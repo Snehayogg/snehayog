@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'dart:async';
@@ -45,6 +46,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   // Banner Ad State
   final ActiveAdsService _activeAdsService = ActiveAdsService();
   final AdImpressionService _adImpressionService = AdImpressionService();
+  final AuthService _authService = AuthService();
   Map<String, dynamic>? _bannerAdData;
   bool _isLoadingAd = false;
 
@@ -759,7 +761,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         builder: (context, orientation) {
           // Auto-fullscreen logic: if device rotates to landscape, enter fullscreen
           if (orientation == Orientation.landscape && !_isFullScreen) {
-            _isFullScreen = true;
+            _isFullScreen = false;
             // Controls show by default on new video/orientation change, so sync UI
             if (_showControls) {
               SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
@@ -1183,18 +1185,31 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         child: Stack(
           children: [
             BannerAdSection(
-              adData: _bannerAdData,
+              adData: {
+                ..._bannerAdData!,
+                'creatorId': _currentVideo.uploader.id, // **NEW: Pass creatorId**
+              },
               onClick: () {
                 AppLogger.log('🖱️ Banner Ad Clicked');
               },
               onImpression: () async {
                 if (_bannerAdData != null) {
                   final adId = _bannerAdData!['_id'] ?? _bannerAdData!['id'];
+
+                  // **NEW: Check if viewer is the creator**
+                  final userData = await _authService.getUserData();
+                  final currentUserId = userData?['id'];
+                  
+                  if (currentUserId != null && currentUserId == _currentVideo.uploader.id) {
+                       AppLogger.log('🚫 Player: Self-impression prevented (video owner)');
+                       return;
+                  }
+
                   if (adId != null) {
                     await _adImpressionService.trackBannerAdImpression(
                       videoId: _currentVideo.id,
                       adId: adId.toString(),
-                      userId: _currentVideo.uploader.id,
+                      userId: currentUserId ?? _currentVideo.uploader.id,
                     );
                     AppLogger.log('📊 Banner Ad Impression tracked');
                   }

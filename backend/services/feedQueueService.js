@@ -307,12 +307,16 @@ class FeedQueueService {
       const seenHashesSet = await redisService.getSetMembers(hashKey);
 
       // 2. Iterative Batch Search ("Discovery Aware")
-      let freshVideos = [];
-      let discoveryVideos = [];
+
       
-      // **SMART RATIO**: Default 80/20, but flexible if content is scarce
-      let POPULAR_TARGET = Math.ceil(this.BATCH_SIZE * 0.8);
-      let DISCOVERY_TARGET = this.BATCH_SIZE - POPULAR_TARGET;
+      // **SMART RATIO**: Popular (50%), Recent (30%), Discovery (20%)
+      let POPULAR_TARGET = Math.ceil(this.BATCH_SIZE * 0.5);
+      let RECENT_TARGET = Math.ceil(this.BATCH_SIZE * 0.3);
+      let DISCOVERY_TARGET = this.BATCH_SIZE - POPULAR_TARGET - RECENT_TARGET;
+      
+      let freshVideos = [];
+      let recentVideos = [];
+      let discoveryVideos = [];
 
       let skip = 0;
       const BATCH_SIZE_QUERY = 250; 
@@ -324,6 +328,53 @@ class FeedQueueService {
       const THROTTLED_CAP = 1; 
       const creatorCounts = new Map();
 
+      // **STEP A: Fetch Recent Videos (Strictly Fresh)**
+      try {
+          // Only fetch Recent for Yug (short videos) generally, or if specific constraint allows
+          const recentQuery = { processingStatus: 'completed' };
+          if (videoType === 'vayu') recentQuery.duration = { $gt: 120 };
+          else recentQuery.duration = { $lte: 120 };
+          
+          if (userId && userId !== 'anon' && userId !== 'undefined') {
+              recentQuery.uploader = { $ne: userId };
+          }
+          
+          // Get videos from last 7 days only for "Recent" bucket transparency
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          recentQuery.createdAt = { $gte: sevenDaysAgo };
+
+          const recentCandidates = await Video.find(recentQuery)
+             .sort({ createdAt: -1 }) // STRICT TIME SORT
+             .limit(50) // Fetch top 50 recent to filter from
+             .select('_id uploader createdAt score finalScore videoType seriesId episodeNumber views videoHash')
+             .lean();
+             
+          // Filter Seen & Hashes
+          let recentToCheck = recentCandidates.filter(v => !seenVideoIds.has(v._id.toString()));
+          if (recentToCheck.length > 0) {
+              recentToCheck = recentToCheck.filter(v => !seenHashesSet.has(v.videoHash));
+          }
+          
+          for (const video of recentToCheck) {
+             if (recentVideos.length >= RECENT_TARGET) break;
+             const uploaderId = video.uploader ? (video.uploader._id || video.uploader).toString() : 'unknown';
+             
+             // Check generic cap
+             const cc = creatorCounts.get(uploaderId) || 0;
+             if (cc < STANDARD_CAP) {
+                recentVideos.push(video);
+                creatorCounts.set(uploaderId, cc + 1);
+                seenVideoIds.add(video._id.toString()); // Mark as picked so Popular/Discovery don't pick again
+                if (video.videoHash) seenHashesSet.add(video.videoHash);
+             }
+          }
+          console.log(`🆕 FeedQueue: Found ${recentVideos.length} recent videos.`);
+      } catch (e) {
+         console.error('⚠️ FeedQueue: Error fetching recent bucket:', e.message);
+      }
+
+      // **STEP B: Pagination Loop for Popular & Discovery**
       while ((freshVideos.length < POPULAR_TARGET || discoveryVideos.length < DISCOVERY_TARGET) && pageCount < MAX_PAGES) {
           const candidateQuery = { processingStatus: 'completed' };
           if (videoType === 'vayu') candidateQuery.duration = { $gt: 120 };
@@ -343,16 +394,18 @@ class FeedQueueService {
 
           if (candidates.length === 0) break; 
 
-          // Filter by Video ID (Redis)
+          // Filter by Video ID (Redis) & Hash
           let candidatesToCheck = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
-          if (candidatesToCheck.length > 0 && userId !== 'anon') {
-             const checkIds = candidatesToCheck.map(v => v._id.toString());
-             const isSeenResults = await redisService.smIsMember(seenKey, checkIds);
-             candidatesToCheck = candidatesToCheck.filter((_, i) => !isSeenResults[i]);
-          }
+          // (Redis check removed within loop for speed - relying on local seenVideoIds set which is synced at start + accumulated)
+          // Double check with Redis Seen Set only if not already in local block list (optimization: skip for now)
+          
+           if (candidatesToCheck.length > 0 && userId !== 'anon') {
+             // We already synced seenVideoIds from Redis at the start, so this check is redundant unless dirty read.
+             // But for safety against "just watched in another thread", we could check. 
+             // For speed, we trust the snapshot we took at start of function.
+           }
 
           // **FATIGUE FILTER: Filter by Content Hash**
-          // Even if ID is different, if the content is the same, skip it.
           candidatesToCheck = candidatesToCheck.filter(v => !seenHashesSet.has(v.videoHash));
           
           for (const video of candidatesToCheck) {
@@ -382,18 +435,6 @@ class FeedQueueService {
              }
           }
           
-          // **SMART ADJUSTMENT**: If we are struggling to find Popular content after a few pages,
-          // increase the discovery buffer so the user doesn't get a short feed or recycled old videos.
-          if (pageCount >= 2 && freshVideos.length < POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET) {
-              const remainingNeeded = POPULAR_TARGET - freshVideos.length;
-              if (remainingNeeded > 2) {
-                  // Borrow half of what's missing from Popular quota and give to Discovery
-                  const shuffleAmount = Math.ceil(remainingNeeded / 2);
-                  DISCOVERY_TARGET += shuffleAmount;
-                  POPULAR_TARGET -= shuffleAmount;
-              }
-          }
-
           if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET) break;
           
           skip += BATCH_SIZE_QUERY;
@@ -401,7 +442,7 @@ class FeedQueueService {
       }
 
       // Combine pools
-      let combinedPool = [...freshVideos, ...discoveryVideos];
+      let combinedPool = [...recentVideos, ...freshVideos, ...discoveryVideos];
 
       // 3. **FINAL DEDUPLICATION CHECK & FALLBACK**
       if (combinedPool.length < this.BATCH_SIZE) {

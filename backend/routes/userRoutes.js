@@ -1,6 +1,6 @@
 import express from 'express';
 import User from '../models/User.js';
-import { verifyToken } from '../utils/verifytoken.js';
+import { verifyToken, passiveVerifyToken } from '../utils/verifytoken.js'; // Added passiveVerifyToken
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
 import redisService from '../services/redisService.js';
 import { getGlobalLeaderboard } from '../controllers/videoController.js';
@@ -8,7 +8,6 @@ import RecommendationService from '../services/recommendationService.js';
 
 const router = express.Router();
 
-const PROFILE_CACHE_TTL = 60; // seconds
 const TOP_EARNERS_CACHE_TTL = 120; // seconds
 
 const getProfileCacheKey = (userId) =>
@@ -142,19 +141,11 @@ router.post('/register', async (req, res) => {
 
 // ✅ Route to get current user profile (requires authentication)
 // **IMPORTANT: This must come before /:id route**
+// **SECURITY FIX: Disabled caching to prevent data leaks between users**
 router.get('/profile', verifyToken, async (req, res) => {
   try {
     const currentUserId = req.user.id; // This is the Google user ID
     
-    const profileCacheKey = getProfileCacheKey(currentUserId);
-    if (profileCacheKey) {
-      const cachedProfile = await getCachedResponse(profileCacheKey);
-      if (cachedProfile) {
-        // Only log cache hits (minimal logging)
-        return res.json(cachedProfile);
-      }
-    }
-
     // Find current user with selective fields and lean query for performance
     const currentUser = await User.findOne({ googleId: currentUserId })
       .select('_id googleId name email profilePic videos following followers preferredCurrency preferredPaymentMethod country')
@@ -186,10 +177,6 @@ router.get('/profile', verifyToken, async (req, res) => {
 
     res.json(payload);
 
-    if (profileCacheKey) {
-      // Cache with slightly longer TTL for better hit rates (was 60s)
-      await cacheResponse(profileCacheKey, payload, 120); 
-    }
   } catch (err) {
     console.error('Get profile error:', err);
     res.status(500).json({ error: 'Failed to get profile', details: err.message });
@@ -400,19 +387,11 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
 
 // ✅ Route to get user profile by ID
 // **IMPORTANT: This must come AFTER all specific routes**
-router.get('/:id', async (req, res) => {
+// **SECURITY FIX: Disabled caching and added privacy filter**
+router.get('/:id', passiveVerifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    // Attempt cache using provided id (assumed googleId)
-    const cacheKeyGuess = getProfileCacheKey(id);
-    if (cacheKeyGuess) {
-      const cachedProfile = await getCachedResponse(cacheKeyGuess);
-      if (cachedProfile) {
-// console.log('⚡ User profile API: Cache hit for', id);
-        return res.json(cachedProfile);
-      }
-    }
-
+    
     // First try to find by Google ID (primary identifier)
     let user = await User.findOne({ googleId: id });
 
@@ -429,25 +408,31 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // **PRIVACY CHECK**: Check if the requester is the owner of the profile
+    const requesterId = req.user?.googleId || req.user?.id;
+    const isOwner = requesterId && (requesterId === user.googleId || requesterId === user._id.toString());
+    
+    console.log(`🔒 Profile Access Check: Requester=${requesterId}, Target=${user.googleId}, IsOwner=${isOwner}`);
+
     const payload = {
       _id: user._id, // MongoDB ObjectID
       id: user.googleId,
-      googleId: user.googleId, // **FIXED: Also return googleId field explicitly for video endpoint**
+      googleId: user.googleId,
       name: user.name,
-      email: user.email,
       profilePic: user.profilePic,
       videos: user.videos,
       following: user.following?.length || 0,
       followers: user.followers?.length || 0,
-      rank: await RecommendationService.getGlobalCreatorRank(user._id), // **NEW: Include global rank**
+      rank: await RecommendationService.getGlobalCreatorRank(user._id),
+      // **SENSITIVE FIELDS**: Only include if owner
+      email: isOwner ? user.email : null,
+      preferredCurrency: isOwner ? user.preferredCurrency : null,
+      preferredPaymentMethod: isOwner ? user.preferredPaymentMethod : null,
+      country: isOwner ? user.country : null,
     };
 
     res.json(payload);
 
-    const canonicalCacheKey = getProfileCacheKey(user.googleId);
-    if (canonicalCacheKey) {
-      await cacheResponse(canonicalCacheKey, payload, PROFILE_CACHE_TTL);
-    }
   } catch (err) {
     console.error('Get user by ID error:', err);
     res.status(500).json({ error: 'Failed to get user' });

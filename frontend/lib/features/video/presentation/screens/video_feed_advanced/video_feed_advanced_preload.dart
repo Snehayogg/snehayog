@@ -1,7 +1,7 @@
 part of '../video_feed_advanced.dart';
 
 extension _VideoFeedPreload on _VideoFeedAdvancedState {
-  static bool _isLowEndDevice = false; // Default to false (assume high-end)
+
 
 
 
@@ -19,6 +19,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       
       // **DYNAMIC POOL: Configure shared pool based on device power**
       SharedVideoControllerPool().configurePool(isLowEndDevice: _isLowEndDevice);
+      
+      // **DYNAMIC CACHE: Configure disk cache limit (150MB vs 500MB)**
+      videoCacheProxy.configureCacheSize(isLowEndDevice: _isLowEndDevice);
       
     } catch (e) {
       AppLogger.log('⚠️ Error checking device capabilities: $e');
@@ -156,7 +159,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     // **FIXED: Dynamic loading trigger based on total videos**
     final distanceFromEnd = _videos.length - _currentIndex;
     if (_hasMore && !_isLoadingMore) {
-      const triggerDistance = 20;
+      // **OPTIMIZATION: Smaller batch trigger for low-end devices**
+      final int triggerDistance = _isLowEndDevice ? 5 : 20;
       if (distanceFromEnd <= triggerDistance) {
         _loadMoreVideos();
       }

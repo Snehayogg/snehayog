@@ -89,7 +89,7 @@ class _GamesFeedScreenState extends State<GamesFeedScreen> with AutomaticKeepAli
                       Icon(Icons.auto_awesome, size: 64, color: AppTheme.primary.withValues(alpha:0.5)),
                       const SizedBox(height: 16),
                       Text(
-                        'Arcade Fun Game Coming Soon',
+                        'Arcade Fun Coming Soon',
                         style: AppTheme.headlineMedium.copyWith(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.bold,

@@ -222,8 +222,25 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     _trackClick();
 
     // Launch CTA URL if available
-    final ctaUrl = widget.carouselAd.callToActionUrl;
+    String ctaUrl = widget.carouselAd.callToActionUrl;
     if (ctaUrl.isNotEmpty) {
+      
+      // **UTM TRACKING IMPLEMENTATION**
+      // Automatically append source and medium if not present
+      final uri = Uri.parse(ctaUrl);
+      final Map<String, String> queryParams = Map.from(uri.queryParameters);
+        
+      if (!queryParams.containsKey('utm_source')) {
+        queryParams['utm_source'] = 'vayug_app';
+      }
+      if (!queryParams.containsKey('utm_medium')) {
+        queryParams['utm_medium'] = 'in_app_ad'; 
+      }
+      
+      // Reconstruct URL with new params
+      ctaUrl = uri.replace(queryParameters: queryParams).toString();
+      AppLogger.log('🔗 CarouselAdWidget: Resolved Link with UTM: $ctaUrl');
+
       // **ROAS IMPROVEMENT: Use In-App Browser instead of external launch**
       // This keeps the user in the app, increasing likelihood of returning to content.
       showModalBottomSheet(
@@ -338,6 +355,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       height: double.infinity,
       child: CachedNetworkImage(
         imageUrl: slide.mediaUrl,
+        memCacheWidth: 1080, // **OPTIMIZATION: Cap memory usage for ad images**
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

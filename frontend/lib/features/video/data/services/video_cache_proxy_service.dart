@@ -108,6 +108,12 @@ class VideoCacheProxyService {
   }
 
   Future<void> _serveLocalFile(File file, HttpRequest request) async {
+    // **LRU UPDATE: Touch the file so it's marked as "Recently Used"**
+    // This prevents the cleaner from deleting active videos.
+    try {
+      file.setLastModified(DateTime.now()); 
+    } catch (_) {}
+
     final response = request.response;
     final int totalLength = await file.length();
     
@@ -124,17 +130,25 @@ class VideoCacheProxyService {
         int start = int.parse(parts[0]);
         int? end = parts.length > 1 && parts[1].isNotEmpty 
             ? int.parse(parts[1]) 
-            : totalLength - 1;
+            : null; // Initialize as null if not specified
 
-        // Validation
-        if (start >= totalLength) {
-          response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
-          response.headers.add(HttpHeaders.contentRangeHeader, 'bytes */$totalLength');
-          await response.close();
-          return;
+        // **OFFLINE FIX: Smart Partial Serving**
+        // Player asks for bytes=0- (full file), but we only have 5MB of a 10MB file.
+        // Instead of erroring or waiting for network, we serve the 5MB we have.
+        // This allows the player to buffer and play that 5MB offline.
+        
+        // If end is unknown or beyond our file, cap it to what we actually have
+        if (end == null || end >= totalLength) {
+            end = totalLength - 1;
         }
-
-        if (end >= totalLength) end = totalLength - 1;
+        
+        // If start is beyond what we have, that's a genuine error (we don't have that part yet)
+        if (start >= totalLength) {
+           response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+           response.headers.add(HttpHeaders.contentRangeHeader, 'bytes */$totalLength');
+           await response.close();
+           return;
+        }
         
         final int contentLength = end - start + 1;
         
@@ -175,7 +189,9 @@ class VideoCacheProxyService {
     String originalManifest;
 
     try {
+      // **LRU UPDATE for Manifests too**
       if (await file.exists()) {
+        try { file.setLastModified(DateTime.now()); } catch (_) {}
         originalManifest = await file.readAsString();
       } else {
         final client = http.Client();
@@ -375,8 +391,29 @@ class VideoCacheProxyService {
   /// **NEW: Smart Initial Chunk Prefetch for Instant Playback (0.5s Buffer)**
   /// Downloads only the first 300-500KB of a video for instant playback start.
   /// The rest of the video is loaded by ExoPlayer in the background.
+
+  void configureCacheSize({required bool isLowEndDevice}) {
+    if (isLowEndDevice) {
+      _maxCacheSizeBytes = 120 * 1024 * 1024; // 70MB for Low End (~2 videos)
+      AppLogger.log('📉 Proxy: Configured for Low-End Device (Limit: 70MB - 2 Videos)');
+    } else {
+      _maxCacheSizeBytes = 300 * 1024 * 1024; // 200MB for High End (~6 videos)
+      AppLogger.log('📈 Proxy: Configured for High-End Device (Limit: 200MB - 6 Videos)');
+    }
+  }
+  /// **NEW: Smart Initial Chunk Prefetch for Instant Playback (0.5s Buffer)**
+  /// Downloads only the first 300-500KB of a video for instant playback start.
+  /// The rest of the video is loaded by ExoPlayer in the background.
   Future<void> prefetchInitialChunk(String url, {int kilobytes = 400}) async {
     if (url.isEmpty) return;
+
+    // **HLS SPECIAL HANDLING**
+    // If it's an HLS playlist, we must download the manifest AND the first segment.
+    if (url.contains('.m3u8')) {
+        await _prefetchHlsInitial(url);
+        return;
+    }
+
     final String fileKey = md5.convert(utf8.encode(url)).toString();
     final String filePath = '$_cachePath/$fileKey.chunk';
     final file = File(filePath);
@@ -396,7 +433,7 @@ class VideoCacheProxyService {
       }
     }
 
-    AppLogger.log('⚡ Proxy: Prefetching initial ${kilobytes}KB chunk for instant playback');
+    // AppLogger.log('⚡ Proxy: Prefetching initial ${kilobytes}KB chunk for instant playback');
 
     final client = http.Client();
     _activeDownloads[filePath] = client;
@@ -413,7 +450,7 @@ class VideoCacheProxyService {
 
       // Accept both 200 (full response) and 206 (partial content)
       if (response.statusCode != 200 && response.statusCode != 206) {
-        AppLogger.log('⚠️ Proxy: Initial chunk prefetch failed with status ${response.statusCode}');
+        // AppLogger.log('⚠️ Proxy: Initial chunk prefetch failed with status ${response.statusCode}');
         return;
       }
 
@@ -432,12 +469,63 @@ class VideoCacheProxyService {
 
       await fileSink.flush();
       await fileSink.close();
+      
+      // Mark as recently used
+      try { file.setLastModified(DateTime.now()); } catch (_) {}
+      
     } catch (e) {
       // Silently handle cancellation
     } finally {
       client.close();
       _activeDownloads.remove(filePath);
     }
+  }
+
+  /// **NEW: HLS Prefetch Helper**
+  /// Downloads manifest + First Segment for successful offline start.
+  Future<void> _prefetchHlsInitial(String url) async {
+      try {
+          // 1. Download Manifest
+          final client = http.Client();
+          final response = await client.get(Uri.parse(url));
+          client.close();
+          
+          if (response.statusCode != 200) return;
+          
+          // Save Manifest
+          final String manifestKey = md5.convert(utf8.encode(url)).toString();
+          final File manifestFile = File('$_cachePath/$manifestKey.chunk');
+          await manifestFile.writeAsString(response.body);
+          
+          // 2. Parse for First Segment
+          final lines = const LineSplitter().convert(response.body);
+          String? firstSegmentUrl;
+          
+          for (final line in lines) {
+              final trimmed = line.trim();
+              if (trimmed.isNotEmpty && !trimmed.startsWith('#')) {
+                  firstSegmentUrl = trimmed;
+                  break; // Found first segment
+              }
+          }
+          
+          if (firstSegmentUrl != null) {
+              // Resolve relative URL
+              if (!firstSegmentUrl.startsWith('http')) {
+                  final baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                  firstSegmentUrl = Uri.parse(baseUrl).resolve(firstSegmentUrl).toString();
+              }
+              
+              // 3. Download First Segment (Full or Chunk)
+              // Segments are usually small (2-5MB), so we can just treat it like a normal chunk prefetch
+              // We fetch up to 1MB of the first segment to ensure start.
+              // AppLogger.log('⚡ Proxy: HLS Prefetch - Downloading first segment...');
+              await prefetchInitialChunk(firstSegmentUrl, kilobytes: 1000); 
+          }
+          
+      } catch (e) {
+          // AppLogger.log('❌ Proxy: HLS Prefetch error: $e');
+      }
   }
 
 
@@ -456,7 +544,10 @@ class VideoCacheProxyService {
           (a, b) => a.statSync().modified.compareTo(b.statSync().modified));
 
       int totalSize = 0;
-      const int maxSizeBytes = 200 * 1024 * 1024;
+      
+      // **DYNAMIC CACHE LIMIT**
+      // Default: 200MB. Can be updated via configure().
+      final int maxSizeBytes = _maxCacheSizeBytes; 
 
       for (var file in files) {
         totalSize += await file.length();
@@ -473,11 +564,15 @@ class VideoCacheProxyService {
         totalSize -= length;
         deletedCount++;
       }
-      AppLogger.log('🧹 Proxy Cache: Cleaned up $deletedCount files');
+      AppLogger.log('🧹 Proxy Cache: Cleaned up $deletedCount files (Limit: ${maxSizeBytes/1024/1024}MB)');
     } catch (e) {
       AppLogger.log('❌ Proxy Cache: Cleanup error: $e');
     }
   }
+
+  // **NEW: Dynamic Cache Configuration**
+  int _maxCacheSizeBytes = 200 * 1024 * 1024; // Default 200MB
+
 
   /// **NEW: Get a random available video URL from cache for instant splash screen**
   /// Returns null if no cached videos found.

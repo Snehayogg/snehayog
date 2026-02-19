@@ -288,12 +288,13 @@ class ProfileVideosWidget extends StatelessWidget {
                   height: double.infinity,
                   color: isProcessing ? AppTheme.backgroundSecondary : const Color(0xFFF3F4F6),
                   child: video.thumbnailUrl.isNotEmpty
-                      ? Image.network(
-                          video.thumbnailUrl,
+                      ? CachedNetworkImage(
+                          imageUrl: video.thumbnailUrl,
+                          memCacheWidth: 350, // Optimize memory for grid
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
-                          errorBuilder: (context, error, stackTrace) {
+                          errorWidget: (context, url, error) {
                             return const Center(
                               child: Icon(
                                 Icons.video_library,
@@ -402,55 +403,49 @@ class ProfileVideosWidget extends StatelessWidget {
                   Positioned(
                     bottom: 10,
                     left: 10,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.15),
-                              width: 0.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 10,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.visibility_rounded,
-                                color: Colors.white.withOpacity(0.9),
-                                size: 13,
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                _formatViews(video.views),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.3,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black26,
-                                      offset: Offset(0, 1),
-                                      blurRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6), // **Darker background for readability without Blur**
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.15),
+                          width: 0.5,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.visibility_rounded,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 13,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            _formatViews(video.views),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black26,
+                                  offset: Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -623,6 +618,7 @@ class ProfileVideosWidget extends StatelessWidget {
                                 child: thumbnailUrl.isNotEmpty 
                                 ? CachedNetworkImage(
                                   imageUrl: thumbnailUrl,
+                                  memCacheWidth: 350, // Optimize memory for grid
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) => Container(color: Colors.grey[300]),
                                   errorWidget: (context, url, error) => Container(

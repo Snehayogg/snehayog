@@ -1,5 +1,6 @@
 part of '../video_feed_advanced.dart';
 
+
 extension _VideoFeedUI on _VideoFeedAdvancedState {
   Widget _buildVideoFeed() {
     return RefreshIndicator(
@@ -197,7 +198,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // **NEW: Pre-fetch Trigger (Buffer 12 videos - Ultra Aggressive for Fast Scroll)**
     // Trigger load more when user is within 12 videos of the end (approx 80% through batch)
     // This provides a much larger safety buffer for slow backend refills or fast scrolling.
-    if (mounted && totalVideos > 0 && index >= totalVideos - 12 && !_isLoadingMore && !_isRefreshing && _hasMore) {
+    
+    // **OPTIMIZATION: Adjust trigger for Low-RAM devices**
+    final int prefetchThreshold = _isLowEndDevice ? 3 : 12;
+
+    if (mounted && totalVideos > 0 && index >= totalVideos - prefetchThreshold && !_isLoadingMore && !_isRefreshing && _hasMore) {
        WidgetsBinding.instance.addPostFrameCallback((_) {
           _loadMoreVideos();
        });
@@ -335,14 +340,49 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               );
             },
           ),
-          if (_loadingVideos.contains(videoId))
-            RepaintBoundary(child: Center(child: _buildGreenSpinner(size: 28))),
         ],
       ),
     );
   }
 
   Widget _buildVideoPage(
+    VideoModel video,
+    VideoPlayerController? controller,
+    bool isActive,
+    int index,
+  ) {
+    // ... existing logic ...
+    
+    // **NEW: Agent Entry Point (Top Right)**
+    return Stack(
+      children: [
+        _buildVideoPageContent(video, controller, isActive, index),
+        if (FeatureFlags.isAgentEnabled)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 16,
+            child: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+              ),
+              onPressed: () {
+                 Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AgentScreen()),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+  
+  Widget _buildVideoPageContent(
     VideoModel video,
     VideoPlayerController? controller,
     bool isActive,
@@ -749,6 +789,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       adDataWithVideoId = {
         ...adData,
         'videoId': video.id,
+        'creatorId': video.uploader.id, // **NEW: Pass creatorId for checking**
       };
     }
 
@@ -772,6 +813,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           AppLogger.log('   User ID: ${userData?['id']}');
 
           if (adId != null && userData != null) {
+            // **NEW: Check if viewer is the creator**
+            if (userData['id'] == video.uploader.id) {
+              AppLogger.log('🚫 UI: Self-impression prevented (video owner)');
+              return;
+            }
+
             try {
               await _adImpressionService.trackBannerAdImpression(
                 videoId: video.id,
@@ -802,16 +849,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 
-  Widget _buildGreenSpinner({double size = 24}) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: const CircularProgressIndicator(
-        strokeWidth: 3,
-        color: Colors.green,
-      ),
-    );
-  }
 
   Widget _buildVideoPlayer(
     VideoPlayerController controller,
@@ -919,10 +956,27 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     AppLogger.log(
       '🎬 MODEL Portrait video - Aspect Ratio: $modelAspectRatio',
     );
+
+    // **FIX: Edge-to-Edge Full Screen for Profile/Vayu Player**
+    // If in full-screen mode (Profile/Vayu), usage BoxFit.cover to fill the screen
+    // independent of the exact aspect ratio match (crops sides slightly on tall phones)
+    if (widget.isFullScreen) {
+      return SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            width: controller.value.size.width,
+            height: controller.value.size.height,
+            child: VideoPlayer(controller),
+          ),
+        ),
+      );
+    }
     
-    // **FIX: Simplified to use standard AspectRatio widget**
-    // This removes usage of originalResolution logic which might be causing sizing issues
-    // and relies on standard Flutter widgets to respect aspect ratio.
+    // **Standard Feed Behavior (Yug Tab)**
+    // Use AspectRatio to respect content size (might show bars if aspect ratio differs)
+    // but aligns to bottom to avoid "floating" feel.
     return Align(
       alignment: Alignment.bottomCenter, // **FIX: Shift video down to minimize bottom gap**
       child: AspectRatio(

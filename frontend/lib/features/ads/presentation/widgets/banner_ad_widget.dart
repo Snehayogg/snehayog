@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
@@ -94,6 +93,13 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       if (videoId.isEmpty || adId.isEmpty) {
         AppLogger.log(
             '⚠️ BannerAdWidget: Missing videoId or adId, skipping view tracking');
+        return;
+      }
+
+      // **NEW: Check if viewer is the creator**
+      final creatorId = widget.adData['creatorId'];
+      if (creatorId != null && creatorId.toString() == userId) {
+        AppLogger.log('🚫 BannerAdWidget: Self-view prevented (video owner)');
         return;
       }
 
@@ -411,6 +417,25 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       }
 
       link = _ensureAbsoluteUrl(link);
+
+      // **UTM TRACKING IMPLEMENTATION**
+      // Automatically append source and medium if not present
+      if (link.isNotEmpty) {
+        final uri = Uri.parse(link);
+        final Map<String, String> queryParams = Map.from(uri.queryParameters);
+        
+        // Add UTM params if missing
+        if (!queryParams.containsKey('utm_source')) {
+          queryParams['utm_source'] = 'vayug_app';
+        }
+        if (!queryParams.containsKey('utm_medium')) {
+          queryParams['utm_medium'] = 'in_app_ad'; 
+        }
+        
+        // Reconstruct URL with new params
+        link = uri.replace(queryParameters: queryParams).toString();
+        AppLogger.log('🔗 BannerAdWidget: Resolved Link with UTM: $link');
+      }
 
       // Directly open link if available (no confirmation dialog)
       if (link.isNotEmpty) {

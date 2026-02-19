@@ -55,7 +55,7 @@ class AppText {
     'btn_confirm': 'Confirm',
     'btn_withdraw_funds': 'Redeem Rewards',
     'btn_add_upi_id': 'Setup Billing',
-    'btn_refer_friends': 'Refer Friends',
+    'btn_refer_friends': 'Unlock Full Access (Refer 2) 🔓',
     'btn_sign_in_google': 'Sign In with Google',
 
     // Upload screen

@@ -131,7 +131,7 @@ class _InAppBrowserState extends State<InAppBrowser> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.open_in_browser, size: 20, color: AppTheme.textSecondary),
+                      icon: const Icon(Icons.open_in_browser, size: 20, color: AppTheme.white),
                       tooltip: 'Open in external browser',
                       onPressed: () async {
                         final currentUrl = await _controller.currentUrl();

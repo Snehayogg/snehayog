@@ -74,6 +74,27 @@ router.post('/impressions/banner', async (req, res) => {
 
     // **FIXED: Track video-specific impression in AdImpression collection**
     try {
+      // **OPTIMIZATION: Get creatorId from request or fetch from Video**
+      let creatorId = providedCreatorId;
+        
+      if (!creatorId) {
+        const video = await Video.findById(videoId).select('uploader').lean();
+        creatorId = video ? video.uploader : null;
+      }
+
+      // **NEW: PREVENT SELF-IMPRESSION**
+      // If the viewer matches the video owner, do NOT count it as an impression
+      if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
+        console.log(`🚫 Self-impression prevented: User ${normalizedUserId} viewing own video ${videoId}`);
+        // We still return success to the frontend so it doesn't think something broke, 
+        // but we don't record the impression.
+        return res.status(200).json({ 
+          success: true,
+          message: 'Self-impression ignored',
+          ignored: true 
+        });
+      }
+
       // Prevent duplicate impressions from same user within 1 hour
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       
@@ -85,14 +106,6 @@ router.post('/impressions/banner', async (req, res) => {
       });
 
       if (!existingImpression) {
-        // **OPTIMIZATION: Get creatorId from request or fetch from Video**
-        let creatorId = providedCreatorId;
-        
-        if (!creatorId) {
-          const video = await Video.findById(videoId).select('uploader').lean();
-          creatorId = video ? video.uploader : null;
-        }
-
         // Create new impression record
         await AdImpression.create({
           videoId: videoId,
@@ -165,6 +178,24 @@ router.post('/impressions/carousel', async (req, res) => {
 
     // **FIXED: Track video-specific impression in AdImpression collection**
     try {
+      // **OPTIMIZATION: Get creatorId from request or fetch from Video**
+      let creatorId = providedCreatorId;
+        
+      if (!creatorId) {
+        const video = await Video.findById(videoId).select('uploader').lean();
+        creatorId = video ? video.uploader : null;
+      }
+
+      // **NEW: PREVENT SELF-IMPRESSION**
+      if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
+        console.log(`🚫 Self-impression prevented (carousel): User ${normalizedUserId} viewing own video ${videoId}`);
+        return res.status(200).json({ 
+          success: true,
+          message: 'Self-impression ignored',
+          ignored: true 
+        });
+      }
+
       // Prevent duplicate impressions from same user within 1 hour
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       
@@ -176,14 +207,6 @@ router.post('/impressions/carousel', async (req, res) => {
       });
 
       if (!existingImpression) {
-        // **OPTIMIZATION: Get creatorId from request or fetch from Video**
-        let creatorId = providedCreatorId;
-        
-        if (!creatorId) {
-          const video = await Video.findById(videoId).select('uploader').lean();
-          creatorId = video ? video.uploader : null;
-        }
-
         // Create new impression record
         await AdImpression.create({
           videoId: videoId,
@@ -347,6 +370,15 @@ router.post('/impressions/banner/view', async (req, res) => {
           creatorId = video ? video.uploader : null;
         }
 
+        // **NEW: PREVENT SELF-VIEW**
+        if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
+          return res.status(200).json({ 
+            success: true,
+            message: 'Self-view ignored',
+            ignored: true 
+          });
+        }
+
       // Create new viewed impression record
       await AdImpression.create({
         videoId: videoId,
@@ -452,6 +484,15 @@ router.post('/impressions/carousel/view', async (req, res) => {
         if (!creatorId) {
           const video = await Video.findById(videoId).select('uploader').lean();
           creatorId = video ? video.uploader : null;
+        }
+
+        // **NEW: PREVENT SELF-VIEW**
+        if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
+          return res.status(200).json({ 
+            success: true,
+            message: 'Self-view ignored',
+            ignored: true 
+          });
         }
 
       await AdImpression.create({

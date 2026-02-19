@@ -123,6 +123,7 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   
   // **NEW: Adaptive Network State**
   bool _isLowBandwidthMode = false;
+  bool _isLowEndDevice = false; // **NEW: Track device capabilities**
   int _consecutiveSmoothPlays = 0;
   
   

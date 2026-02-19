@@ -7,6 +7,8 @@ import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/profile/presentation/widgets/video_creator_search_delegate.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
+import 'package:vayu/features/agent/presentation/screens/agent_screen.dart';
+import 'package:vayu/shared/config/feature_flags.dart';
 
 
 class VayuScreen extends StatefulWidget {
@@ -209,6 +211,16 @@ class VayuScreenState extends State<VayuScreen> {
               );
             },
           ),
+            if (FeatureFlags.isAgentEnabled)
+              IconButton(
+                icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AgentScreen()),
+                  );
+                },
+              ),
           const SizedBox(width: AppTheme.spacing2),
         ],
       ),

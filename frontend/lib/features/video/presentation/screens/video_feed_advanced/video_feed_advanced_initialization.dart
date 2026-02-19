@@ -714,6 +714,11 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
   }
 
   void _precacheThumbnails() {
+    // **OPTIMIZATION: Skip thumbnail precaching for Yug Tab (Main Feed)**
+    // User requested: "yug tab me hume thumbnail ki jarurat nahi hai"
+    // We only need thumbnails when opening from Profile (where initialVideos are passed)
+    if (!_openedFromProfile) return;
+
     Future(() async {
       for (final v in _videos.take(5)) {
         if (v.thumbnailUrl.isNotEmpty) {

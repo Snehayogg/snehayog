@@ -44,6 +44,10 @@ void main() async {
 
   debugRepaintRainbowEnabled = false;
   
+  // **OPTIMIZATION: Limit Image Cache for Low-RAM devices**
+  // 100MB limit (default is 1000MB which is too high for 3GB RAM phones)
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 * 1024 * 1024; 
+
   // **NEW: Initialize Ad Impression Service for offline syncing**
   AdImpressionService().initialize();
 

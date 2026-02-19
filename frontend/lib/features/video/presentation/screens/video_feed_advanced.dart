@@ -28,6 +28,8 @@ import 'package:vayu/shared/services/connectivity_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayu/features/agent/presentation/screens/agent_screen.dart';
+import 'package:vayu/shared/config/feature_flags.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
 import 'package:vayu/features/auth/presentation/screens/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -769,6 +771,12 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       // **EXECUTE ATOMIC CANCELLATION**
       // This is Microsecond-level latency (local check) vs Second-level savings (network).
       videoCacheProxy.cancelAllStreamingExcept(safeUrls);
+      
+      // **SMART CACHE CLEANUP: Trigger cleanup every 3 scrolls**
+      // Keeps storage usage healthy without affecting performance
+      if (index % 3 == 0) {
+         videoCacheProxy.cleanCache().catchError((_) {});
+      }
     }
 
 
