@@ -4,7 +4,7 @@ import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/shared/widgets/custom_share_widget.dart';
+import 'package:vayu/shared/services/share_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 
@@ -15,8 +15,9 @@ class VideoActionsWidget extends StatelessWidget {
   final VideoService videoService;
   final int currentHorizontalIndex;
   final Function(int) onHorizontalIndexChanged;
+  final ShareService _shareService = ShareService();
 
-  const VideoActionsWidget({
+  VideoActionsWidget({
     Key? key,
     required this.video,
     required this.index,
@@ -58,7 +59,7 @@ class VideoActionsWidget extends StatelessWidget {
               ),
               size: AppConstants.secondaryActionButtonSize,
               containerSize: AppConstants.secondaryActionButtonContainerSize,
-              onPressed: () => _showCustomShareSheet(context),
+              onPressed: () => _handleShare(context),
               label: '${video.shares}',
             ),
 
@@ -77,25 +78,22 @@ class VideoActionsWidget extends StatelessWidget {
   }
 
   // Move these methods back to VideoActionsWidget
-  void _showCustomShareSheet(BuildContext context) async {
+  void _handleShare(BuildContext context) async {
     try {
       // Track share
       try {
         await videoService.incrementShares(video.id);
+        // Optimistically update share count in UI
         video.shares++;
       } catch (e) {
         AppLogger.log('Failed to track share: $e');
       }
 
-      // Show custom share bottom sheet
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => CustomShareWidget(video: video),
-      );
+      // Use native share
+      await _shareService.shareVideo(video);
+      
     } catch (e) {
-      AppLogger.log('Failed to show share sheet: $e');
+      AppLogger.log('Failed to share video: $e');
     }
   }
 }

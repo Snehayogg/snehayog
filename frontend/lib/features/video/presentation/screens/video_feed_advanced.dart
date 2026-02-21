@@ -38,7 +38,7 @@ import 'package:vayu/features/video/presentation/managers/video_controller_manag
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/shared/widgets/report_dialog_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:vayu/shared/widgets/custom_share_widget.dart';
+import 'package:vayu/shared/services/share_service.dart';
 import 'video_feed_advanced/widgets/throttled_progress_bar.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,6 +51,7 @@ import 'package:vayu/features/video/presentation/widgets/video_feed_skeleton.dar
 
 import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/services/local_gallery_service.dart';
+import 'package:vayu/features/video/presentation/screens/edit_video_title.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -99,6 +100,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         VideoFeedStateFieldsMixin {
   final Map<String, bool> _likeInProgress = {};
   Timer? _pageChangeDebounceTimer; // **NEW: Timer for debouncing page rapid scrolls**
+  final ShareService _shareService = ShareService();
 
   @override
   bool get wantKeepAlive => true;
@@ -1513,19 +1515,13 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
 
 
-  /// **HANDLE SHARE: Show custom share widget with only 4 options**
+  /// **HANDLE SHARE: Use ShareService for native sharing**
   Future<void> _handleShare(VideoModel video) async {
     try {
-      // Show custom share widget instead of system share
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => CustomShareWidget(video: video),
-      );
+      await _shareService.shareVideo(video);
     } catch (e) {
-      AppLogger.log('❌ Error showing share widget: $e');
-      _showSnackBar('Failed to open share options', isError: true);
+      AppLogger.log('❌ Error showing share options: $e');
+      _showSnackBar('Failed to share video', isError: true);
     }
   }
 

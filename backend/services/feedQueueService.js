@@ -324,8 +324,10 @@ class FeedQueueService {
       let pageCount = 0;
 
       // Creator Bucket Caps
-      const STANDARD_CAP = 2; // Reduced from 3 for better diversity
-      const THROTTLED_CAP = 1; 
+      // **DIVERSITY FIX: Max 8 videos per creator per batch, but never consecutive**
+      // The orderFeedWithDiversity algorithm enforces minCreatorSpacing=5 gaps between same creator
+      const STANDARD_CAP = 8; // Max 8 videos per creator in a 50-video batch
+      const THROTTLED_CAP = 3; // Recently-seen creators get max 3 slots
       const creatorCounts = new Map();
 
       // **STEP A: Fetch Recent Videos (Strictly Fresh)**
@@ -358,7 +360,12 @@ class FeedQueueService {
           
           for (const video of recentToCheck) {
              if (recentVideos.length >= RECENT_TARGET) break;
-             const uploaderId = video.uploader ? (video.uploader._id || video.uploader).toString() : 'unknown';
+             // **FIX: Normalize uploader ID correctly (handles ObjectId and plain string)**
+             const uploaderId = video.uploader
+               ? (typeof video.uploader === 'object'
+                   ? (video.uploader._id || video.uploader).toString()
+                   : video.uploader.toString())
+               : 'unknown';
              
              // Check generic cap
              const cc = creatorCounts.get(uploaderId) || 0;
@@ -409,12 +416,19 @@ class FeedQueueService {
           candidatesToCheck = candidatesToCheck.filter(v => !seenHashesSet.has(v.videoHash));
           
           for (const video of candidatesToCheck) {
-             const uploaderId = video.uploader ? (video.uploader._id || video.uploader).toString() : 'unknown';
+             // **FIX: Normalize uploader ID correctly (handles ObjectId and plain string)**
+             const uploaderId = video.uploader
+               ? (typeof video.uploader === 'object'
+                   ? (video.uploader._id || video.uploader).toString()
+                   : video.uploader.toString())
+               : 'unknown';
              const isDiscovery = (video.views || 0) < 1000;
              
+             // If this creator was in the "recent" window, skip entirely for this batch
              let currentCap = recentCreatorSet.has(uploaderId) ? THROTTLED_CAP : STANDARD_CAP;
              if (pageCount > 2 && freshVideos.length + discoveryVideos.length < 5) {
-                 currentCap = 5; 
+                 // Emergency fill mode: allow more per creator only if feed is seriously empty
+                 currentCap = Math.max(currentCap, 2); 
              }
 
              const currentCount = creatorCounts.get(uploaderId) || 0;
@@ -458,7 +472,8 @@ class FeedQueueService {
       // 4. Shuffle & Order
       const randomizedPool = RecommendationService.weightedShuffle(combinedPool, this.BATCH_SIZE);
       const orderedVideos = RecommendationService.orderFeedWithDiversity(randomizedPool, {
-          minCreatorSpacing: 3
+          // **DIVERSITY: Enforce 5 videos between same creator (up from 3)**
+          minCreatorSpacing: 4
       });
 
       const toPushIds = orderedVideos.map(v => v._id.toString()).slice(0, this.BATCH_SIZE);

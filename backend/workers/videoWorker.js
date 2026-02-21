@@ -11,6 +11,7 @@ import User from '../models/User.js';
 import redisService from '../services/redisService.js';
 import { invalidateCache, VideoCacheKeys } from '../middleware/cacheMiddleware.js';
 import RecommendationService from '../services/recommendationService.js';
+import localModerationService from '../services/localModerationService.js';
 
 dotenv.config();
 
@@ -113,6 +114,34 @@ const videoWorker = new Worker('video-processing', async (job) => {
         await video.save();
 
         console.log('✅ Worker: Video record updated');
+
+        // 4.1 **NEW: Trigger Local Moderation scan**
+        try {
+            console.log(`🛡️ Worker: Starting local moderation for ${videoId}...`);
+            const moderationResult = await localModerationService.moderateVideo(hlsResult.videoUrl);
+            
+            // Re-fetch to ensure we have latest version
+            const updatedVideo = await Video.findById(videoId);
+            if (updatedVideo) {
+                updatedVideo.moderationResult = {
+                    isFlagged: moderationResult.isFlagged,
+                    confidence: moderationResult.confidence,
+                    label: moderationResult.label,
+                    processedAt: new Date(),
+                    provider: 'local-transformers'
+                };
+                
+                if (moderationResult.isFlagged) {
+                    console.log(`🚩 Worker: Video ${videoId} FLAGGED. Updating status.`);
+                    updatedVideo.processingStatus = 'flagged';
+                }
+                
+                await updatedVideo.save();
+                console.log('✅ Worker: Moderation results saved');
+            }
+        } catch (modError) {
+            console.error('⚠️ Worker: Local moderation failed:', modError.message);
+        }
 
         // 4.1 Invalidate Cache (CRITICAL for updating user profile immediately)
         try {

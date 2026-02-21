@@ -8,12 +8,16 @@ class BannerAdSection extends StatefulWidget {
   final Map<String, dynamic>? adData;
   final VoidCallback? onClick;
   final Future<void> Function()? onImpression;
+  final VoidCallback? onVideoPause;
+  final VoidCallback? onVideoResume;
 
   const BannerAdSection({
     Key? key,
     this.adData,
     this.onClick,
     this.onImpression,
+    this.onVideoPause,
+    this.onVideoResume,
   }) : super(key: key);
 
   @override
@@ -56,6 +60,8 @@ class _BannerAdSectionState extends State<BannerAdSection> {
       adData: data,
       onAdClick: () => widget.onClick?.call(),
       onAdImpression: () async => await widget.onImpression?.call(),
+      onVideoPause: widget.onVideoPause,
+      onVideoResume: widget.onVideoResume,
     );
   }
 }

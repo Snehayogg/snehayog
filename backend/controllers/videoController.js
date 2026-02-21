@@ -508,7 +508,11 @@ export const getUserVideos = async (req, res) => {
     let user = null;
 
     if (redisService.getConnectionStatus()) {
-      user = await redisService.get(userProfileCacheKey);
+      const cached = await redisService.get(userProfileCacheKey);
+      // **FIX: Only use cache if _id is a valid 24-char hex ObjectId (not a googleId string)**
+      if (cached && cached._id && /^[a-f0-9]{24}$/i.test(cached._id.toString())) {
+        user = cached;
+      }
     }
 
     if (!user) {
@@ -519,6 +523,7 @@ export const getUserVideos = async (req, res) => {
         await redisService.set(userProfileCacheKey, user, 600);
       }
     }
+
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 9;
@@ -1274,6 +1279,59 @@ export const deleteVideo = async (req, res) => {
   } catch (error) {
     console.error('❌ Error deleting video:', error);
     res.status(500).json({ error: 'Failed to delete video' });
+  }
+};
+
+/**
+ * **Update Video Metadata**
+ */
+export const updateVideo = async (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const googleId = req.user.googleId;
+    const { videoName } = req.body;
+
+    if (!videoName || videoName.trim() === '') {
+      return res.status(400).json({ error: 'Video name is required' });
+    }
+
+    const user = await User.findOne({ googleId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const video = await Video.findById(videoId);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    // Verify ownership
+    if (video.uploader.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Not authorized to update this video' });
+    }
+
+    // Update metadata
+    video.videoName = videoName.trim();
+    video.updatedAt = new Date();
+    await video.save();
+
+    // Invalidate caches
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*',
+        `videos:user:${googleId}`,
+        VideoCacheKeys.all(),
+        VideoCacheKeys.single(videoId)
+      ]);
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Video updated successfully',
+      video: {
+        id: video._id,
+        videoName: video.videoName
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error updating video:', error);
+    res.status(500).json({ error: 'Failed to update video' });
   }
 };
 

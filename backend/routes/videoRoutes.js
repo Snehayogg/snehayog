@@ -30,7 +30,7 @@ router.post('/image', verifyToken, videoController.createImageFeedEntry);
  * Video Retrieval Routes
  */
 router.get('/', videoController.getFeed);
-router.get('/user/:googleId', verifyToken, videoController.getUserVideos);
+router.get('/user/:googleId', passiveVerifyToken, videoController.getUserVideos);
 router.get('/saved', verifyToken, videoController.getSavedVideos);
 router.get('/:id', videoController.getVideoById);
 
@@ -48,6 +48,7 @@ router.post('/:id/increment-view', videoController.incrementView);
  * Video Deletion Routes
  */
 router.delete('/:id', verifyToken, videoController.deleteVideo);
+router.patch('/:id', verifyToken, videoController.updateVideo); // **NEW: Update video metadata**
 router.post('/bulk-delete', verifyToken, videoController.bulkDeleteVideos);
 
 /**

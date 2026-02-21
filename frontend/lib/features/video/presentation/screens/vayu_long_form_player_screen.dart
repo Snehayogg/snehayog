@@ -53,8 +53,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   // Controls State
   bool _showControls = true;
   bool _showScrubbingOverlay = false;
-  bool _showPlayPauseAnimation = false;
-  final bool _isAnimatingForward = true;
   Duration _scrubbingTargetTime = Duration.zero;
   Duration _scrubbingDelta = Duration.zero;
   double _horizontalDragTotal = 0.0;
@@ -63,9 +61,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   Timer? _hideControlsTimer;
 
   // Gesture state (MX Player style)
-  final double _verticalDragTotal = 0.0;
-  bool _showBrightnessOverlay = false;
-  bool _showVolumeOverlay = false;
   double _brightnessValue = 0.5;
   double _volumeValue = 0.5;
   Timer? _overlayTimer;
@@ -409,8 +404,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         AppLogger.log('❌ Error setting brightness: $e');
       }
       setState(() {
-        _showBrightnessOverlay = true;
-        _showVolumeOverlay = false;
         _showScrubbingOverlay = false;
         _showControls = false; // Hide controls while gestured
       });
@@ -424,8 +417,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
         AppLogger.log('❌ Error setting volume: $e');
       }
       setState(() {
-        _showVolumeOverlay = true;
-        _showBrightnessOverlay = false;
         _showScrubbingOverlay = false;
         _showControls = false;
       });
@@ -442,12 +433,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   void _resetOverlayTimer() {
     _overlayTimer?.cancel();
     _overlayTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _showBrightnessOverlay = false;
-          _showVolumeOverlay = false;
-        });
-      }
+      // Intentionally left blank or handle other overlay clearing
     });
   }
 
@@ -510,22 +496,15 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
   }
 
   void _showFeedbackAnimation(bool isPlaying) {
-    setState(() {
-      _showPlayPauseAnimation = true;
-    });
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          _showPlayPauseAnimation = false;
-        });
-      }
-    });
-  }
-
-  void _toggleControls() {
-    setState(() {
-      _showControls = !_showControls;
-    });
+    // Toggle controls visibility: hiding them if playing, showing if paused
+    if (isPlaying) {
+      _startHideControlsTimer();
+    } else {
+      setState(() {
+        _showControls = true;
+      });
+      _hideControlsTimer?.cancel();
+    }
   }
 
   void _hideControlsWithDelay() {
@@ -680,78 +659,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
     );
   }
 
-  Widget _buildBrightnessOverlay() {
-    return _buildGestureOverlay(
-      icon: Icons.brightness_6,
-      value: _brightnessValue,
-      label: 'Brightness',
-    );
-  }
 
-  Widget _buildVolumeOverlay() {
-    return _buildGestureOverlay(
-      icon: _volumeValue == 0 ? Icons.volume_off : Icons.volume_up,
-      value: _volumeValue,
-      label: 'Volume',
-    );
-  }
-
-  Widget _buildGestureOverlay({
-    required IconData icon,
-    required double value,
-    required String label,
-  }) {
-    return Center(
-      child: Container(
-        width: 160,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.black45,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12, width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Colors.white, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Text(
-                  '${(value * 100).toInt()}%',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: value,
-                backgroundColor: Colors.white10,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                minHeight: 4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -879,34 +787,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               behavior: HitTestBehavior.translucent,
             ),
 
-          // Play/Pause Feedback Animation
-          if (_showPlayPauseAnimation)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: const BoxDecoration(
-                  color: Colors.black26,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _videoPlayerController.value.isPlaying
-                      ? Icons.play_arrow
-                      : Icons.pause,
-                  color: Colors.white,
-                  size: 60,
-                ),
-              ),
-            ),
-
-          // Brightness Overlay
-          if (_showBrightnessOverlay)
-            _buildBrightnessOverlay(),
-
-          // Volume Overlay
-          if (_showVolumeOverlay)
-            _buildVolumeOverlay(),
-
-          // Custom Controls Overlay
+          // Custom Controls Overlay including Center Area
           if (_showControls &&
               _chewieController != null &&
               _chewieController!.videoPlayerController.value.isInitialized)
@@ -987,30 +868,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               onVerticalDragEnd: (details) => _handleVerticalDragEnd(),
               behavior: HitTestBehavior.translucent,
             ),
-
-            if (_showPlayPauseAnimation)
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: Colors.black26,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _videoPlayerController.value.isPlaying
-                        ? Icons.play_arrow
-                        : Icons.pause,
-                    color: Colors.white,
-                    size: 60,
-                  ),
-                ),
-              ),
-
-            if (_showBrightnessOverlay)
-              _buildBrightnessOverlay(),
-
-            if (_showVolumeOverlay)
-              _buildVolumeOverlay(),
 
             if (_showControls &&
                 _chewieController != null &&
@@ -1188,6 +1045,16 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
               adData: {
                 ..._bannerAdData!,
                 'creatorId': _currentVideo.uploader.id, // **NEW: Pass creatorId**
+              },
+              onVideoPause: () {
+                // Pause the long-form video while the browser is open
+                if (_videoPlayerController.value.isPlaying) {
+                  _videoPlayerController.pause();
+                }
+              },
+              onVideoResume: () {
+                // Resume the long-form video when the browser is closed
+                _videoPlayerController.play();
               },
               onClick: () {
                 AppLogger.log('🖱️ Banner Ad Clicked');
@@ -1424,28 +1291,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> {
                 ),
               ],
             ),
-          ),
-        ),
-
-        // Center Area (No large buttons, just tap to toggle controls)
-        Positioned.fill(
-          child: Center(
-            child: _showPlayPauseAnimation 
-              ? Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
-                    color: Colors.black45,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _videoPlayerController.value.isPlaying
-                        ? Icons.play_arrow
-                        : Icons.pause,
-                    color: AppTheme.iconPrimary,
-                    size: 40,
-                  ),
-                )
-              : const SizedBox.shrink(),
           ),
         ),
 

@@ -66,7 +66,7 @@ router.get('/creators', async (req, res) => {
     const creators = await User.find({
       name: { $regex: escapedQuery, $options: 'i' },
     })
-      .select('googleId name profilePic followers createdAt') // **FIXED: Removed email for privacy**
+      .select('_id googleId name profilePic bio followers createdAt') // **FIXED: Added _id and bio so frontend UserModel.id = MongoDB _id**
       .sort({ 'followers.length': -1 })
       .limit(limit)
       .lean();

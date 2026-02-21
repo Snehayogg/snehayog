@@ -8,7 +8,7 @@ import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 // import 'package:vayu/features/video/data/services/video_service.dart'; // Unused import removed
 // import 'package:url_launcher/url_launcher.dart'; // Unused import removed
-import 'package:vayu/shared/widgets/custom_share_widget.dart';
+import 'package:vayu/shared/services/share_service.dart';
 import 'package:vayu/shared/theme/app_theme.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
@@ -20,6 +20,8 @@ class CarouselAdWidget extends StatefulWidget {
   final VoidCallback? onAdClosed;
   final bool autoPlay;
   final String? videoId; // **NEW: Track which video context this ad was shown in**
+  final VoidCallback? onVideoPause;
+  final VoidCallback? onVideoResume;
 
   const CarouselAdWidget({
     Key? key,
@@ -27,6 +29,8 @@ class CarouselAdWidget extends StatefulWidget {
     this.onAdClosed,
     this.autoPlay = true,
     this.videoId, // **NEW: Optional videoId for view tracking**
+    this.onVideoPause,
+    this.onVideoResume,
   }) : super(key: key);
 
   @override
@@ -52,6 +56,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   final CarouselAdService _carouselAdService = CarouselAdService();
   final AdImpressionService _adImpressionService = AdImpressionService();
   final AuthService _authService = AuthService();
+  final ShareService _shareService = ShareService();
 
 
   @override
@@ -243,6 +248,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
       // **ROAS IMPROVEMENT: Use In-App Browser instead of external launch**
       // This keeps the user in the app, increasing likelihood of returning to content.
+      // Pause video while browser is open
+      widget.onVideoPause?.call();
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -255,7 +262,10 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             title: widget.carouselAd.callToActionLabel,
           ),
         ),
-      );
+      ).then((_) {
+        // Resume video when browser is closed
+        widget.onVideoResume?.call();
+      });
     }
 
     widget.onAdClosed?.call();
@@ -816,15 +826,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     }
   }
 
-  void _onShareTap() {
-    // Create a mock VideoModel for the ad to use existing CustomShareWidget
-    final mockVideo = _createMockVideoFromAd();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => CustomShareWidget(video: mockVideo),
-    );
+  Future<void> _onShareTap() async {
+    await _shareService.shareAd(widget.carouselAd);
   }
 
   String _getCleanedCtaLabel(String label) {
@@ -834,25 +837,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     return label;
   }
 
-  /// Create a mock VideoModel from the carousel ad for compatibility
-  dynamic _createMockVideoFromAd() {
-    // Return a simple object with the required fields for the widgets
-    return {
-      'id': widget.carouselAd.id,
-      'videoName': _getAdTitle(),
-      'description': _getAdDescription(),
-      'uploader': {
-        'id': widget.carouselAd.campaignId,
-        'name': widget.carouselAd.advertiserName,
-        'profilePic': widget.carouselAd.advertiserProfilePic,
-      },
-      'likes': widget.carouselAd.likes,
-      'comments': [], // Empty for now
-      'shares': widget.carouselAd.shares,
-      'likedBy': widget.carouselAd.likedBy,
-      'link': widget.carouselAd.callToActionUrl,
-    };
-  }
+  // Removed _createMockVideoFromAd as it is no longer needed
 }
 
 /// **NEW: Video Player Item for Carousel Ads**

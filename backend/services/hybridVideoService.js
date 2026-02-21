@@ -273,14 +273,6 @@ class HybridVideoService {
          // await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
       }
       
-      console.log('🎉 Hybrid processing completed successfully!');
-      console.log('📊 Cost breakdown:');
-      console.log('   - Cloudflare Stream transcoding: $0 (FREE!)');
-      console.log('   - Stream storage: $0 (deleted after transfer)');
-      console.log('   - R2 storage: ~$0.015/GB/month');
-      console.log('   - R2 bandwidth: $0 (FREE forever!)');
-      console.log('   - Total: 100% FREE transcoding!');
-      
       return {
         success: true,
         videoUrl: r2VideoResult.url,
@@ -292,6 +284,8 @@ class HybridVideoService {
         size: r2VideoResult.size,
         processing: finalStreamVideoId ? 'Cloudflare Stream → R2 Hybrid' : 'HLS → R2',
         costSavings: '100% FREE transcoding',
+        // **NEW: Ensure duration is passed correctly to calling function**
+        duration: processingResult.duration,
         // **NEW: Include original resolution in result**
         width: originalVideoInfo?.width,
         height: originalVideoInfo?.height,
@@ -555,9 +549,9 @@ class HybridVideoService {
         storage: 'Cloudflare R2',
         bandwidth: 'FREE Forever',
         processing: 'Local FFmpeg (FREE)',
-        costSavings: '100% vs any cloud processing',
         hlsPlaylistUrl: r2HLSResult.playlistUrl,
         isHLSEncoded: true,
+        duration: originalVideoInfo.duration || 0,
         // **FIX: Include original video dimensions to preserve aspect ratio**
         aspectRatio: originalVideoInfo.aspectRatio,
         width: originalVideoInfo.width,

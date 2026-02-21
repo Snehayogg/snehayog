@@ -8,6 +8,7 @@ import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
 import 'dart:ui';
 import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -256,16 +257,31 @@ class ProfileVideosWidget extends StatelessWidget {
             // sharedPool.clearAll();
             sharedPool.pauseAllControllers(); 
 
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => VideoScreen(
-                  initialVideos: manager.userVideos,
-                  initialVideoId: video.id,
-                  isFullScreen: true, // **NEW: Full-screen mode**
+            // **NEW: Check video category and navigate accordingly**
+            if (video.videoType.toLowerCase() == 'vayu') {
+              // Navigate to Long Form Player for Vayu videos
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => VayuLongFormPlayerScreen(
+                    video: video,
+                    relatedVideos: manager.userVideos,
+                  ),
                 ),
-              ),
-            );
+              );
+            } else {
+              // Navigate to Short Form Player (VideoScreen) for Yug videos
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => VideoScreen(
+                    initialVideos: manager.userVideos,
+                    initialVideoId: video.id,
+                    isFullScreen: true, // **NEW: Full-screen mode**
+                  ),
+                ),
+              );
+            }
           } else if (manager.isSelecting && canSelectVideo) {
             manager.toggleVideoSelection(video.id);
           }

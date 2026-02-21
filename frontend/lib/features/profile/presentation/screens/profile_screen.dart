@@ -2159,9 +2159,14 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: ValueListenableBuilder<int>(
           valueListenable: _activeProfileTabIndex,
           builder: (context, activeIndex, child) {
+            final int effectiveActiveIndex = isViewingOwnProfile ? activeIndex : 0;
             return ProfileTabsWidget(
-              activeIndex: activeIndex,
-              onSelect: (i) => _activeProfileTabIndex.value = i,
+              activeIndex: effectiveActiveIndex,
+              showTopCreators: isViewingOwnProfile,
+              onSelect: (i) {
+                if (!isViewingOwnProfile) return;
+                _activeProfileTabIndex.value = i;
+              },
             );
           },
         ),
@@ -2169,7 +2174,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
 
     // 4. Videos or Recommendations Section
-    if (_activeProfileTabIndex.value == 0) {
+    if (!isViewingOwnProfile || _activeProfileTabIndex.value == 0) {
       slivers.add(
         ProfileVideosWidget(
           stateManager: _stateManager,

@@ -158,6 +158,14 @@ router.get('/profile', verifyToken, async (req, res) => {
       });
     }
     
+    // **SAFE: Wrap rank call so any failure doesn't cause a 500**
+    let ownRank = 0;
+    try {
+      ownRank = await RecommendationService.getGlobalCreatorRank(currentUser._id);
+    } catch (rankErr) {
+      console.error('⚠️ GET /profile: Failed to get creator rank (non-fatal):', rankErr.message);
+    }
+
     // currentUser is already a plain object due to .lean()
     const payload = {
       _id: currentUser._id,
@@ -172,7 +180,7 @@ router.get('/profile', verifyToken, async (req, res) => {
       preferredCurrency: currentUser.preferredCurrency,
       preferredPaymentMethod: currentUser.preferredPaymentMethod,
       country: currentUser.country,
-      rank: await RecommendationService.getGlobalCreatorRank(currentUser._id), // **NEW: Include global rank**
+      rank: ownRank,
     };
 
     res.json(payload);
@@ -414,6 +422,14 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
     
     console.log(`🔒 Profile Access Check: Requester=${requesterId}, Target=${user.googleId}, IsOwner=${isOwner}`);
 
+    // **SAFE: Wrap rank call so any failure doesn't cause a 500**
+    let rank = 0;
+    try {
+      rank = await RecommendationService.getGlobalCreatorRank(user._id);
+    } catch (rankErr) {
+      console.error('⚠️ GET /:id: Failed to get creator rank (non-fatal):', rankErr.message);
+    }
+
     const payload = {
       _id: user._id, // MongoDB ObjectID
       id: user.googleId,
@@ -423,7 +439,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
       videos: user.videos,
       following: user.following?.length || 0,
       followers: user.followers?.length || 0,
-      rank: await RecommendationService.getGlobalCreatorRank(user._id),
+      rank,
       // **SENSITIVE FIELDS**: Only include if owner
       email: isOwner ? user.email : null,
       preferredCurrency: isOwner ? user.preferredCurrency : null,

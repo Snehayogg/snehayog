@@ -310,17 +310,12 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     const userId = req.user.id;
     const videoPath = req.file.path;
 
-    console.log('🚀 Starting video upload process...');
-    console.log('📁 File path:', videoPath);
-    console.log('👤 User ID:', userId);
-
     // **NEW: Lazy load hybrid service to ensure env vars are loaded**
     if (!hybridVideoService) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
 
-    // **NEW: Validate video file with hybrid service**
     const videoValidation = await hybridVideoService.validateVideo(videoPath);
     if (!videoValidation.isValid) {
       await fs.unlink(videoPath);
@@ -329,9 +324,6 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
         details: videoValidation.error
       });
     }
-
-    console.log('✅ Video validation passed');
-    console.log('📊 Video info:', videoValidation);
 
     // **NEW: Show cost estimate**
     const costEstimate = hybridVideoService.getCostEstimate(videoValidation.sizeInMB);
@@ -345,11 +337,9 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     }
 
     // **NEW: Calculate file hash for duplicate detection**
-    console.log('🔍 Calculating video file hash for duplicate detection...');
     let videoHash;
     try {
       videoHash = await calculateFileHash(videoPath);
-      console.log('✅ Video hash calculated:', videoHash.substring(0, 16) + '...');
     } catch (hashError) {
       console.error('❌ Error calculating file hash:', hashError);
       await fs.unlink(videoPath);
@@ -425,13 +415,8 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
 
     // **NEW: Save video record first**
     await video.save();
-    console.log('💾 Video record saved with ID:', video._id);
 
     // **NEW: Start hybrid processing in background (Cloudinary → R2)**
-    console.log('🔄 Starting background processing for video:', video._id);
-    console.log('📁 Video path:', videoPath);
-    console.log('👤 User ID:', userId);
-
     // Start processing in background with proper error handling
     processVideoHybrid(video._id, videoPath, videoName, userId).catch(error => {
       console.error('❌ Background processing failed:', error);
@@ -833,17 +818,10 @@ function normalizeVideoUrl(url) {
   return normalizedUrl;
 }
 
-// **NEW: Hybrid video processing function (Cloudinary → R2)**
 async function processVideoHybrid(videoId, videoPath, videoName, userId) {
   try {
-    console.log('🚀 Starting hybrid video processing (Cloudinary → R2) for:', videoId);
-    console.log('📁 Video path:', videoPath);
-    console.log('📝 Video name:', videoName);
-    console.log('👤 User ID:', userId);
-
     // **FIX: Sanitize video name to remove invalid characters for Cloudinary**
     const sanitizedVideoName = videoName.replace(/[^a-zA-Z0-9\s_-]/g, '_').replace(/\s+/g, '_').substring(0, 50);
-    console.log('📝 Sanitized video name:', sanitizedVideoName);
 
     // **NEW: Lazy load hybrid service to ensure env vars are loaded**
     if (!hybridVideoService) {
@@ -860,15 +838,12 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     video.processingStatus = 'processing';
     video.processingProgress = 10;
     await video.save();
-    console.log('📊 Processing status updated to 10% - Starting validation');
 
     // **UPDATE: Validation phase (10-30%)**
     video.processingProgress = 30;
     await video.save();
-    console.log('📊 Processing status updated to 30% - Validation complete, starting conversion');
 
     // **NEW: Process video using hybrid approach with timeout**
-    console.log('🔄 Starting hybrid processing...');
     let hybridResult;
     try {
       hybridResult = await Promise.race([
@@ -882,7 +857,6 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
           setTimeout(() => reject(new Error('Hybrid processing timeout after 30 minutes')), 30 * 60 * 1000)
         )
       ]);
-      console.log('✅ Hybrid processing completed successfully');
     } catch (error) {
       console.error('❌ Hybrid processing failed:', error);
       // Update video status to failed
@@ -892,13 +866,9 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       throw error;
     }
 
-    console.log('✅ Hybrid processing completed');
-    console.log('🔗 Hybrid result:', hybridResult);
-
     // **UPDATE: Finalizing phase (80-95%)**
     video.processingProgress = 95;
     await video.save();
-    console.log('📊 Processing status updated to 95% - Finalizing');
 
     // **NEW: Update video record with R2 URLs**
     // **FIX: Validate and normalize URLs before saving**
@@ -907,9 +877,6 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
 
     video.videoUrl = normalizedVideoUrl; // R2 video URL with FREE bandwidth
     video.thumbnailUrl = normalizedThumbnailUrl; // R2 thumbnail URL
-
-    console.log('🔗 Final video URL:', normalizedVideoUrl);
-    console.log('🖼️ Final thumbnail URL:', normalizedThumbnailUrl);
 
     // **NEW: Clear old quality URLs (single format now)**
     video.preloadQualityUrl = null;
@@ -952,18 +919,57 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       generatedAt: new Date()
     }];
 
+    // **FIX: Update duration and videoType based on actual processed result**
+    if (hybridResult.duration && hybridResult.duration > 0) {
+      video.duration = hybridResult.duration;
+      // Recalculate videoType based on accurate duration (yug <= 60s, vayu > 60s)
+      video.videoType = video.duration > 60 ? 'vayu' : 'yog';
+    }
+
     await video.save();
     console.log('🎉 Hybrid video processing completed successfully!');
-    console.log('💰 Cost savings: 93% vs previous setup');
-    console.log('📊 Final video data:', {
-      id: video._id,
-      videoUrl: normalizedVideoUrl,
-      thumbnailUrl: normalizedThumbnailUrl,
-      quality: '480p optimized',
-      storage: 'Cloudflare R2',
-      bandwidth: 'FREE',
-      status: video.processingStatus
-    });
+
+    // **NEW: Trigger Free Local Moderation (replaces Sightengine)**
+    try {
+      const { default: localModerationService } = await import('../services/localModerationService.js');
+      
+      // We skip moderation for very short previews if needed, but usually, we scan everything
+      console.log('🛡️ Starting local AI moderation scan...');
+      
+      // Note: We use the normalizedVideoUrl (R2) for the scan if possible, 
+      // but the service needs a local path. Since processing just finished, 
+      // we might need to be careful about local file cleanup.
+      // However, hybridResult often contains info about where the file was.
+      
+      // If we used Cloudflare Stream, the local processed file might have been cleaned up.
+      // In that case, we can download a few frames from the R2 URL or similar.
+      // BUT, processVideoHybrid in hybridVideoService usually cleans up.
+      
+      // OPTIMIZATION: If we have a local path that hasn't been deleted yet, use it.
+      // If not, we scan the newly created R2 URL (which localModerationService can handle via FFmpeg)
+      const moderationResult = await localModerationService.moderateVideo(normalizedVideoUrl);
+      
+      const updatedVideo = await Video.findById(video._id);
+      if (updatedVideo) {
+        updatedVideo.moderationResult = {
+          isFlagged: moderationResult.isFlagged,
+          confidence: moderationResult.confidence,
+          label: moderationResult.label,
+          processedAt: new Date(),
+          provider: 'local-transformers'
+        };
+        
+        // If flagged, we hide it or mark it for review
+        if (moderationResult.isFlagged) {
+          console.log(`🚩 Video ${video._id} FLAGGED by local AI. Marking as hidden.`);
+          updatedVideo.processingStatus = 'flagged'; // Or 'hidden'
+        }
+        
+        await updatedVideo.save();
+      }
+    } catch (modErr) {
+      console.error('⚠️ Local moderation failed (skipping to ensure availability):', modErr.message);
+    }
 
   } catch (error) {
     console.error('❌ Error in hybrid video processing:', error);
@@ -1331,8 +1337,6 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
     const { videoId } = req.params;
     const userId = req.user.id;
 
-    console.log('🔍 Status check request:', { videoId, userId });
-
     // Validate video ID
     if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
       return res.status(400).json({
@@ -1375,7 +1379,6 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
       }
     };
 
-    console.log('✅ Status response:', statusResponse.video.processingStatus);
     res.json(statusResponse);
 
   } catch (error) {
@@ -1388,5 +1391,6 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
   }
 });
 
-export default router;
+// **MODERATION WEBHOOK REMOVED - Using Local Moderation Instead**
 
+export default router;

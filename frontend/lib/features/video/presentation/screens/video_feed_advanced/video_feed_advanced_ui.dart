@@ -471,27 +471,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 return const SizedBox.shrink();
               },
             ),
-          // **NEW: Back Button for Profile/Vayu navigation**
-          if (widget.isFullScreen)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 10,
-              left: 16,
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
+
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -797,6 +777,20 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // BannerAdSection will try AdMob first, then fallback to custom ads
     return BannerAdSection(
       adData: adDataWithVideoId, // **FIXED: Pass custom ad data for fallback**
+      onVideoPause: () {
+        // Pause the currently playing video while the browser is open
+        final videoId = index < _videos.length ? _videos[index].id : null;
+        if (videoId != null && _controllerPool.containsKey(videoId)) {
+          _controllerPool[videoId]!.pause();
+        }
+      },
+      onVideoResume: () {
+        // Resume the video when the browser is closed
+        final videoId = index < _videos.length ? _videos[index].id : null;
+        if (videoId != null && _controllerPool.containsKey(videoId)) {
+          _controllerPool[videoId]!.play();
+        }
+      },
       onClick: () {
         AppLogger.log('🖱️ Banner ad clicked on video $index');
       },
@@ -1524,6 +1518,18 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     return CarouselAdWidget(
       carouselAd: carouselAd,
       videoId: videoId,
+      onVideoPause: () {
+        // Pause the currently playing video while the browser is open
+        if (videoId != null && _controllerPool.containsKey(videoId)) {
+          _controllerPool[videoId]!.pause();
+        }
+      },
+      onVideoResume: () {
+        // Resume the video when the browser is closed
+        if (videoId != null && _controllerPool.containsKey(videoId)) {
+          _controllerPool[videoId]!.play();
+        }
+      },
       onAdClosed: () {
         if (videoId != null && _currentHorizontalPage.containsKey(videoId)) {
           _currentHorizontalPage[videoId]!.value = 0;
@@ -1882,13 +1888,68 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Video Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Video Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                if (_currentUserId != null &&
+                    (video.uploader.googleId == _currentUserId ||
+                        video.uploader.id == _currentUserId))
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.35,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+                        foregroundColor: AppTheme.primary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () async {
+                        Navigator.of(context).pop(); // Close bottom sheet
+                        final newTitle = await Navigator.of(context).push<String>(
+                          MaterialPageRoute(
+                            builder: (context) => EditVideoTitle(video: video),
+                          ),
+                        );
+
+                        if (newTitle != null && newTitle.isNotEmpty) {
+                          // Update the video title in the local list
+                          safeSetState(() {
+                            final index = _videos.indexWhere((v) => v.id == video.id);
+                            if (index != -1) {
+                              _videos[index] =
+                                  _videos[index].copyWith(videoName: newTitle);
+                            }
+                          });
+                        }
+                      },
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.edit_outlined, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 20),
             Row(
@@ -1922,7 +1983,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Icon(Icons.remove_red_eye_outlined, size: 20, color: Colors.grey),
+                const Icon(Icons.remove_red_eye_outlined,
+                    size: 20, color: Colors.grey),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1946,7 +2008,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 ),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            const SizedBox(height: 20),
           ],
         ),
       ),

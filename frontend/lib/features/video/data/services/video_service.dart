@@ -821,7 +821,49 @@ class VideoService {
 
     } catch (e) {
       AppLogger.log('❌ Direct upload failed: $e');
-      throw e;
+      rethrow;
+    }
+  }
+  Future<bool> updateVideoMetadata(String videoId, String videoName) async {
+    try {
+      AppLogger.log('🔄 VideoService: Updating metadata for video: $videoId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) {
+        throw Exception('Please sign in to update video details');
+      }
+
+      final headers = await _getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+      
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
+      final url = '$resolvedBaseUrl/api/videos/$videoId';
+
+      final res = await http
+          .patch(
+            Uri.parse(url),
+            headers: headers,
+            body: json.encode({'videoName': videoName}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200) {
+        AppLogger.log('✅ VideoService: Video updated successfully');
+        return true;
+      } else if (res.statusCode == 401) {
+        throw Exception('Please sign in again to update video');
+      } else if (res.statusCode == 403) {
+        throw Exception('You do not have permission to update this video');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to update video');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error updating video metadata: $e');
+      if (e is TimeoutException) {
+        throw Exception('Request timed out. Please try again.');
+      }
+      rethrow;
     }
   }
 

@@ -38,7 +38,7 @@ class _SplashScreenState extends State<SplashScreen>
     // **SMART PROGRESS: Adaptive Controller**
     _progressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000), // Default slow crawl
+      duration: const Duration(milliseconds: 800), // Fast crawl to match quick auth
     );
 
     // 1. Start Fade

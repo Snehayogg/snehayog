@@ -4,11 +4,13 @@ import 'package:vayu/shared/theme/app_theme.dart';
 class ProfileTabsWidget extends StatelessWidget {
   final int activeIndex;
   final ValueChanged<int> onSelect;
+  final bool showTopCreators;
 
   const ProfileTabsWidget({
     super.key,
     required this.activeIndex,
     required this.onSelect,
+    this.showTopCreators = true,
   });
 
   @override
@@ -27,12 +29,13 @@ class ProfileTabsWidget extends StatelessWidget {
               index: 0,
             ),
           ),
-          Expanded(
-            child: _buildTabItem(
-              label: 'Top Creators',
-              index: 1,
+          if (showTopCreators)
+            Expanded(
+              child: _buildTabItem(
+                label: 'Top Creators',
+                index: 1,
+              ),
             ),
-          ),
         ],
       ),
     );

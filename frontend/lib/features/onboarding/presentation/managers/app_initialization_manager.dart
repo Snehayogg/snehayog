@@ -14,6 +14,7 @@ import 'package:vayu/shared/services/notification_service.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/services/hls_warmup_service.dart';
 import 'dart:async'; // For unawaited
+import 'package:shared_preferences/shared_preferences.dart';
 /// **AppInitializationManager**
 /// 
 /// Centralizes and sequences app startup logic to prevent "thundering herd"
@@ -110,16 +111,19 @@ class AppInitializationManager {
       final videoService = VideoService();
       final authService = AuthService();
 
-      // Task B: Fetch User Data (Strict sequence ensures tokens are ready for videos)
+      // Task B: Fast local auth gate — validates token state without a network call.
+      // Full profile fetch runs in the background after navigation.
       try {
-        AppLogger.log('🔐 InitManager: Authenticating user...');
+        AppLogger.log('🔐 InitManager: Fast local auth gate...');
         initializationStatus.value = 'Authenticating...';
         initializationProgress.value = 0.50; // checkpoint
-        await authService.ensureStrictAuth();
+        await _fastAuthGate();
         initializationProgress.value = 0.65; // checkpoint
-        AppLogger.log('✅ InitManager: User Data (Strict) loaded');
+        AppLogger.log('✅ InitManager: Fast auth gate complete');
+        // Full profile/session validation runs in background (non-blocking)
+        unawaited(authService.ensureStrictAuth());
       } catch (e) {
-        AppLogger.log('⚠️ InitManager: User Data fetch failed (non-critical): $e');
+        AppLogger.log('⚠️ InitManager: Auth gate error (non-critical): $e');
       }
 
       // Task A: Video fetching (Now has access to validated tokens/user ID)
@@ -189,6 +193,45 @@ class AppInitializationManager {
       }
   }
 
+
+  /// **FAST AUTH GATE: Checks token state locally, refreshes only if expired.**
+  /// - Valid token: returns instantly (<50ms)
+  /// - Expired token: tries one refresh call (~500ms), clears on failure
+  /// - No token: returns instantly (AuthWrapper will route to login)
+  Future<void> _fastAuthGate() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      final authService = AuthService();
+
+      // No token → let AuthWrapper handle routing to login
+      if (token == null || token.isEmpty) {
+        AppLogger.log('🔐 InitManager: No token found, proceeding to AuthWrapper');
+        return;
+      }
+
+      // Token is locally valid → navigate immediately, no network needed
+      if (authService.isTokenValid(token)) {
+        AppLogger.log('✅ InitManager: Token valid locally, fast-tracking to home');
+        return;
+      }
+
+      // Token is expired → attempt a fast refresh (single network call)
+      AppLogger.log('🔄 InitManager: Token expired, attempting fast refresh...');
+      final refreshed = await authService.refreshAccessToken()
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+
+      if (refreshed != null) {
+        AppLogger.log('✅ InitManager: Token refreshed successfully, proceeding');
+      } else {
+        AppLogger.log('⚠️ InitManager: Refresh failed — clearing expired token, AuthWrapper will show login');
+        await prefs.remove('jwt_token');
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ InitManager: _fastAuthGate error: $e — proceeding anyway');
+      // Fail-safe: always continue, AuthWrapper handles auth state
+    }
+  }
 
   // --- STAGE 3: DEFERRED SERVICES (After Home Mount) ---
   /// Called by MainScreen after 3-5 seconds.

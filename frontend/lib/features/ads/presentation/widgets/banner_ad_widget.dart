@@ -14,12 +14,16 @@ class BannerAdWidget extends StatefulWidget {
   final Map<String, dynamic> adData;
   final VoidCallback? onAdClick;
   final VoidCallback? onAdImpression;
+  final VoidCallback? onVideoPause;
+  final VoidCallback? onVideoResume;
 
   const BannerAdWidget({
     Key? key,
     required this.adData,
     this.onAdClick,
     this.onAdImpression,
+    this.onVideoPause,
+    this.onVideoResume,
   }) : super(key: key);
 
   @override
@@ -450,6 +454,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
         // **ROAS IMPROVEMENT: Use In-App Browser**
         if (context.mounted) {
+          // Pause video while browser is open
+          widget.onVideoPause?.call();
           showModalBottomSheet(
             context: context,
             isScrollControlled: true,
@@ -462,7 +468,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                 title: widget.adData['title'] ?? 'Sponsored Content',
               ),
             ),
-          );
+          ).then((_) {
+            // Resume video when browser is closed
+            widget.onVideoResume?.call();
+          });
         }
       } else {
         // Show simple message to user

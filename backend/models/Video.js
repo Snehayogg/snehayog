@@ -201,6 +201,29 @@ const videoSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
     description: 'Timestamp when finalScore was last calculated'
+  },
+  
+  // **NEW: Moderation system fields (replaces Sightengine)**
+  moderationResult: {
+    isFlagged: {
+      type: Boolean,
+      default: false
+    },
+    confidence: {
+      type: Number,
+      default: 0
+    },
+    label: {
+      type: String,
+      default: 'normal'
+    },
+    processedAt: {
+      type: Date
+    },
+    provider: {
+      type: String,
+      default: 'local-transformers'
+    }
   }
 }, {
   timestamps: true
