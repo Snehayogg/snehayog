@@ -70,6 +70,27 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
+  /// **OPTIMIZED: Batch check follow status for multiple users in 1 call**
+  Future<void> batchCheckFollowStatus(List<String> userIds) async {
+    if (userIds.isEmpty) return;
+
+    // Filter out already cached IDs
+    final uncachedIds = userIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty && id != 'unknown' && !_followStatusCache.containsKey(id))
+        .toList();
+
+    if (uncachedIds.isEmpty) return;
+
+    try {
+      final statuses = await _userService.batchCheckFollowStatus(uncachedIds);
+      _followStatusCache.addAll(statuses);
+      notifyListeners();
+    } catch (e) {
+      // Silently fail — individual checks will still work as fallback
+    }
+  }
+
   /// Get user data including follower counts
   Future<UserModel?> getUserDataWithFollowers(String userId) async {
     final normalizedId = userId.trim();

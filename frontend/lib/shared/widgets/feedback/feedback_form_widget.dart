@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/shared/services/feedback_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class FeedbackFormWidget extends StatefulWidget {
   const FeedbackFormWidget({Key? key}) : super(key: key);
@@ -171,14 +172,12 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
               const SizedBox(height: 24),
 
               // Submit Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitFeedback,
-                  child: _isSubmitting
-                      ? const CircularProgressIndicator()
-                      : const Text('Submit Feedback'),
-                ),
+              AppButton(
+                onPressed: _isSubmitting ? null : _submitFeedback,
+                label: 'Submit Feedback',
+                variant: AppButtonVariant.primary,
+                isLoading: _isSubmitting,
+                isFullWidth: true,
               ),
             ],
           ),

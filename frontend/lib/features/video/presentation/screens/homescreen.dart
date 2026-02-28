@@ -18,9 +18,10 @@ import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/onboarding/presentation/managers/app_initialization_manager.dart';
 import 'package:vayu/features/games/presentation/screens/games_feed_screen.dart'; // Import GamesFeedScreen
 import 'package:in_app_update/in_app_update.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/shared/managers/activity_recovery_manager.dart';
 import 'package:vayu/shared/models/app_activity.dart';
+import 'package:hugeicons/hugeicons.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -35,6 +36,15 @@ class _MainScreenState extends State<MainScreen>
   final _vayuScreenKey = GlobalKey<VayuScreenState>();
   final _profileScreenKey = GlobalKey<State<ProfileScreen>>();
   final AuthService _authService = AuthService();
+
+  // **NESTED NAVIGATION: Navigator keys for each tab**
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
+    GlobalKey<NavigatorState>(), // Index 0: Yug
+    GlobalKey<NavigatorState>(), // Index 1: Vayu
+    GlobalKey<NavigatorState>(), // Index 2: Arcade
+    GlobalKey<NavigatorState>(), // Index 3: Upload
+    GlobalKey<NavigatorState>(), // Index 4: Profile
+  ];
 
   // **NEW: Track refresh state for visual feedback**
   bool _isRefreshing = false;
@@ -129,7 +139,7 @@ class _MainScreenState extends State<MainScreen>
           );
         }
       } else {
-        print('❌ MainScreen: VideoScreen state not found');
+        AppLogger.log('❌ MainScreen: VideoScreen state not found');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -151,7 +161,7 @@ class _MainScreenState extends State<MainScreen>
         }
       }
     } catch (e) {
-      print('❌ MainScreen: Error in double-tap refresh: $e');
+      AppLogger.log('❌ MainScreen: Error in double-tap refresh: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -244,8 +254,7 @@ class _MainScreenState extends State<MainScreen>
 
     // **BACKGROUND PRELOADING: Start preloading profile data when app opens (user starts on Yug tab)**
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print(
-          '🚀 MainScreen: Starting background profile preloading on app start');
+      AppLogger.log('🚀 MainScreen: Starting background profile preloading on app start');
       _profilePreloader.startBackgroundPreloading();
 
       // **LOCATION ONBOARDING: Check and show location permission request**
@@ -311,12 +320,10 @@ class _MainScreenState extends State<MainScreen>
       // Users can access login from settings/profile if needed
       final needsReLogin = await _authService.needsReLogin();
       if (needsReLogin) {
-        print(
-            '⚠️ MainScreen: Token validation failed, clearing expired tokens');
+
         await _authService.clearExpiredTokens();
         // **DISABLED: No redirect to login screen - user stays on home screen**
-        print(
-            'ℹ️ MainScreen: Token expired but staying on home screen (login disabled)');
+ 
       }
     } catch (e) {
       print('❌ MainScreen: Error checking token validity: $e');
@@ -335,13 +342,10 @@ class _MainScreenState extends State<MainScreen>
 
       final shouldShow =
           await LocationOnboardingService.shouldShowLocationOnboarding();
-      print('📍 MainScreen: Should show location onboarding: $shouldShow');
 
       if (shouldShow) {
-        print('📍 MainScreen: Showing location onboarding dialog...');
         final result =
             await LocationOnboardingService.showLocationOnboarding(context);
-        print('📍 MainScreen: Location onboarding result: $result');
 
         if (result) {
           print('✅ MainScreen: Location permission granted successfully');
@@ -362,6 +366,7 @@ class _MainScreenState extends State<MainScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     // **NEW: Dispose animation controller**
+    
     _refreshAnimationController.dispose();
     // **BACKGROUND PRELOADING: Dispose preloader**
     _profilePreloader.dispose();
@@ -388,6 +393,13 @@ class _MainScreenState extends State<MainScreen>
 
   /// Handle back button press with proper navigation lifecycle
   Future<void> _handleBackPress(MainController mainController) async {
+    // **NEW: Check nested navigator first**
+    final currentKey = _navigatorKeys[mainController.currentIndex];
+    if (await currentKey.currentState!.maybePop()) {
+      print('🔙 MainScreen: Nested pop occurred');
+      return;
+    }
+
     // Use MainController's back button handling logic
     final shouldExit = mainController.handleBackPress();
 
@@ -467,17 +479,25 @@ class _MainScreenState extends State<MainScreen>
   Widget build(BuildContext context) {
     return Consumer<MainController>(
       builder: (context, mainController, child) {
-        return PopScope(
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarIconBrightness: Brightness.light,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarContrastEnforced: false,
+          ),
+          child: PopScope(
           canPop: false, // Prevent default back behavior
           onPopInvokedWithResult: (didPop, result) async {
             await _handleBackPress(mainController);
           },
           child: Scaffold(
-            backgroundColor: AppTheme.backgroundPrimary,
+            extendBody: !mainController.isBottomNavVisible, // Allow content to flow under the bottom bar only when hidden
+            backgroundColor: AppColors.backgroundPrimary,
             floatingActionButton: kDebugMode
                 ? FloatingActionButton(
                     mini: true,
-                    backgroundColor: Colors.deepPurple.withOpacity(0.8),
+                    backgroundColor: Colors.deepPurple.withValues(alpha: 0.8),
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -498,93 +518,105 @@ class _MainScreenState extends State<MainScreen>
             body: IndexedStack(
               index: mainController.currentIndex,
               children: [
-                VideoScreen(
+                _buildTabNavigator(0, VideoScreen(
                   key: _videoScreenKey,
                   initialVideos: AppInitializationManager.instance.initialVideos,
-                ),
-                VayuScreen(key: _vayuScreenKey),
-                const GamesFeedScreen(key: PageStorageKey('gamesFeedScreen')), // Index 2: Games
-                UploadScreen(
+                )),
+                _buildTabNavigator(1, VayuScreen(key: _vayuScreenKey)),
+                _buildTabNavigator(2, const GamesFeedScreen(key: PageStorageKey('gamesFeedScreen'))),
+                _buildTabNavigator(3, UploadScreen(
                   key: const PageStorageKey('uploadScreen'),
                   onVideoUploaded: _refreshVideoList,
-                ),
-                ProfileScreen(
+                )),
+                _buildTabNavigator(4, ProfileScreen(
                   key: _profileScreenKey,
-                ),
+                )),
               ],
             ),
-            bottomNavigationBar: RepaintBoundary(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundPrimary,
-                  border: const Border(
-                    top: BorderSide(color: AppTheme.borderPrimary, width: 0.5),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
-                      spreadRadius: 0,
+            bottomNavigationBar: AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: mainController.isBottomNavVisible 
+                ? RepaintBoundary(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.backgroundPrimary,
+                        border: const Border(
+                          top: BorderSide(color: AppColors.borderPrimary, width: 0.5),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, -4),
+                            spreadRadius: 0,
+                          ),
+                        ],
+                      ),
+                      child: Container(
+                        height: 52 + MediaQuery.of(context).padding.bottom,
+                        padding: EdgeInsets.only(
+                          left: 4,
+                          right: 4,
+                          top: 0,
+                          bottom: math.max(2.0, MediaQuery.of(context).padding.bottom),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildNavItem(
+                              index: 0,
+                              currentIndex: mainController.currentIndex,
+                              icon: HugeIcons.strokeRoundedPlayCircle02,
+                              activeIcon: HugeIcons.strokeRoundedPlayCircle02,
+                              label: 'Yug',
+                              onTap: () => _handleNavTap(0, mainController),
+                              mainController: mainController,
+                            ),
+                            _buildNavItem(
+                              index: 1,
+                              currentIndex: mainController.currentIndex,
+                              icon: HugeIcons.strokeRoundedVideo01,
+                              activeIcon: HugeIcons.strokeRoundedVideo01,
+                              label: 'Vayu',
+                              onTap: () => _handleNavTap(1, mainController),
+                              mainController: mainController,
+                            ),
+                            _buildNavItem(
+                              index: 2,
+                              currentIndex: mainController.currentIndex,
+                              icon: HugeIcons.strokeRoundedGameController01,
+                              activeIcon: HugeIcons.strokeRoundedGameController01,
+                              label: 'Arcade',
+                              onTap: () => _handleNavTap(2, mainController),
+                              mainController: mainController,
+                            ),
+                            _buildNavItem(
+                              index: 3,
+                              currentIndex: mainController.currentIndex,
+                              icon: HugeIcons.strokeRoundedAddCircleHalfDot,
+                              activeIcon: HugeIcons.strokeRoundedAddCircleHalfDot,
+                              label: 'Upload',
+                              onTap: () => _handleNavTap(3, mainController),
+                              mainController: mainController,
+                            ),
+                            _buildNavItem(
+                              index: 4,
+                              currentIndex: mainController.currentIndex,
+                              icon: HugeIcons.strokeRoundedUser,
+                              activeIcon: HugeIcons.strokeRoundedUser,
+                              label: 'Account',
+                              onTap: () => _handleNavTap(4, mainController),
+                              mainController: mainController,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-                child: Container(
-                  height: 60 + MediaQuery.of(context).padding.bottom,
-                  padding: EdgeInsets.only(
-                    left: 4,
-                    right: 4,
-                    top: 2,
-                    bottom: math.max(2.0, MediaQuery.of(context).padding.bottom),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(
-                        index: 0,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.play_circle_filled,
-                        label: 'Yug',
-                        onTap: () => _handleNavTap(0, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 1,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.video_camera_front_rounded,
-                        label: 'Vayu',
-                        onTap: () => _handleNavTap(1, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 2,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.sports_esports, // Game Controller Icon
-                        label: 'Arcade',
-                        onTap: () => _handleNavTap(2, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 3,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.add,
-                        label: 'Upload',
-                        onTap: () => _handleNavTap(3, mainController),
-                        mainController: mainController,
-                      ),
-                      _buildNavItem(
-                        index: 4,
-                        currentIndex: mainController.currentIndex,
-                        icon: Icons.person_outline_rounded,
-                        label: 'Account',
-                        onTap: () => _handleNavTap(4, mainController),
-                        mainController: mainController,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+                  )
+                : const SizedBox(height: 0, width: double.infinity),
             ),
+          ),
           ),
         );
       },
@@ -595,7 +627,8 @@ class _MainScreenState extends State<MainScreen>
   Widget _buildNavItem({
     required int index,
     required int currentIndex,
-    required IconData icon,
+    required dynamic icon,
+    required dynamic activeIcon,
     required String label,
     required VoidCallback onTap,
     required MainController mainController,
@@ -625,8 +658,8 @@ class _MainScreenState extends State<MainScreen>
                   child: RotationTransition(
                     turns: _refreshAnimationController,
                     child: Container(
-                      width: 32, // Same size for all icons
-                      height: 32, // Same size for all icons
+                      width: 36, // Same size for all icons
+                      height: 34, // Same size for all icons
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF2196F3).withOpacity(0.2)
@@ -635,10 +668,10 @@ class _MainScreenState extends State<MainScreen>
                       ),
                       child: Icon(
                         Icons.refresh,
-                        size: isSelected ? 30 : 28, // Same size for all icons
+                        size: isSelected ? 30 : 28,
                         color: isSelected
-                            ? AppTheme.primary
-                            : AppTheme.textSecondary,
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
                       ),
                     ),
                   ),
@@ -646,20 +679,20 @@ class _MainScreenState extends State<MainScreen>
               else
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 32, // Same size for all icons
-                  height: 32, // Same size for all icons
+                  width: 36, // Increased to fit larger icons
+                  height: 34, // Increased to fit larger icons
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.primary.withValues(alpha:0.2)
+                        ? AppColors.primary.withValues(alpha:0.2)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Icon(
-                    icon,
-                    size: isSelected ? 30 : 28, // Same size for all icons
+                  child: HugeIcon(
+                    icon: isSelected ? activeIcon : icon,
+                    size: isSelected ? 30.0 : 28.0, // Matches Youtube larger icons
                     color: isSelected
-                        ? AppTheme.primary
-                        : AppTheme.textSecondary,
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                   ),
                 ),
 
@@ -667,11 +700,11 @@ class _MainScreenState extends State<MainScreen>
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
                 style: TextStyle(
-                  fontSize: 9, // Increased from 7 to 9 for better readability
+                  fontSize: 10, // Slightly more legible when compact
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   color: isSelected
-                      ? AppTheme.primary
-                      : AppTheme.textSecondary,
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
                   letterSpacing: 0.2,
                 ),
                 child: Text(isRefreshingYug ? 'Refreshing...' : label),
@@ -680,6 +713,18 @@ class _MainScreenState extends State<MainScreen>
           ),
         ),
       ),
+    );
+  }
+
+  /// **NEW: Nested Tab Navigator Builder**
+  Widget _buildTabNavigator(int index, Widget child) {
+    return Navigator(
+      key: _navigatorKeys[index],
+      onGenerateRoute: (routeSettings) {
+        return MaterialPageRoute(
+          builder: (context) => child,
+        );
+      },
     );
   }
 }

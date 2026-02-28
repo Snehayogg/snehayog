@@ -8,7 +8,7 @@ import {
   getActiveSessions,
   checkDeviceId 
 } from '../controllers/authController.js';
-import { authLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter, refreshLimiter } from '../middleware/rateLimiter.js';
 import { verifyToken } from '../utils/verifytoken.js';
 
 const router = express.Router();
@@ -25,7 +25,7 @@ router.post('/google', authLimiter, googleSignIn);
 // router.post('/device-login', authLimiter, deviceLogin);
 
 // Refresh Access Token
-router.post('/refresh', authLimiter, refreshAccessToken);
+router.post('/refresh', refreshLimiter, refreshAccessToken);
 
 // Legacy: Check if device has logged in before
 router.post('/check-device', authLimiter, checkDeviceId);

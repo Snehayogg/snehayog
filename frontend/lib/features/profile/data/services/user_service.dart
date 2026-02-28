@@ -207,6 +207,36 @@ class UserService {
     }
   }
 
+  /// **OPTIMIZED: Batch check follow status for multiple users in 1 API call**
+  Future<Map<String, bool>> batchCheckFollowStatus(List<String> userIds) async {
+    if (userIds.isEmpty) return {};
+
+    try {
+      final token = (await _authService.getUserData())?['token'];
+      if (token == null) return {};
+
+      final response = await httpClientService.post(
+        Uri.parse('${NetworkHelper.usersEndpoint}/isfollowing/batch'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'userIds': userIds}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final statuses = data['statuses'] as Map<String, dynamic>? ?? {};
+        return statuses.map((key, value) => MapEntry(key, value as bool));
+      }
+
+      return {};
+    } catch (e) {
+      AppLogger.log('❌ Error batch checking follow status: $e');
+      return {};
+    }
+  }
+
   /// Update user profile information
   Future<bool> updateProfile({
     required String googleId,

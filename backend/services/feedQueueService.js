@@ -266,6 +266,22 @@ class FeedQueueService {
     console.log(`♻️ Refill STARTED for ${userId}`);
     
     try {
+      // **CRITICAL FIX: Resolve Google ID → MongoDB ObjectId for uploader queries**
+      // The userId from JWT is a Google ID (e.g. "105992171843910879786"), but
+      // Video.uploader is a MongoDB ObjectId. Querying with a Google ID causes CastError.
+      let uploaderObjectId = null;
+      if (userId && userId !== 'anon' && userId !== 'undefined') {
+        try {
+          const User = mongoose.model('User');
+          const userDoc = await User.findOne({ googleId: userId }).select('_id').lean();
+          if (userDoc) {
+            uploaderObjectId = userDoc._id;
+          }
+        } catch (e) {
+          console.error('⚠️ FeedQueue: Could not resolve user ObjectId:', e.message);
+        }
+      }
+
       // 1. Fetch User History & Context
       const queueKey = this.getQueueKey(userId, videoType);
       
@@ -337,8 +353,9 @@ class FeedQueueService {
           if (videoType === 'vayu') recentQuery.duration = { $gt: 120 };
           else recentQuery.duration = { $lte: 120 };
           
-          if (userId && userId !== 'anon' && userId !== 'undefined') {
-              recentQuery.uploader = { $ne: userId };
+          // **FIX: Use ObjectId for uploader exclusion to prevent CastError**
+          if (uploaderObjectId) {
+              recentQuery.uploader = { $ne: uploaderObjectId };
           }
           
           // Get videos from last 7 days only for "Recent" bucket transparency
@@ -388,8 +405,9 @@ class FeedQueueService {
           else candidateQuery.duration = { $lte: 120 };
 
           // Exclude own videos from feed
-          if (userId && userId !== 'anon' && userId !== 'undefined') {
-              candidateQuery.uploader = { $ne: userId };
+          // **FIX: Use ObjectId for uploader exclusion to prevent CastError**
+          if (uploaderObjectId) {
+              candidateQuery.uploader = { $ne: uploaderObjectId };
           }
 
           const candidates = await Video.find(candidateQuery)
@@ -516,6 +534,7 @@ class FeedQueueService {
       try {
         const matchStage = { 
           processingStatus: 'completed',
+          'moderationResult.isFlagged': { $ne: true }, // Added filter
           _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
               try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
           }).filter(Boolean) }
@@ -578,6 +597,7 @@ class FeedQueueService {
       try {
         const matchStage = { 
             processingStatus: 'completed',
+            'moderationResult.isFlagged': { $ne: true }, // Added filter
             _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
                 try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
             }).filter(Boolean) }

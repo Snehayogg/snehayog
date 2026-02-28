@@ -232,9 +232,9 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       final video = _videos[index];
 
-      // **FIXED: Resolve playable URL (handles share page URLs)**
-      videoUrl = await _resolvePlayableUrl(video);
-      if (videoUrl == null || videoUrl.isEmpty) {
+      // **NEW: Use effective URL (Original or Dubbed)**
+      videoUrl = _getActingUrl(video);
+      if (videoUrl.isEmpty) {
         AppLogger.log('❌ Invalid video URL for $index: ${video.videoUrl}');
         _loadingVideos.remove(videoId);
         return;
@@ -377,7 +377,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       }
 
       if (mounted && index == _currentIndex) {
-         _tryAutoplayCurrentImmediate(index);
+         // **FIX: When opened from profile, use forcePlayCurrent() which bypasses
+         // all context checks (visibility, tab, lifecycle) and directly plays.
+         // This ensures reliable autoplay regardless of timing/race conditions.**
+         if (_openedFromProfile) {
+           forcePlayCurrent();
+         } else {
+           _tryAutoplayCurrentImmediate(index);
+         }
       }
 
     } catch (e) {
@@ -443,62 +450,32 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     return videoCacheProxy.proxyUrl(finalUrl);
   }
 
-  Future<String?> _resolvePlayableUrl(VideoModel video) async {
-    try {
-      // **MATCHING STRATEGY: HLS (m3u8) matches Hive Cache & VideoService Logic**
-      // Hive stores HLS URLs (VideoService promotes them).
-      // We MUST play HLS to hit the pre-warmed cache (0ms start).
-
-      // 1. **Priority #1: HLS (Adaptive Streaming)**
-      // This matches what we save in Hive and what HlsWarmupService preloads.
-      final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true
-          ? video.hlsPlaylistUrl
-          : video.hlsMasterPlaylistUrl;
-      
-      if (hlsUrl != null && hlsUrl.isNotEmpty) {
-        // **SUCCESS: Play HLS**
-        return _validateAndFixVideoUrl(hlsUrl);
+  /// **NEW: Get acting URL representing original or dubbed state**
+  String _getActingUrl(VideoModel video) {
+    if (_isDubbedActiveVN[video.id]?.value == true && _dubbedVideoUrls.containsKey(video.id)) {
+      final dubbedUrl = _dubbedVideoUrls[video.id]!;
+      if (!_isValidDubbedPlaybackSource(dubbedUrl)) {
+        _dubbedVideoUrls.remove(video.id);
+      } else {
+      // **POC FIX: If using local path, don't proxy it**
+      if (dubbedUrl.startsWith('/') || dubbedUrl.contains(':\\')) {
+        return dubbedUrl;
       }
-
-      // **NEW: Bypass URL fixing for local gallery videos**
-      if (video.videoType == 'local_gallery') {
-         return video.videoUrl;
+      AppLogger.log('🌐 Auto-Dub: Using globally cached URL for [${video.id}]');
+      return videoCacheProxy.proxyUrl(dubbedUrl);
       }
-
-      // 2. **Fallback: MP4 (if HLS is missing)**
-      // Check for 480p optimized URL first
-      if (video.lowQualityUrl != null && video.lowQualityUrl!.isNotEmpty) {
-         if (!video.lowQualityUrl!.contains('.m3u8')) {
-            final url = _validateAndFixVideoUrl(video.lowQualityUrl!);
-
-            return url;
-         }
-      }
-
-      // 3. **Deep Link Handling (snehayog.site)**
-      final uri = Uri.tryParse(video.videoUrl);
-      if (uri != null &&
-          uri.host.contains('snehayog.site') &&
-          uri.pathSegments.isNotEmpty &&
-          uri.pathSegments.first == 'video') {
-        try {
-          final details = await VideoService().getVideoById(video.id);
-          final candidate = details.hlsPlaylistUrl?.isNotEmpty == true
-              ? details.hlsPlaylistUrl
-              : details.videoUrl;
-          if (candidate != null && candidate.isNotEmpty) {
-            return _validateAndFixVideoUrl(candidate);
-          }
-        } catch (_) {}
-      }
-
-      // 3. **Final Fallback: videoUrl**
-      // Checks main URL. Note: VideoService might have already optimized this to HLS.
-      return _validateAndFixVideoUrl(video.videoUrl);
-    } catch (_) {
-      return _validateAndFixVideoUrl(video.videoUrl);
     }
+
+    // Standard logic
+    final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true
+        ? video.hlsPlaylistUrl
+        : video.hlsMasterPlaylistUrl;
+    
+    final String targetUrl = (hlsUrl != null && hlsUrl.isNotEmpty) ? hlsUrl : video.videoUrl;
+    final fixedUrl = _validateAndFixVideoUrl(targetUrl);
+    return videoCacheProxy.proxyUrl(fixedUrl ?? targetUrl);
   }
+
 
   void _cleanupOldControllers({int? keepStart, int? keepEnd}) {
     final sharedPool = SharedVideoControllerPool();
@@ -767,15 +744,36 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           } else {
             _bufferingTimers[videoId]?.cancel();
             _bufferingTimers.remove(videoId);
-            _getOrCreateNotifier<bool>(_isSlowConnectionVN, videoId, false);
+            final slowConnectionVN =
+                _getOrCreateNotifier<bool>(_isSlowConnectionVN, videoId, false);
+            if (slowConnectionVN.value != false) {
+              slowConnectionVN.value = false;
+            }
           }
     
-          _getOrCreateNotifier<bool>(_isBufferingVN, videoId, isBuffering);
+          final bufferingVN =
+              _getOrCreateNotifier<bool>(_isBufferingVN, videoId, isBuffering);
+          if (bufferingVN.value != isBuffering) {
+            bufferingVN.value = isBuffering;
+          }
       }
       
       // **2. SILENT STALL DETECTION Watchdog**
       // Detects when video claims to be playing but position isn't moving
       if (value.isPlaying && !value.isBuffering) {
+          // Playback is healthy; force-clear stale buffering UI state.
+          if (_isBuffering[videoId] == true) {
+            _isBuffering[videoId] = false;
+          }
+          if (_isBufferingVN[videoId]?.value == true) {
+            _isBufferingVN[videoId]!.value = false;
+          }
+          if (_isSlowConnectionVN[videoId]?.value == true) {
+            _isSlowConnectionVN[videoId]!.value = false;
+          }
+          _bufferingTimers[videoId]?.cancel();
+          _bufferingTimers.remove(videoId);
+
           if (lastPosition == value.position) {
              // Position hasn't moved
              lastMoveTime ??= DateTime.now();

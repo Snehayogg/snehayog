@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/services/city_search_service.dart';
 import 'package:vayu/shared/constants/interests.dart';
 
@@ -350,14 +354,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
         children: [
           Row(
             children: [
-              Icon(Icons.gps_fixed, color: AppTheme.primary),
+              Icon(Icons.gps_fixed, color: AppColors.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Advanced Targeting',
-                  style: AppTheme.headlineSmall.copyWith(
+                  style: AppTypography.headlineSmall.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.white,
+                    color: AppColors.white,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -488,15 +492,15 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.settings, color: AppTheme.primary),
+                      Icon(Icons.settings, color: AppColors.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Advanced Campaign Settings',
-                          style: AppTheme.headlineSmall.copyWith(
+                          style: AppTypography.headlineSmall.copyWith(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.white,
+                            color: AppColors.white,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -592,15 +596,15 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.trending_up, color: AppTheme.warning),
+                      Icon(Icons.trending_up, color: AppColors.warning),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Bidding & Performance KPIs',
-                          style: AppTheme.headlineSmall.copyWith(
+                          style: AppTypography.headlineSmall.copyWith(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.white,
+                            color: AppColors.white,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -768,10 +772,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       children: [
         Text(
           'Interests',
-          style: AppTheme.headlineSmall.copyWith(
+          style: AppTypography.headlineSmall.copyWith(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: AppTheme.white,
+            color: AppColors.white,
           ),
         ),
         const SizedBox(height: 8),
@@ -805,12 +809,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         }
                       },
                       backgroundColor: isCustom
-                          ? AppTheme.success.withOpacity(0.1)
-                          : AppTheme.primary.withOpacity(0.1),
+                          ? AppColors.success.withOpacity(0.1)
+                          : AppColors.primary.withOpacity(0.1),
                       labelStyle: TextStyle(
                         color: isCustom
-                            ? AppTheme.success
-                            : AppTheme.primary,
+                            ? AppColors.success
+                            : AppColors.primary,
                       ),
                     );
                   }).toList(),
@@ -819,7 +823,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               ],
 
               // Predefined interests button
-              ElevatedButton.icon(
+              AppButton(
                 onPressed: () => _showMultiSelectDialog(
                   'Interests',
                   widget.selectedInterests,
@@ -827,16 +831,11 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   widget.onInterestsChanged,
                 ),
                 icon: const Icon(Icons.favorite, size: 18),
-                label: Text(
-                  widget.selectedInterests.isEmpty
+                label: widget.selectedInterests.isEmpty
                       ? 'Select Interests'
                       : 'Add More',
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary.withOpacity(0.05),
-                  foregroundColor: AppTheme.primary,
-                  elevation: 0,
-                ),
+                variant: AppButtonVariant.outline,
+                size: AppButtonSize.small,
               ),
 
               const SizedBox(height: 12),
@@ -860,15 +859,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
+                  AppButton(
                     onPressed: _addCustomInterest,
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.success.withOpacity(0.05),
-                      foregroundColor: AppTheme.success,
-                      elevation: 0,
-                    ),
+                    label: 'Add',
+                    variant: AppButtonVariant.secondary,
+                    size: AppButtonSize.small,
                   ),
                 ],
               ),
@@ -880,7 +876,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   'Custom Interests: ${_customInterests.join(', ')}',
                   style: const TextStyle(
                     fontSize: 12,
-                    color: AppTheme.success,
+                    color: AppColors.success,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -905,10 +901,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       children: [
         Text(
           label,
-          style: AppTheme.headlineSmall.copyWith(
+          style: AppTypography.headlineSmall.copyWith(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: AppTheme.white,
+            color: AppColors.white,
           ),
         ),
         const SizedBox(height: 8),
@@ -935,8 +931,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                           ..remove(item);
                         onChanged(newItems);
                       },
-                      backgroundColor: AppTheme.primary.withOpacity(0.1),
-                      labelStyle: const TextStyle(color: AppTheme.primary),
+                      backgroundColor: AppColors.primary.withOpacity(0.1),
+                      labelStyle: const TextStyle(color: AppColors.primary),
                     );
                   }).toList(),
                 ),
@@ -944,7 +940,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               ],
 
               // Add button
-              ElevatedButton.icon(
+              AppButton(
                 onPressed: () => _showMultiSelectDialog(
                   label,
                   selectedItems,
@@ -952,12 +948,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   onChanged,
                 ),
                 icon: Icon(icon, size: 18),
-                label: Text(selectedItems.isEmpty ? hint : 'Add More'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade50,
-                  foregroundColor: Colors.blue.shade700,
-                  elevation: 0,
-                ),
+                label: selectedItems.isEmpty ? hint : 'Add More',
+                variant: AppButtonVariant.outline,
+                size: AppButtonSize.small,
               ),
             ],
           ),
@@ -974,14 +967,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       children: [
         Row(
           children: [
-            Icon(Icons.location_on, color: AppTheme.primary, size: 20),
+            Icon(Icons.location_on, color: AppColors.primary, size: 20),
             const SizedBox(width: 8),
             Text(
               'Target Locations (India)',
-              style: AppTheme.headlineSmall.copyWith(
+              style: AppTypography.headlineSmall.copyWith(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: AppTheme.white,
+                color: AppColors.white,
               ),
             ),
           ],
@@ -993,9 +986,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              border: Border.all(color: AppTheme.backgroundTertiary),
+              border: Border.all(color: AppColors.backgroundTertiary),
               borderRadius: BorderRadius.circular(8),
-              color: AppTheme.backgroundSecondary,
+              color: AppColors.backgroundSecondary,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1005,7 +998,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.textTertiary,
+                    color: AppColors.textTertiary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1025,8 +1018,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         )..remove(location);
                         widget.onLocationsChanged(newItems);
                       },
-                      backgroundColor: AppTheme.success.withOpacity(0.1),
-                      labelStyle: const TextStyle(color: AppTheme.success),
+                      backgroundColor: AppColors.success.withOpacity(0.1),
+                      labelStyle: const TextStyle(color: AppColors.success),
                     );
                   }).toList(),
                 ),
@@ -1042,7 +1035,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           focusNode: _locationSearchFocusNode,
           decoration: InputDecoration(
             hintText: 'Type city name (e.g., Mumbai, Delhi)...',
-            prefixIcon: const Icon(Icons.search, color: AppTheme.primary),
+            prefixIcon: const Icon(Icons.search, color: AppColors.primary),
             suffixIcon: _isSearchingLocations
                 ? const Padding(
                     padding: EdgeInsets.all(12),
@@ -1051,13 +1044,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                       ),
                     ),
                   )
                 : _hasSearchText
                     ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppTheme.textTertiary),
+                        icon: const Icon(Icons.clear, color: AppColors.textTertiary),
                         onPressed: () {
                           _locationSearchController.clear();
                           setState(() {
@@ -1070,18 +1063,18 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         color: Colors.grey),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.backgroundTertiary),
+              borderSide: const BorderSide(color: AppColors.backgroundTertiary),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.backgroundTertiary),
+              borderSide: const BorderSide(color: AppColors.backgroundTertiary),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
             filled: true,
-            fillColor: AppTheme.backgroundSecondary,
+            fillColor: AppColors.backgroundSecondary,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
@@ -1101,9 +1094,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 : (_locationSuggestions.length * 56.0).clamp(0.0, 200.0),
             child: Container(
               decoration: BoxDecoration(
-              color: AppTheme.backgroundSecondary,
+              color: AppColors.backgroundSecondary,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.backgroundTertiary),
+              border: Border.all(color: AppColors.backgroundTertiary),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -1131,7 +1124,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     separatorBuilder: (context, index) => Divider(
                       height: 1,
                       thickness: 1,
-                      color: AppTheme.backgroundTertiary,
+                      color: AppColors.backgroundTertiary,
                     ),
                     itemBuilder: (context, index) {
                       final location = _locationSuggestions[index];
@@ -1151,8 +1144,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         leading: Icon(
                           Icons.location_city,
                           color: isAlreadySelected
-                              ? AppTheme.textTertiary
-                              : AppTheme.primary,
+                              ? AppColors.textTertiary
+                              : AppColors.primary,
                           size: 20,
                         ),
                         title: Text(
@@ -1161,8 +1154,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: isAlreadySelected
-                                ? AppTheme.textTertiary
-                                : AppTheme.white,
+                                ? AppColors.textTertiary
+                                : AppColors.white,
                           ),
                         ),
                         subtitle: Text(
@@ -1170,8 +1163,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                           style: TextStyle(
                             fontSize: 12,
                             color: isAlreadySelected
-                                ? AppTheme.textTertiary
-                                : AppTheme.textSecondary,
+                                ? AppColors.textTertiary
+                                : AppColors.textSecondary,
                           ),
                         ),
                         trailing: isAlreadySelected
@@ -1182,7 +1175,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                               )
                             : Icon(
                                 Icons.add,
-                                color: AppTheme.primary,
+                                color: AppColors.primary,
                                 size: 20,
                               ),
                         enabled: !isAlreadySelected,
@@ -1207,7 +1200,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: AppTheme.textTertiary,
+            color: AppColors.textTertiary,
           ),
         ),
         const SizedBox(height: 8),
@@ -1223,7 +1216,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     location,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isSelected ? AppTheme.white : AppTheme.primary,
+                      color: isSelected ? AppColors.white : AppColors.primary,
                     ),
                   ),
                   selected: isSelected,
@@ -1237,9 +1230,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       widget.onLocationsChanged(newItems);
                     }
                   },
-                  selectedColor: AppTheme.primary,
-                  backgroundColor: AppTheme.primary.withOpacity(0.05),
-                  checkmarkColor: AppTheme.white,
+                  selectedColor: AppColors.primary,
+                  backgroundColor: AppColors.primary.withOpacity(0.05),
+                  checkmarkColor: AppColors.white,
                 ),
               );
             }).toList(),
@@ -1275,13 +1268,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     title: Text(
                       option,
                       style: const TextStyle(
-                        color: AppTheme.success,
+                        color: AppColors.success,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     leading: const Icon(
                       Icons.add_circle_outline,
-                      color: AppTheme.success,
+                      color: AppColors.success,
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
@@ -1308,16 +1301,18 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             ),
           ),
           actions: [
-            TextButton(
+            AppButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              label: 'Cancel',
+              variant: AppButtonVariant.text,
             ),
-            ElevatedButton(
+            AppButton(
               onPressed: () {
                 onChanged(List<String>.from(selectedItems));
                 Navigator.pop(context);
               },
-              child: const Text('Done'),
+              label: 'Done',
+              variant: AppButtonVariant.primary,
             ),
           ],
         ),
@@ -1349,21 +1344,23 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             const SizedBox(height: 16),
             Text(
               'This will be added to your selected interests and can be used for targeting.',
-              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ],
         ),
         actions: [
-          TextButton(
+          AppButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            variant: AppButtonVariant.text,
           ),
-          ElevatedButton(
+          AppButton(
             onPressed: () {
               _addCustomInterest();
               Navigator.pop(context);
             },
-            child: const Text('Add Interest'),
+            label: 'Add Interest',
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -1380,14 +1377,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           children: [
             Row(
               children: [
-                Icon(Icons.calendar_today, color: AppTheme.primary),
+                Icon(Icons.calendar_today, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text(
                   'Day Targeting',
-                  style: AppTheme.headlineSmall.copyWith(
+                  style: AppTypography.headlineSmall.copyWith(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.white,
+                    color: AppColors.white,
                   ),
                 ),
               ],
@@ -1395,7 +1392,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             const SizedBox(height: 12),
             const Text(
               'Select which days of the week to show ads:',
-              style: TextStyle(fontSize: 14, color: AppTheme.textTertiary),
+              style: TextStyle(fontSize: 14, color: AppColors.textTertiary),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -1413,8 +1410,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     newDayParting[day] = selected;
                     widget.onDayPartingChanged(newDayParting);
                   },
-                  selectedColor: AppTheme.primary.withOpacity(0.2),
-                  checkmarkColor: AppTheme.primary,
+                  selectedColor: AppColors.primary.withOpacity(0.2),
+                  checkmarkColor: AppColors.primary,
                 );
               }).toList(),
             ),
@@ -1424,7 +1421,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                TextButton.icon(
+                AppButton(
                   onPressed: () {
                     final allSelected = Map<String, bool>.fromEntries(
                       _daysOfWeek.map((day) => MapEntry(day, true)),
@@ -1432,9 +1429,11 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     widget.onDayPartingChanged(allSelected);
                   },
                   icon: const Icon(Icons.select_all, size: 16),
-                  label: const Text('All Days'),
+                  label: 'All Days',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
                 ),
-                TextButton.icon(
+                AppButton(
                   onPressed: () {
                     final weekdaysSelected = Map<String, bool>.fromEntries(
                       _daysOfWeek.map(
@@ -1447,14 +1446,18 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     widget.onDayPartingChanged(weekdaysSelected);
                   },
                   icon: const Icon(Icons.business, size: 16),
-                  label: const Text('Weekdays'),
+                  label: 'Weekdays',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
                 ),
-                TextButton.icon(
+                AppButton(
                   onPressed: () {
                     widget.onDayPartingChanged({});
                   },
                   icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('Clear'),
+                  label: 'Clear',
+                  variant: AppButtonVariant.text,
+                  size: AppButtonSize.small,
                 ),
               ],
             ),

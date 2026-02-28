@@ -2,8 +2,6 @@ part of '../video_feed_advanced.dart';
 
 extension _VideoFeedInitialization on _VideoFeedAdvancedState {
   void _initializeServices() {
-    AppConfig.resetCachedUrl();
-
     // **FIX: For deep links (initialVideoId without initialVideos),
     // we'll set initialPage after fetching the video**
     int initialPage = widget.initialIndex ?? 0;
@@ -170,6 +168,14 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             // **OPTIMIZED: Immediately preload first video for instant playback**
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && _videos.isNotEmpty) {
+                // **FIX: Set screen visible immediately when opened from profile**
+                // Without this, _shouldAutoplayForContext blocks autoplay because
+                // _isScreenVisible is still false at this point.
+                if (_openedFromProfile) {
+                  _isScreenVisible = true;
+                  _ensureWakelockForVisibility();
+                }
+
                 // Preload current video immediately (don't wait)
                 _preloadVideo(_currentIndex);
 
@@ -840,21 +846,16 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           .where((id) => id.isNotEmpty && id != 'unknown' && id != _currentUserId)
           .toList();
 
+      if (uniqueUploaders.isEmpty) return;
+
       AppLogger.log(
-        '🔍 Checking follow status for ${uniqueUploaders.length} unique uploaders via UserProvider',
+        '🔍 Batch checking follow status for ${uniqueUploaders.length} unique uploaders',
       );
 
-      // **OPTIMIZED: Check status for each uploader - UserProvider will cache them**
-      for (final uploaderId in uniqueUploaders) {
-        try {
-          // checkFollowStatus will fetch from backend and update UserProvider's cache
-          await userProvider.checkFollowStatus(uploaderId);
-        } catch (e) {
-          AppLogger.log('❌ Error checking follow status for $uploaderId: $e');
-        }
-      }
+      // **OPTIMIZED: Single batch API call instead of N individual calls**
+      await userProvider.batchCheckFollowStatus(uniqueUploaders);
 
-      AppLogger.log('✅ Synchronized follow status for ${uniqueUploaders.length} users');
+      AppLogger.log('✅ Batch follow status check complete for ${uniqueUploaders.length} users');
     } catch (e) {
       AppLogger.log('❌ Error loading following users: $e');
     }

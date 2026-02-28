@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/radius.dart';
+import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
@@ -293,12 +296,8 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                     width: 60,
                     height: 24,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1.0,
-                      ),
+                      color: AppColors.backgroundSecondary.withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                     child: const Center(
                       child: SizedBox(
@@ -315,91 +314,31 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                   );
                 }
 
-                // **MODERN PROFESSIONAL FOLLOW BUTTON DESIGN**
-                // Clean white background for both states with gray text
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  width: isFollowing ? 90 : 80,
-                  height: 24,
+                // Match Yug-tab subscribe button style for cross-screen consistency.
+                return GestureDetector(
+                  onTap: _handleFollowTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    // **UNIFIED DESIGN: White background for both states**
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.grey.shade300,
-                      width: 1.0,
-                    ),
-                    boxShadow: [
-                      // **PROFESSIONAL SHADOWS: Subtle depth**
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                        spreadRadius: 0,
-                      ),
-                    ],
+                      color: isFollowing
+                          ? AppColors.backgroundTertiary
+                          : AppColors.backgroundSecondary.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: _handleFollowTap,
-                      splashColor: Colors.grey.shade200,
-                      highlightColor: Colors.grey.shade100,
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isFollowing ? 8 : 10,
-                          vertical: 4,
-                        ),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 250),
-                          transitionBuilder: (child, animation) {
-                            return ScaleTransition(
-                              scale: animation,
-                              child: child,
-                            );
-                          },
-                          child: Row(
-                            key: ValueKey(isFollowing),
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // **SHOW CHECKMARK ONLY FOR FOLLOWING STATE**
-                              if (isFollowing) ...[
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 250),
-                                  transitionBuilder: (child, animation) {
-                                    return RotationTransition(
-                                      turns: animation,
-                                      child: child,
-                                    );
-                                  },
-                                  child: const Icon(
-                                    Icons.check_circle_rounded,
-                                    key: ValueKey('following'),
-                                    color: Color(0xFF10B981), // Green-500
-                                    size: 14,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              Text(
-                                isFollowing 
-                                    ? (widget.followingText ?? 'Following') 
-                                    : (widget.followText ?? 'Follow'),
-                                style: const TextStyle(
-                                  color: Color(
-                                      0xFF374151), // Gray-700 (same for both)
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.1,
-                                  height: 1.0,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    child: Text(
+                      isFollowing
+                          ? (widget.followingText ?? 'Subscribed')
+                          : (widget.followText ?? 'Subscribe'),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.white,
+                        fontSize: AppTypography.fontSizeSM,
+                        fontWeight: AppTypography.weightBold,
                       ),
                     ),
                   ),

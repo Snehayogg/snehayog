@@ -772,6 +772,10 @@ export const getVideoById = async (req, res) => {
     if (!video) return res.status(404).json({ error: 'Video not found' });
 
     const videoObj = video.toObject();
+    const dubbedUrls =
+      videoObj.dubbedUrls instanceof Map
+        ? Object.fromEntries(videoObj.dubbedUrls.entries())
+        : (videoObj.dubbedUrls || null);
     const normalizeUrl = (url) => url ? url.replace(/\\/g, '/') : url;
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
 
@@ -835,7 +839,8 @@ export const getVideoById = async (req, res) => {
       isLiked: isLiked,
       earnings: (req.user?.googleId === videoObj.uploader?.googleId?.toString())
         ? (parseFloat(videoObj.earnings) || 0.0)
-        : 0.0
+        : 0.0,
+      dubbedUrls: dubbedUrls
     };
 
     res.json(transformedVideo);

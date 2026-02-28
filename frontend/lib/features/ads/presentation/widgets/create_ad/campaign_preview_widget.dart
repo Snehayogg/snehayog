@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 /// **CampaignPreviewWidget - Shows campaign metrics and preview**
 class CampaignPreviewWidget extends StatelessWidget {
@@ -36,13 +39,13 @@ class CampaignPreviewWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.analytics, color: AppTheme.primary),
+                Icon(Icons.analytics, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text(
                   'Campaign Preview',
-                  style: AppTheme.headlineSmall.copyWith(
+                  style: AppTypography.headlineSmall.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.white,
+                    color: AppColors.white,
                   ),
                 ),
               ],
@@ -53,20 +56,20 @@ class CampaignPreviewWidget extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.success.withOpacity(0.05),
+                color: AppColors.success.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.success.withOpacity(0.2)),
+                border: Border.all(color: AppColors.success.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
                   Icon(Icons.check_circle,
-                      size: 16, color: AppTheme.success),
+                      size: 16, color: AppColors.success),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '✅ Campaign configuration looks good! You can proceed to create your ad.',
                       style: TextStyle(
-                        color: AppTheme.success,
+                        color: AppColors.success,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -137,7 +140,7 @@ class CampaignPreviewWidget extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: AppTheme.primary,
+              color: AppColors.primary,
             ),
           ),
         ],

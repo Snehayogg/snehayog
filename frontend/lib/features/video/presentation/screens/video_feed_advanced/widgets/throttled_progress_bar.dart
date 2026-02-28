@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 class ThrottledProgressBar extends StatefulWidget {
   final VideoPlayerController controller;
@@ -146,7 +149,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
               height: _isDragging ? 6 : 2,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: AppTheme.white.withOpacity(_isDragging ? 0.3 : 0.2),
+                color: AppColors.white.withOpacity(_isDragging ? 0.3 : 0.2),
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
@@ -161,7 +164,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
                 curve: Curves.easeOutCubic,
                 height: _isDragging ? 6 : 2, // Height animates on hold
                 decoration: BoxDecoration(
-                  color: AppTheme.primary,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -178,7 +181,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
                 width: _isDragging ? 10 : 3, // Size animates on hold
                 height: _isDragging ? 8 : 2,
                 decoration: BoxDecoration(
-                  color: AppTheme.primary,
+                  color: AppColors.primary,
                   shape: BoxShape.circle,
                   boxShadow: _isDragging ? [
                     BoxShadow(

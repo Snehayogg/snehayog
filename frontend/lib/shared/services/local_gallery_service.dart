@@ -12,7 +12,7 @@ class LocalGalleryService {
 
   /// Fetches videos from the user's gallery and converts them to [VideoModel]s.
   /// Used as an offline fallback when internet is unavailable.
-  Future<List<VideoModel>> fetchGalleryVideos({int page = 0, int limit = 20}) async {
+  Future<List<VideoModel>> fetchGalleryVideos({int page = 0, int limit = 20, Duration? minDuration}) async {
     try {
       // 1. Check/Request Permission
       AppLogger.log('🎞️ LocalGalleryService: Requesting permissions...');
@@ -34,9 +34,22 @@ class LocalGalleryService {
       }
 
       // 2. Fetch Assets (Videos only)
+      FilterOptionGroup filterOptionGroup = FilterOptionGroup();
+      if (minDuration != null) {
+        filterOptionGroup.setOption(
+          AssetType.video,
+          FilterOption(
+            durationConstraint: DurationConstraint(
+              min: minDuration,
+            ),
+          ),
+        );
+      }
+
       final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList(
         type: RequestType.video,
         onlyAll: true,
+        filterOption: filterOptionGroup,
       );
 
       if (paths.isEmpty) return [];

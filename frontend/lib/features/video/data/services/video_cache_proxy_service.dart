@@ -643,6 +643,25 @@ class VideoCacheProxyService {
       return false;
     }
   }
+
+  /// **NEW: Get the local path if the URL is cached (substantial file), else null**
+  Future<String?> getCachedFilePath(String url) async {
+    if (_cachePath == null || url.isEmpty) return null;
+    
+    try {
+      final String fileKey = md5.convert(utf8.encode(url)).toString();
+      final String filePath = '$_cachePath/$fileKey.chunk';
+      final file = File(filePath);
+
+      if (await file.exists() && await file.length() > 1024 * 1024) {
+        return filePath;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// **NEW: Global Cancel All Prefetches**
   /// Stops all background downloads immediately.
   void cancelAllPrefetches() {

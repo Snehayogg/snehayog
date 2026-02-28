@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 /// **CampaignSettingsWidget - Handles budget and date selection**
 class CampaignSettingsWidget extends StatelessWidget {
@@ -52,25 +55,25 @@ class CampaignSettingsWidget extends StatelessWidget {
                 hintText: '100',
                 border: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: (isBudgetValid == false) ? AppTheme.error : AppTheme.borderPrimary,
+                    color: (isBudgetValid == false) ? AppColors.error : AppColors.borderPrimary,
                     width: (isBudgetValid == false) ? 2.0 : 1.0,
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: (isBudgetValid == false) ? AppTheme.error : AppTheme.borderPrimary,
+                    color: (isBudgetValid == false) ? AppColors.error : AppColors.borderPrimary,
                     width: (isBudgetValid == false) ? 2.0 : 1.0,
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: (isBudgetValid == false) ? AppTheme.error : AppTheme.primary,
+                    color: (isBudgetValid == false) ? AppColors.error : AppColors.primary,
                     width: (isBudgetValid == false) ? 2.0 : 2.0,
                   ),
                 ),
                 prefixIcon: const Icon(Icons.attach_money),
                 errorText: (isBudgetValid == false) ? budgetError : null,
-                errorStyle: const TextStyle(color: AppTheme.error, fontSize: 12),
+                errorStyle: const TextStyle(color: AppColors.error, fontSize: 12),
               ),
               keyboardType: TextInputType.number,
               onChanged: (_) {
@@ -86,7 +89,7 @@ class CampaignSettingsWidget extends StatelessWidget {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: (isDateValid == false) ? AppTheme.error : AppTheme.borderPrimary,
+                      color: (isDateValid == false) ? AppColors.error : AppColors.borderPrimary,
                       width: (isDateValid == false) ? 2.0 : 1.0,
                     ),
                     borderRadius: BorderRadius.circular(4),
@@ -101,10 +104,10 @@ class CampaignSettingsWidget extends StatelessWidget {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: (isDateValid == false)
-                          ? AppTheme.error.withOpacity(0.1)
-                          : AppTheme.warning,
+                          ? AppColors.error.withOpacity(0.1)
+                          : AppColors.warning,
                       foregroundColor:
-                          (isDateValid == false) ? AppTheme.error : AppTheme.white,
+                          (isDateValid == false) ? AppColors.error : AppColors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4),
@@ -117,7 +120,7 @@ class CampaignSettingsWidget extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       dateError!,
-                      style: const TextStyle(color: AppTheme.error, fontSize: 12),
+                      style: const TextStyle(color: AppColors.error, fontSize: 12),
                     ),
                   ),
               ],
@@ -128,7 +131,7 @@ class CampaignSettingsWidget extends StatelessWidget {
                 child: Text(
                   'Campaign will run for ${endDate!.difference(startDate!).inDays + 1} days',
                   style: TextStyle(
-                    color: AppTheme.textSecondary,
+                    color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
                 ),
@@ -139,7 +142,7 @@ class CampaignSettingsWidget extends StatelessWidget {
                 child: Text(
                   'Please select start and end dates for your campaign',
                   style: TextStyle(
-                    color: AppTheme.error,
+                    color: AppColors.error,
                     fontSize: 12,
                   ),
                 ),

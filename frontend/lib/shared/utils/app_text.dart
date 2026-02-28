@@ -43,7 +43,7 @@ class AppText {
     'btn_choose_gallery': 'Choose from Gallery',
     'btn_update_now': 'Update Now',
     'btn_retry_upload': 'Retry Upload',
-    'btn_upload_another': 'Upload Another',
+    'btn_upload_another': 'Upload',
     'btn_view_in_feed': 'View in Feed',
     'btn_i_understand': 'I Understand',
     'btn_manage_ads': 'Manage Ads',
@@ -55,7 +55,7 @@ class AppText {
     'btn_confirm': 'Confirm',
     'btn_withdraw_funds': 'Redeem Rewards',
     'btn_add_upi_id': 'Setup Billing',
-    'btn_refer_friends': 'Unlock Full Access (Refer 2) 🔓',
+    'btn_refer_friends': '2 Share & Unlock Full Access',
     'btn_sign_in_google': 'Sign In with Google',
 
     // Upload screen
@@ -107,7 +107,7 @@ class AppText {
         'If you upload content belonging to someone else without permission, you (the uploader) will be fully responsible for any legal consequences. Vayug acts only as a platform and does not own or endorse user-uploaded content.',
     'upload_terms_reporting': '3. Reporting Copyright Violation',
     'upload_terms_reporting_desc':
-        'Copyright owners may submit a takedown request by emailing: factshort1@gmail.com with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
+        'Copyright owners may submit a takedown request by emailing: support@snehayog.site with proof of ownership. Upon receiving a valid request, Vayug will remove the infringing content within 48 hours.',
     'upload_terms_payment_desc':
         'All creator payments are subject to a 30-day hold for copyright checks and disputes. If a video is found infringing during this period, the transfer will be cancelled and may be withheld.',
     'upload_terms_strike': '5. Strike Policy',

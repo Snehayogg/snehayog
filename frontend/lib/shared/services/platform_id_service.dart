@@ -94,7 +94,7 @@ class PlatformIdService {
           
           // Fallback for emulators or when ID is generic
           if (newDeviceId.isEmpty || newDeviceId == '9774d56d682e549c') {
-            newDeviceId = 'android_${DateTime.now().millisecondsSinceEpoch}_${androidInfo.model.replaceAll(' ', '_')}';
+            newDeviceId = 'generic_android_${DateTime.now().millisecondsSinceEpoch}_${androidInfo.model.replaceAll(' ', '_')}';
           }
         } else if (Platform.isIOS) {
           final iosInfo = await deviceInfo.iosInfo;
@@ -103,7 +103,7 @@ class PlatformIdService {
           newDeviceId = iosInfo.identifierForVendor ?? '';
           
           if (newDeviceId.isEmpty) {
-            newDeviceId = 'ios_${DateTime.now().millisecondsSinceEpoch}_${iosInfo.model.replaceAll(' ', '_')}';
+            newDeviceId = 'generic_ios_${DateTime.now().millisecondsSinceEpoch}_${iosInfo.model.replaceAll(' ', '_')}';
           }
         }
       } catch (deviceError) {

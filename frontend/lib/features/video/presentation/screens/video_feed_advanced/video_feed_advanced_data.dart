@@ -351,6 +351,10 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       // Cleanup timers
       _bufferingTimers[videoId]?.cancel();
       _bufferingTimers.remove(videoId);
+      _forceShowOverlayTimers[videoId]?.cancel();
+      _forceShowOverlayTimers.remove(videoId);
+      _forceShowOverlayVN[videoId]?.dispose();
+      _forceShowOverlayVN.remove(videoId);
     }
   }
 
@@ -425,6 +429,33 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     for (final video in videos) {
       _getOrCreateNotifier<bool>(_isLikedVN, video.id, video.isLiked);
       _getOrCreateNotifier<int>(_likeCountVN, video.id, video.likes);
+    }
+    
+    // **NEW: Synchronize dubbed state from backend**
+    _syncDubbedStateWithModels(videos);
+  }
+
+  /// **NEW: Initialize dubbed state from globally cached URLs**
+  void _syncDubbedStateWithModels(List<VideoModel> videos) {
+    for (final video in videos) {
+      if (video.dubbedUrls != null && video.dubbedUrls!.isNotEmpty) {
+        // Assume 'english' is our target global language for now
+        final targetLang = 'english'; 
+        if (video.dubbedUrls!.containsKey(targetLang)) {
+          final cachedUrl = video.dubbedUrls![targetLang];
+          if (_isValidRemoteDubbedUrl(cachedUrl)) {
+             final validCachedUrl = cachedUrl!.trim();
+             // Store the URL for preloading/playback
+             _dubbedVideoUrls[video.id] = validCachedUrl;
+             // Set the active UI state to true so "Smart Dub" button glows
+             _getOrCreateNotifier<bool>(_isDubbedActiveVN, video.id, true);
+             AppLogger.log('🌐 Global Dub Match for [${video.id}]: Active by default');
+          }
+        }
+      } else {
+        // Ensure state exists but is false for new/undubbed videos
+        _getOrCreateNotifier<bool>(_isDubbedActiveVN, video.id, false);
+      }
     }
   }
 }

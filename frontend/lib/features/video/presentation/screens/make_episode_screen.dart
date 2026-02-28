@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:video_player/video_player.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 // Helper class to store episode details
 class EpisodeItem {
@@ -17,7 +18,8 @@ class EpisodeItem {
 }
 
 class MakeEpisodeScreen extends StatefulWidget {
-  const MakeEpisodeScreen({super.key});
+  final File? initialFile;
+  const MakeEpisodeScreen({super.key, this.initialFile});
 
   @override
   State<MakeEpisodeScreen> createState() => _MakeEpisodeScreenState();
@@ -30,6 +32,16 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
 
   String _currentStatus = '';
   int _currentUploadIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialFile != null) {
+      final file = widget.initialFile!;
+      final defaultTitle = file.path.split('/').last.split('.').first;
+      _selectedEpisodes.add(EpisodeItem(file: file, title: defaultTitle));
+    }
+  }
 
   Future<void> _pickVideos() async {
     try {
@@ -116,11 +128,12 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
           autofocus: true,
         ),
         actions: [
-          TextButton(
+          AppButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            variant: AppButtonVariant.text,
           ),
-          ElevatedButton(
+          AppButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
                 setState(() {
@@ -129,11 +142,8 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
               }
               Navigator.pop(context);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Save'),
+            label: 'Save',
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -230,12 +240,13 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
           title: const Text('Uploads Completed'),
           content: const Text('All episodes have been queued for processing. They will be available shortly after processing is complete.'),
           actions: [
-            TextButton(
+            AppButton(
               onPressed: () {
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Go back to previous screen
               },
-              child: const Text('OK'),
+              label: 'OK',
+              variant: AppButtonVariant.primary,
             ),
           ],
         ),
@@ -361,29 +372,25 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isUploading ? null : _pickVideos,
+                  child: AppButton(
+                    onPressed: _pickVideos,
+                    isDisabled: _isUploading,
                     icon: const Icon(Icons.add_photo_alternate),
-                    label: const Text('Select Episodes'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
+                    label: 'Select Episodes',
+                    variant: AppButtonVariant.primary,
+                    isFullWidth: true,
                   ),
                 ),
                 if (_selectedEpisodes.isNotEmpty) ...[
                   const SizedBox(width: 16),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isUploading ? null : _uploadOneByOne,
+                    child: AppButton(
+                      onPressed: _uploadOneByOne,
+                      isDisabled: _isUploading,
                       icon: const Icon(Icons.cloud_upload),
-                      label: const Text('Upload All'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
+                      label: 'Upload All',
+                      variant: AppButtonVariant.primary,
+                      isFullWidth: true,
                     ),
                   ),
                 ],

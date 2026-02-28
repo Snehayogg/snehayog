@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/features/onboarding/data/services/welcome_onboarding_service.dart';
 import 'package:vayu/shared/services/app_remote_config_service.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class WelcomeOnboardingScreen extends StatefulWidget {
   final VoidCallback onGetStarted;
@@ -45,7 +49,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
           _heading = config.getText(
             'welcome_onboarding_heading',
             fallback:
-                'Showcase Your Video Content',
+                'World First Ad-free Video Streaming app',
           );
           _buttonText = config.getText(
             'welcome_onboarding_button',
@@ -56,7 +60,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
       } else {
         // Fallback to hardcoded values if config not available
         setState(() {
-          _heading = 'Showcase Your Video Content';
+          _heading = 'World First Ad-free Video Streaming app';
           _buttonText = 'Get Started';
           _isLoading = false;
         });
@@ -64,17 +68,32 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
     } catch (e) {
       // Fallback to hardcoded values on error
       setState(() {
-        _heading = 'Showcase Your Video Content';
+        _heading = 'World First Ad-free Video Streaming app';
         _buttonText = 'Get Started';
         _isLoading = false;
       });
     }
   }
 
+  Future<void> _launchURL(String url) async {
+    final Uri uri = Uri.parse(url);
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch $url');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open link: $url')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundPrimary,
+      backgroundColor: AppColors.backgroundPrimary,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -87,13 +106,13 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: const BoxDecoration(
-                  color: AppTheme.backgroundSecondary,
+                  color: AppColors.backgroundSecondary,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.video_camera_front_rounded,
                   size: 64,
-                  color: AppTheme.textPrimary,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 32),
@@ -103,15 +122,15 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                 const SizedBox(
                   height: 60,
                   child: Center(
-                    child: CircularProgressIndicator(color: AppTheme.primary),
+                    child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 )
               else
                 Text(
                   _heading,
                   textAlign: TextAlign.center,
-                  style: AppTheme.headlineLarge.copyWith(
-                    color: AppTheme.textPrimary,
+                  style: AppTypography.headlineLarge.copyWith(
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -122,53 +141,62 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                 Text(
                   _subheading,
                   textAlign: TextAlign.center,
-                  style: AppTheme.bodyLarge.copyWith(
-                    color: AppTheme.textSecondary,
+                  style: AppTypography.bodyLarge.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
 
               const Spacer(flex: 3),
 
               // Get Started Button - Backend-driven text
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () async {
-                          // Mark onboarding as shown
-                          await WelcomeOnboardingService
-                              .markWelcomeOnboardingShown();
-                          // Navigate to main screen
-                          widget.onGetStarted();
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: AppTheme.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+              AppButton(
+                onPressed: _isLoading
+                    ? null
+                    : () async {
+                        // Mark onboarding as shown
+                        await WelcomeOnboardingService
+                            .markWelcomeOnboardingShown();
+                        // Navigate to main screen
+                        widget.onGetStarted();
+                      },
+                label: _buttonText,
+                variant: AppButtonVariant.primary,
+                isLoading: _isLoading,
+                isFullWidth: true,
+                size: AppButtonSize.large,
+              ),
+              const SizedBox(height: 24),
+              // Legal Disclosure
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: AppTypography.labelSmall.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(AppTheme.white),
-                          ),
-                        )
-                      : Text(
-                          _buttonText,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                  children: [
+                    const TextSpan(text: 'By continuing, you agree to our '),
+                    TextSpan(
+                      text: 'Terms of Service',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () => _launchURL('https://snehayog.site/terms.html'),
+                    ),
+                    const TextSpan(text: ' and '),
+                    TextSpan(
+                      text: 'Privacy Policy',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () => _launchURL('https://snehayog.site/privacy.html'),
+                    ),
+                    const TextSpan(text: '.'),
+                  ],
                 ),
               ),
               const SizedBox(height: 32),

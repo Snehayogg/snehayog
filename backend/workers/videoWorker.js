@@ -115,10 +115,11 @@ const videoWorker = new Worker('video-processing', async (job) => {
 
         console.log('✅ Worker: Video record updated');
 
-        // 4.1 **NEW: Trigger Local Moderation scan**
+        // 4.1 **NEW: Trigger Local Moderation scan (BEFORE cleanup)**
         try {
             console.log(`🛡️ Worker: Starting local moderation for ${videoId}...`);
-            const moderationResult = await localModerationService.moderateVideo(hlsResult.videoUrl);
+            // Use LOCAL file path (before deletion) so FFmpeg can extract frames
+            const moderationResult = await localModerationService.moderateVideo(localRawPath);
             
             // Re-fetch to ensure we have latest version
             const updatedVideo = await Video.findById(videoId);

@@ -14,6 +14,17 @@ class AdImpressionService {
   final AuthService _authService = AuthService();
   static const String _kOfflineImpressionsKey = 'offline_ad_impressions';
 
+  /// **OPTIMIZED: Read JWT token directly from SharedPreferences**
+  /// Avoids calling getUserData() (which may trigger a network request) just for the token.
+  Future<String?> _getToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('jwt_token');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// **NEW: Initialize service to listen for connectivity changes**
   void initialize() {
     Connectivity().onConnectivityChanged.listen((results) {
@@ -50,8 +61,7 @@ class AdImpressionService {
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer ${(await _authService.getUserData())?['token']}',
+          'Authorization': 'Bearer ${await _getToken()}',
         },
         body: json.encode({
           'videoId': videoId,
@@ -113,8 +123,7 @@ class AdImpressionService {
         Uri.parse('${NetworkHelper.adsEndpoint}/impressions/carousel'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer ${(await _authService.getUserData())?['token']}',
+          'Authorization': 'Bearer ${await _getToken()}',
         },
         body: json.encode({
           'videoId': videoId,
@@ -279,8 +288,7 @@ class AdImpressionService {
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer ${(await _authService.getUserData())?['token']}',
+          'Authorization': 'Bearer ${await _getToken()}',
         },
         body: json.encode({
           'videoId': videoId,
@@ -321,8 +329,7 @@ class AdImpressionService {
         Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization':
-              'Bearer ${(await _authService.getUserData())?['token']}',
+          'Authorization': 'Bearer ${await _getToken()}',
         },
         body: json.encode({
           'videoId': videoId,

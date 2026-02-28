@@ -69,10 +69,6 @@ class VideoPlayerConfigService {
       final hlsUrl =
           mp4Url.replaceAll('/video/upload/', '/video/upload/$transformation/');
 
-      print('$_tag: HLS Transformation Parameters:');
-      print('   Resolution: ${preset.targetResolution}');
-      print('   Bitrate: ${preset.maxBitrate ~/ 1000}kbps');
-      print('   Transformation: $transformation');
 
       return hlsUrl;
     } catch (e) {

@@ -12,7 +12,7 @@ import 'package:vayu/features/video/presentation/managers/video_provider.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/profile/data/services/background_profile_preloader.dart';
 import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
@@ -37,8 +37,10 @@ void main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarContrastEnforced: false, // Prevents Android from adding black background
       statusBarIconBrightness: Brightness.light,
       systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarDividerColor: Colors.transparent, 
     ),
   );
 
@@ -462,6 +464,12 @@ class AppNavigatorObserver extends NavigatorObserver {
        AppLogger.log('⚠️ NAV ALERT: Pushed root (Splash?) route! StackTrace:');
        AppLogger.log(StackTrace.current.toString().split('\n').take(10).join('\n'));
     }
+
+    // **AUTO-PAUSE: Pause all playing videos whenever a new route is pushed**
+    // This prevents audio leaks during any navigation transition globally
+    if (previousRoute != null) {
+      _pauseAllVideos();
+    }
   }
 
   @override
@@ -478,5 +486,13 @@ class AppNavigatorObserver extends NavigatorObserver {
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
     AppLogger.log('🚀 NAV: Popped ${route.settings.name} (Now on: ${previousRoute?.settings.name})');
+  }
+
+  /// Pause all videos using singleton controllers (no BuildContext needed)
+  void _pauseAllVideos() {
+    try {
+      SharedVideoControllerPool().pauseAllControllers();
+      VideoControllerManager().forcePauseAllVideosSync();
+    } catch (_) {}
   }
 }

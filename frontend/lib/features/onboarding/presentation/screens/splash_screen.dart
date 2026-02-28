@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:vayu/main.dart'; // Access to AuthWrapper
 import 'package:vayu/features/onboarding/presentation/managers/app_initialization_manager.dart';
 import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -71,21 +74,14 @@ class _SplashScreenState extends State<SplashScreen>
       );
     }
 
-    // If logic is 100% complete, finish the bar quickly
+    // If logic is 100% complete, finish the bar quickly and navigate
     if (realProgress >= 1.0) {
-      _finishProgressBar();
+      _isNavigating = true; 
+      _navigateToHome(); // Direct navigation for maximum speed
     }
   }
 
-  void _finishProgressBar() {
-    if (!mounted || _isNavigating) return;
-    
-    _progressController.animateTo(
-      1.0, 
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-    ).then((_) => _checkAndNavigate());
-  }
+
 
   Future<void> _startBackgroundInitialization() async {
     if (mounted) {
@@ -99,8 +95,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     final initManager = AppInitializationManager.instance;
     
-    // **FINAL GATE: Only navigate if logic is ready AND bar is at 100%**
-    if (initManager.isStage2Complete && _progressController.value >= 1.0) {
+    // **FINAL GATE: Only navigate if logic stage 2 is complete**
+    // Decoupled from progress bar animation for maximum speed
+    if (initManager.isStage2Complete) {
       _isNavigating = true;
       _navigateToHome();
     }
@@ -131,7 +128,7 @@ class _SplashScreenState extends State<SplashScreen>
     final initManager = AppInitializationManager.instance;
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundPrimary,
+      backgroundColor: AppColors.backgroundPrimary,
       body: Stack(
         children: [
           // Center Content: Vayu Text
@@ -140,7 +137,7 @@ class _SplashScreenState extends State<SplashScreen>
               opacity: _opacityAnimation,
               child: const VayuLogo(
                 fontSize: 48,
-                textColor: AppTheme.white, // White logo on dark splash
+                textColor: AppColors.white, // White logo on dark splash
               ),
             ),
           ),
@@ -163,8 +160,8 @@ class _SplashScreenState extends State<SplashScreen>
                         final displayStatus = status.toLowerCase().contains('ready') ? status : '';
                         return Text(
                           displayStatus,
-                          style: AppTheme.labelSmall.copyWith(
-                            color: AppTheme.textSecondary.withOpacity(0.6),
+                          style: AppTypography.labelSmall.copyWith(
+                            color: AppColors.textSecondary.withOpacity(0.6),
                             letterSpacing: 0.5,
                           ),
                         );
@@ -180,8 +177,8 @@ class _SplashScreenState extends State<SplashScreen>
                         builder: (context, _) {
                           return LinearProgressIndicator(
                             value: _progressController.value,
-                            backgroundColor: AppTheme.white.withOpacity(0.1),
-                            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                            backgroundColor: AppColors.white.withOpacity(0.1),
+                            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                             minHeight: 6, // Increased from 3
                           );
                         },
@@ -201,8 +198,8 @@ class _SplashScreenState extends State<SplashScreen>
             child: Center(
               child: Text(
                 'v${AppConfig.kApiVersion}',
-                style: AppTheme.labelSmall.copyWith(
-                  color: AppTheme.textTertiary.withOpacity(0.3),
+                style: AppTypography.labelSmall.copyWith(
+                  color: AppColors.textTertiary.withOpacity(0.3),
                   letterSpacing: 1,
                 ),
               ),

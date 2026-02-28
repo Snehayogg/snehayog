@@ -1,4 +1,6 @@
+import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter/foundation.dart';
+import 'package:vayu/core/design/radius.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,7 +14,10 @@ import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/services/profile_screen_logger.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+
 import 'dart:async';
 import 'package:share_plus/share_plus.dart' as sp;
 
@@ -36,6 +41,7 @@ import 'package:vayu/features/profile/presentation/widgets/video_creator_search_
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/profile/presentation/screens/creator_revenue_screen.dart';
 import 'package:vayu/shared/utils/app_text.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 import 'package:vayu/features/profile/presentation/screens/edit_profile_screen.dart';
 import 'package:vayu/features/profile/presentation/widgets/game_creator_dashboard.dart';
@@ -95,43 +101,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   // **NEW: Track profile load attempts to prevent constant reloading**
   int _profileLoadAttemptCount = 0;
   bool _profileNoDataFound = false;
+  bool _isDeleteLoadingDialogVisible = false;
+  
 
-  bool _forceShowSignIn = false;
-
-  bool _shouldShowSignIn(GoogleSignInController authController) {
-    if (widget.userId != null) return false;
-    return _forceShowSignIn || !authController.isSignedIn;
-  }
-
-  void _markForceSignIn() {
-    if (!mounted) return;
-    if (!_forceShowSignIn) {
-      setState(() {
-        _forceShowSignIn = true;
-      });
-    }
-    _stateManager.clearData();
-    context.read<GameCreatorManager>().clearData();
-    _isLoading.value = false;
-    _error.value = null;
-  }
-
-  Future<void> _checkSessionForOwnProfile() async {
-    if (widget.userId != null) return;
-    try {
-      final needsReLogin = await _authService.needsReLogin();
-      if (!mounted) return;
-      if (needsReLogin) {
-        _markForceSignIn();
-      } else if (_forceShowSignIn) {
-        setState(() {
-          _forceShowSignIn = false;
-        });
-      }
-    } catch (_) {
-      // Keep current state on check failure.
-    }
-  }
 
   @override
 
@@ -156,14 +128,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
     
     _stateManager.setContext(context);
-    unawaited(_checkSessionForOwnProfile());
 
     // Ensure context is set early for providers that may be used during loads
     // It will be set again in didChangeDependencies
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _stateManager.setContext(context);
-    unawaited(_checkSessionForOwnProfile());
         // **FIX: Ensure data loads on first attempt even if cache fails**
         // Call _loadData() in postFrameCallback to ensure context is ready
         if (_stateManager.userData == null) {
@@ -189,12 +159,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// **OPTIMIZED: Only load if data is missing - don't reload on every tab switch**
   /// **FIXED: Don't reload if creator has no videos - only load once per session**
   void onProfileTabSelected() {
-    unawaited(_checkSessionForOwnProfile());
     // **FIX: Only proceed if this is still the current route**
     if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
-    if (_forceShowSignIn) {
-      return;
-    }
     AppLogger.log(
         '🔄 ProfileScreen: Profile tab selected, checking if data needs loading');
 
@@ -265,12 +231,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     try {
-      if (widget.userId == null) {
-        await _checkSessionForOwnProfile();
-        if (_forceShowSignIn) {
-          return;
-        }
-      }
       AppLogger.log(
           '🔄 ProfileScreen: Starting data loading (forceRefresh: $forceRefresh)');
 
@@ -376,7 +336,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             '📡 ProfileScreen: Loading data (attempt ${retryCount + 1}/${maxRetries + 1}) for ${widget.userId != null ? "creator" : "own"} profile (forceRefresh: $forceRefresh)');
 
         final timeoutDuration = widget.userId != null
-            ? const Duration(seconds: 20)
+            ? const Duration(seconds: 10)
             : const Duration(seconds: 15);
 
         await _stateManager
@@ -646,7 +606,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _stateManager.setContext(context);
-    unawaited(_checkSessionForOwnProfile());
 
     // **DISABLED: Preload profile videos to prevent video playback conflicts**
     // _preloadProfileVideos();
@@ -1030,7 +989,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppText.get('profile_updated_success')),
-            backgroundColor: AppTheme.success,
+            backgroundColor: AppColors.success,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -1042,7 +1001,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${AppText.get('error_update_profile')}: $e'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: AppColors.error,
           ),
         );
       }
@@ -1067,11 +1026,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       try {
         await _stateManager.deleteSelectedVideos();
 
-        // Hide loading indicator
-        if (mounted && Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -1084,11 +1038,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
         ProfileScreenLogger.logVideoDeletionSuccess(count: initialCount);
       } catch (e) {
-        // Hide loading indicator on error
-        if (mounted && Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
         rethrow;
+      } finally {
+        _hideLoadingDialog();
       }
     } catch (e) {
       ProfileScreenLogger.logVideoDeletionError(e.toString());
@@ -1111,22 +1063,33 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _showLoadingDialog() {
+    if (_isDeleteLoadingDialogVisible) return;
+    _isDeleteLoadingDialogVisible = true;
     showDialog(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return Center(
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppTheme.surfacePrimary,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+              color: AppColors.surfacePrimary,
+              borderRadius: BorderRadius.circular(AppRadius.md),
             ),
             child: const CircularProgressIndicator(),
           ),
         );
       },
-    );
+    ).then((_) {
+      _isDeleteLoadingDialogVisible = false;
+    });
+  }
+
+  void _hideLoadingDialog() {
+    if (!_isDeleteLoadingDialogVisible || !mounted) return;
+    _isDeleteLoadingDialogVisible = false;
+    Navigator.of(context, rootNavigator: true).maybePop();
   }
 
   Future<bool> _showDeleteConfirmationDialog() async {
@@ -1139,11 +1102,11 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: AppTheme.backgroundPrimary,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                  color: AppColors.backgroundPrimary,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                   boxShadow: const [
                     BoxShadow(
-                      color: AppTheme.shadowPrimary,
+                      color: AppColors.shadowPrimary,
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -1157,16 +1120,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: AppTheme.error.withOpacity(0.15),
+                        color: AppColors.error.withOpacity(0.15),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppTheme.error.withOpacity(0.3),
+                          color: AppColors.error.withOpacity(0.3),
                           width: 2,
                         ),
                       ),
-                      child: const Icon(
-                        Icons.delete_forever,
-                        color: AppTheme.error,
+                      child: HugeIcon(icon: HugeIcons.strokeRoundedDelete02,
+                        color: AppColors.error,
                         size: 32,
                       ),
                     ),
@@ -1176,7 +1138,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     Text(
                       AppText.get('profile_delete_videos_title'),
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: AppTheme.textPrimary,
+                            color: AppColors.textPrimary,
                             fontWeight: FontWeight.bold,
                           ),
                     ),
@@ -1188,7 +1150,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           '{count}',
                           '${_stateManager.selectedVideoIds.length}'),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.textSecondary,
+                            color: AppColors.textSecondary,
                             height: 1.4,
                           ),
                       textAlign: TextAlign.center,
@@ -1199,46 +1161,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                     Row(
                       children: [
                         Expanded(
-                          child: TextButton(
+                          child: AppButton(
+                            isFullWidth: true,
                             onPressed: () => Navigator.of(context).pop(false),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(
-                                  color: Colors.grey.withOpacity(0.3),
-                                ),
-                              ),
-                            ),
-                            child: Text(
-                              AppText.get('btn_cancel'),
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                            ),
+                            label: AppText.get('btn_cancel'),
+                            variant: AppButtonVariant.secondary,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: ElevatedButton(
+                          child: AppButton(
+                            isFullWidth: true,
                             onPressed: () => Navigator.of(context).pop(true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: Text(
-                              AppText.get('btn_delete', fallback: 'Delete'),
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppTheme.textInverse,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
+                            label: AppText.get('btn_delete', fallback: 'Delete'),
+                            variant: AppButtonVariant.danger,
                           ),
                         ),
                       ],
@@ -1269,7 +1205,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.camera_alt),
+                  leading: HugeIcon(icon: HugeIcons.strokeRoundedCamera01),
                   title: Text(AppText.get('profile_take_photo')),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
@@ -1278,7 +1214,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.photo_library),
+                  leading: HugeIcon(icon: HugeIcons.strokeRoundedImage02),
                   title: Text(AppText.get('profile_choose_gallery')),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
@@ -1381,7 +1317,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           if (authController.isLoading) {
             return Scaffold(
               key: _scaffoldKey,
-              backgroundColor: AppTheme.backgroundSecondary,
+              backgroundColor: AppColors.backgroundSecondary,
               appBar: _buildAppBar(false),
               body: const ProfileSkeleton(),
             );
@@ -1456,7 +1392,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             children: [
               Scaffold(
                 key: _scaffoldKey,
-                backgroundColor: AppTheme.backgroundSecondary,
+                backgroundColor: AppColors.backgroundSecondary,
                 appBar: _buildAppBar(isViewingOwnProfile),
                 drawer: isViewingOwnProfile
                     ? ProfileMenuWidget(
@@ -1551,7 +1487,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     // **FIXED: Check authentication status first - if viewing own profile and not signed in, show sign-in view**
     // If viewing someone else's profile (widget.userId != null), show their profile even if not signed in
-    if (_shouldShowSignIn(authController)) {
+    if (widget.userId == null && !authController.isSignedIn) {
       return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
     }
 
@@ -1618,7 +1554,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           valueListenable: _error,
           builder: (context, error, child) {
             // **FIXED: Check authentication status - if not signed in and viewing own profile, show sign-in view**
-            if (_shouldShowSignIn(authController)) {
+            if (widget.userId == null && !authController.isSignedIn) {
               return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
             }
 
@@ -1635,7 +1571,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               
               // **FIX: Allow viewing other profiles even if not signed in**
               // If not signed in and viewing own profile -> Sign In
-              if (_shouldShowSignIn(authController)) {
+              if (widget.userId == null && !authController.isSignedIn) {
                  return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
 
@@ -1647,8 +1583,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.error_outline,
+                        HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
                           size: 64,
                           color: Colors.red[300],
                         ),
@@ -1656,7 +1591,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Text(
                           AppText.get('error_load_profile'),
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: AppTheme.error,
+                            color: AppColors.error,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,
@@ -1665,7 +1600,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Text(
                           error,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textSecondary,
+                            color: AppColors.textSecondary,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -1675,31 +1610,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ValueListenableBuilder<bool>(
                           valueListenable: _isLoading,
                           builder: (context, isLoading, child) {
-                            return ElevatedButton.icon(
+                            return AppButton(
                               onPressed: isLoading
                                   ? null
                                   : () => _loadData(forceRefresh: true),
-                              icon: isLoading
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.refresh),
-                              label: Text(isLoading
-                                  ? AppText.get('btn_loading',
-                                      fallback: 'Loading...')
-                                  : AppText.get('btn_retry',
-                                      fallback: 'Retry')),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
-                                ),
-                              ),
+                              isLoading: isLoading,
+                              icon: HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
+                              label: AppText.get('btn_retry', fallback: 'Retry'),
+                              variant: AppButtonVariant.primary,
                             );
                           },
                         ),
@@ -1712,7 +1630,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
             // Check if we have user data - if viewing own profile and no data, show sign-in view
             if (_stateManager.userData == null) {
-              if (_shouldShowSignIn(authController)) {
+              if (widget.userId == null && !authController.isSignedIn) {
                 return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
               }
               // If viewing someone else's profile, we might not have data yet - show loading or error
@@ -1724,8 +1642,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.error_outline,
+                          HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
                             size: 64,
                             color: Colors.red[300],
                           ),
@@ -1755,31 +1672,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ValueListenableBuilder<bool>(
                             valueListenable: _isLoading,
                             builder: (context, isLoading, child) {
-                              return ElevatedButton.icon(
+                              return AppButton(
                                 onPressed: isLoading
                                     ? null
                                     : () => _loadData(forceRefresh: true),
-                                icon: isLoading
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.refresh),
-                                label: Text(isLoading
-                                    ? AppText.get('btn_loading',
-                                        fallback: 'Loading...')
-                                    : AppText.get('btn_retry',
-                                        fallback: 'Retry')),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
+                                isLoading: isLoading,
+                                icon: HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
+                                label: AppText.get('btn_retry', fallback: 'Retry'),
+                                variant: AppButtonVariant.primary,
                               );
                             },
                           ),
@@ -1865,7 +1765,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Consumer<ProfileStateManager>(
         builder: (context, stateManager, child) {
           return AppBar(
-            backgroundColor: AppTheme.backgroundPrimary,
+            backgroundColor: AppColors.backgroundPrimary,
             elevation: 0,
             shadowColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
@@ -1875,7 +1775,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     stateManager.selectedVideoIds.isNotEmpty
                 ? Text(
                     '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
-                    style: AppTheme.titleMedium.copyWith(
+                    style: AppTypography.titleMedium.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   )
@@ -1896,23 +1796,23 @@ class _ProfileScreenState extends State<ProfileScreen>
                     : Text(
                         stateManager.userData?['name'] ??
                             AppText.get('profile_title'),
-                        style: AppTheme.titleLarge.copyWith(
+                        style: AppTypography.titleLarge.copyWith(
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.5,
                         ),
                       )),
             leading: isViewingOwnProfile
                 ? IconButton(
-                    icon: const Icon(Icons.menu,
-                        color: AppTheme.textPrimary, size: 20),
+                    icon: HugeIcon(icon: HugeIcons.strokeRoundedMenu01,
+                        color: AppColors.textPrimary, size: 20),
                     tooltip: 'Menu',
                     onPressed: () {
                       _scaffoldKey.currentState?.openDrawer();
                     },
                   )
                 : IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: AppTheme.textPrimary, size: 20),
+                    icon: HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01,
+                        color: AppColors.textPrimary, size: 20),
                     tooltip: 'Back',
                     onPressed: () {
                       Navigator.of(context).pop();
@@ -1923,7 +1823,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               preferredSize: const Size.fromHeight(1),
               child: Container(
                 height: 1,
-                color: AppTheme.borderPrimary,
+                color: AppColors.borderPrimary,
               ),
             ),
           );
@@ -1935,9 +1835,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<Widget> _buildAppBarActions(ProfileStateManager stateManager, bool isViewingOwnProfile) {
     final actions = <Widget>[
       IconButton(
-        icon: const Icon(
-          Icons.search,
-          color: AppTheme.textPrimary,
+        icon: HugeIcon(icon: HugeIcons.strokeRoundedSearch01,
+          color: AppColors.textPrimary,
           size: 20,
         ),
         tooltip: 'Search videos & creators',
@@ -1948,7 +1847,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         },
       ),
-      _buildFeedbackAction(),
+      if (isViewingOwnProfile) _buildFeedbackAction(),
     ];
 
     if (isViewingOwnProfile && stateManager.isSelecting && stateManager.selectedVideoIds.isNotEmpty) {
@@ -1960,8 +1859,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               color: Colors.red.withValues(alpha:0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.delete_forever,
+            child: HugeIcon(icon: HugeIcons.strokeRoundedDelete02,
               color: Colors.red,
               size: 24,
             ),
@@ -1982,8 +1880,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               color: Colors.grey.withValues(alpha:0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.close,
+            child: HugeIcon(icon: HugeIcons.strokeRoundedCancel01,
               color: Colors.grey,
               size: 24,
             ),
@@ -1999,8 +1896,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildFeedbackAction() {
     return IconButton(
-      icon: const Icon(
-        Icons.tips_and_updates_outlined,
+      icon: HugeIcon(icon: HugeIcons.strokeRoundedIdea01,
         color: Color(0xFF10B981),
         size: 20,
       ),
@@ -2103,7 +1999,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
                 ),
                 const SizedBox(height: 8),
-                ElevatedButton(
+                AppButton(
                   onPressed: () async {
                     final prefs = await SharedPreferences.getInstance();
                     // 1. Manually corrupt the token
@@ -2122,11 +2018,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     // This will hit 401, catch it in HttpClient, and run the new refresh logic
                     await _refreshData();
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Corrupt Token & Refresh'),
+                  label: 'Corrupt Token & Refresh',
+                  variant: AppButtonVariant.primary,
                 ),
               ],
             ),
@@ -2139,14 +2032,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     // 2. Compact Profile Header
     slivers.add(
       SliverToBoxAdapter(
-        child: ProfileHeaderWidget(
-          isViewingOwnProfile: isViewingOwnProfile,
-          onProfilePhotoChange: _handleProfilePhotoChange,
-          onAddUpiId: _handleAddUpiId,
-          onReferFriends: _handleReferFriends,
-          onEarningsTap: _handleEarningsTap,
-          onSaveProfile: _handleSaveProfile,
-          onCancelEdit: _handleCancelEdit,
+        child: ValueListenableBuilder<int>(
+          valueListenable: _invitedCount,
+          builder: (context, invitedCount, _) {
+            return ProfileHeaderWidget(
+              isViewingOwnProfile: isViewingOwnProfile,
+              hasReferralBillingUnlock: invitedCount >= 2,
+              onProfilePhotoChange: _handleProfilePhotoChange,
+              onAddUpiId: _handleAddUpiId,
+              onReferFriends: _handleReferFriends,
+              onEarningsTap: _handleEarningsTap,
+              onSaveProfile: _handleSaveProfile,
+              onCancelEdit: _handleCancelEdit,
+            );
+          },
         ),
       ),
     );
@@ -2207,8 +2106,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             const SizedBox(height: 8),
             Text(
               AppText.get('profile_top_earners'),
-              style: AppTheme.titleSmall.copyWith(
-                color: AppTheme.textPrimary,
+              style: AppTypography.titleSmall.copyWith(
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -2449,12 +2348,14 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// Shows cached data instantly when user navigates back to same profile
   Future<Map<String, dynamic>?> _loadCachedProfileData() async {
     try {
-      // **OPTIMIZATION: Use ProfileLocalDataSource (Hive) for instant load**
-      final loggedInUser = await _authService.getUserData();
-      final loggedInUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
-      
-      // Determine the correct user ID to fetch
-      final String? targetUserId = widget.userId ?? loggedInUserId;
+      // **OPTIMIZED: For creator profiles, skip auth call and use widget.userId directly**
+      // This eliminates the biggest latency source for creator profile loading
+      String? targetUserId = widget.userId;
+      if (targetUserId == null) {
+        // Only call auth service for own profile
+        final loggedInUser = await _authService.getUserData();
+        targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
+      }
 
       if (targetUserId == null) {
         ProfileScreenLogger.logDebugInfo(
@@ -2747,9 +2648,20 @@ class _EarningsBottomSheetContentState
 
       final prefs = await SharedPreferences.getInstance();
       final cacheKey = 'earnings_cache_$userId';
+      final cacheTimestampKey = 'earnings_cache_ts_$userId';
       final cachedDataJson = prefs.getString(cacheKey);
+      final cacheTimestamp = prefs.getInt(cacheTimestampKey);
 
-      if (cachedDataJson != null) {
+      // **OPTIMIZED: Only use cache if it's less than 10 minutes old**
+      bool isCacheValid = false;
+      if (cacheTimestamp != null) {
+        final cacheAge = DateTime.now().difference(
+          DateTime.fromMillisecondsSinceEpoch(cacheTimestamp),
+        );
+        isCacheValid = cacheAge.inMinutes < 5;
+      }
+
+      if (cachedDataJson != null && isCacheValid) {
         final Map<String, dynamic> revenueData = json.decode(cachedDataJson);
         if (revenueData.containsKey('videos')) {
            final List<dynamic> videoStatsList = revenueData['videos'] ?? [];
@@ -2814,7 +2726,7 @@ class _EarningsBottomSheetContentState
           ),
           child: Row(
             children: [
-              const Icon(Icons.account_balance_wallet,
+              HugeIcon(icon: HugeIcons.strokeRoundedWallet01,
                   color: Colors.black87, size: 24),
               const SizedBox(width: 12),
               Text(
@@ -2837,7 +2749,7 @@ class _EarningsBottomSheetContentState
               const SizedBox(width: 12),
               IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Colors.black54),
+                icon: HugeIcon(icon: HugeIcons.strokeRoundedCancel01, color: Colors.black54),
               ),
             ],
           ),
@@ -2907,7 +2819,7 @@ class _EarningsBottomSheetContentState
                                   // Views
                                   Expanded(
                                     child: _buildStatItem(
-                                      icon: Icons.visibility,
+                                      icon: HugeIcons.strokeRoundedView,
                                       label: 'Views',
                                       value: '${video.views}',
                                       color: Colors.blue,
@@ -2917,7 +2829,7 @@ class _EarningsBottomSheetContentState
                                   // Upload date
                                   Expanded(
                                     child: _buildStatItem(
-                                      icon: Icons.calendar_today,
+                                      icon: HugeIcons.strokeRoundedCalendar03,
                                       label: 'Uploaded',
                                       value: _formatDate(video.uploadedAt),
                                       color: Colors.orange,
@@ -2927,7 +2839,7 @@ class _EarningsBottomSheetContentState
                                   // Rewards
                                   Expanded(
                                     child: _buildStatItem(
-                                      icon: Icons.account_balance_wallet,
+                                      icon: HugeIcons.strokeRoundedWallet01,
                                       label: 'Rewards',
                                       value: '${earnings.toStringAsFixed(2)}',
                                       color: const Color(0xFF10B981),
@@ -2946,7 +2858,7 @@ class _EarningsBottomSheetContentState
   }
 
   Widget _buildStatItem({
-    required IconData icon,
+    required dynamic icon,
     required String label,
     required String value,
     required Color color,

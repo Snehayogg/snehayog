@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:vayu/core/design/radius.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -9,7 +10,10 @@ import 'package:vayu/features/auth/data/services/authservices.dart';
 // import 'package:vayu/features/video/data/services/video_service.dart'; // Unused import removed
 // import 'package:url_launcher/url_launcher.dart'; // Unused import removed
 import 'package:vayu/shared/services/share_service.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/shared/widgets/in_app_browser.dart';
@@ -288,11 +292,11 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       },
       child: RepaintBoundary(
         child: Scaffold(
-          backgroundColor: AppTheme.backgroundPrimary,
+          backgroundColor: AppColors.backgroundPrimary,
           body: Container(
             width: double.infinity,
             height: double.infinity,
-            color: AppTheme.backgroundPrimary,
+            color: AppColors.backgroundPrimary,
             child: Stack(
               children: [
                 // **Sponsored Text at Top Corner**
@@ -385,21 +389,21 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   Widget _buildFallbackContent() {
     return Container(
-      color: AppTheme.backgroundSecondary,
+      color: AppColors.backgroundSecondary,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(
               Icons.campaign,
-              color: AppTheme.textSecondary,
+              color: AppColors.textSecondary,
               size: 80,
             ),
             const SizedBox(height: 16),
             Text(
               'Advertisement',
-              style: AppTheme.headlineMedium.copyWith(
-                color: AppTheme.white,
+              style: AppTypography.headlineMedium.copyWith(
+                color: AppColors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -419,10 +423,10 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.backgroundPrimary.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+              color: AppColors.backgroundPrimary.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               border:
-                  Border.all(color: AppTheme.white.withValues(alpha: 0.2), width: 1.0),
+                  Border.all(color: AppColors.white.withValues(alpha: 0.2), width: 1.0),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.4),
@@ -433,8 +437,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             ),
             child: Text(
               '${_currentSlideIndex + 1}/${widget.carouselAd.slides.length}',
-              style: AppTheme.labelSmall.copyWith(
-                color: AppTheme.white,
+              style: AppTypography.labelSmall.copyWith(
+                color: AppColors.white,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -451,13 +455,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppTheme.backgroundPrimary.withValues(alpha: 0.6),
+          color: AppColors.backgroundPrimary.withValues(alpha: 0.6),
           shape: BoxShape.circle,
-          border: Border.all(color: AppTheme.white.withValues(alpha: 0.1)),
+          border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
         ),
         child: const Icon(
           Icons.arrow_back_ios_new,
-          color: AppTheme.white,
+          color: AppColors.white,
           size: 18,
         ),
       ),
@@ -466,10 +470,10 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   Widget _buildLoadingPlaceholder() {
     return Container(
-      color: AppTheme.backgroundSecondary,
+      color: AppColors.backgroundSecondary,
       child: const Center(
         child: CircularProgressIndicator(
-          color: AppTheme.primary,
+          color: AppColors.primary,
         ),
       ),
     );
@@ -477,16 +481,16 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
 
   Widget _buildErrorPlaceholder() {
     return Container(
-      color: AppTheme.backgroundSecondary,
+      color: AppColors.backgroundSecondary,
       child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, color: AppTheme.textSecondary, size: 48),
+            Icon(Icons.error_outline, color: AppColors.textSecondary, size: 48),
             SizedBox(height: 8),
             Text(
               'Ad Image',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
             ),
           ],
         ),
@@ -520,22 +524,22 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           color: Colors.transparent,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: AppTheme.backgroundPrimary.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+              color: AppColors.backgroundPrimary.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               border:
-                  Border.all(color: AppTheme.white.withValues(alpha: 0.15), width: 0.8),
+                  Border.all(color: AppColors.white.withValues(alpha: 0.15), width: 0.8),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.campaign_outlined, size: 14, color: AppTheme.white),
+                  const Icon(Icons.campaign_outlined, size: 14, color: AppColors.white),
                   const SizedBox(width: 6),
                   Text(
                     'Sponsored',
-                    style: AppTheme.labelSmall.copyWith(
-                      color: AppTheme.white,
+                    style: AppTypography.labelSmall.copyWith(
+                      color: AppColors.white,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                     ),
@@ -570,7 +574,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           // Heart icon
           _buildActionButton(
             icon: _isLiked ? Icons.favorite : Icons.favorite_border,
-            iconColor: _isLiked ? AppTheme.error : AppTheme.white,
+            iconColor: _isLiked ? AppColors.error : AppColors.white,
             onTap: _onHeartTap,
             count: _displayLikes(),
           ),
@@ -606,19 +610,19 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 Container(
                   padding: const EdgeInsets.all(1.5),
                   decoration: const BoxDecoration(
-                    color: AppTheme.white,
+                    color: AppColors.white,
                     shape: BoxShape.circle,
                   ),
                   child: CircleAvatar(
                     radius: 14, // Slightly smaller
-                    backgroundColor: AppTheme.backgroundSecondary,
+                    backgroundColor: AppColors.backgroundSecondary,
                     backgroundImage:
                         widget.carouselAd.advertiserProfilePic.isNotEmpty
                             ? CachedNetworkImageProvider(
                                 widget.carouselAd.advertiserProfilePic)
                             : null,
                     child: widget.carouselAd.advertiserProfilePic.isEmpty
-                        ? const Icon(Icons.business, size: 14, color: AppTheme.textSecondary)
+                        ? const Icon(Icons.business, size: 14, color: AppColors.textSecondary)
                         : null,
                   ),
                 ),
@@ -626,8 +630,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 Expanded(
                   child: Text(
                     widget.carouselAd.advertiserName,
-                    style: AppTheme.headlineSmall.copyWith(
-                      color: AppTheme.white,
+                    style: AppTypography.headlineSmall.copyWith(
+                      color: AppColors.white,
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
                       shadows: [
@@ -652,8 +656,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             // Ad caption
             Text(
               _getAdTitle(),
-              style: AppTheme.titleLarge.copyWith(
-                color: AppTheme.white,
+              style: AppTypography.titleLarge.copyWith(
+                color: AppColors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 shadows: [
@@ -676,8 +680,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 _getAdDescription(),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppTheme.bodySmall.copyWith(
-                  color: AppTheme.white.withValues(alpha: 0.9),
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.white.withValues(alpha: 0.9),
                   fontSize: 13,
                   shadows: [
                     const Shadow(
@@ -702,8 +706,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.2),
@@ -714,8 +718,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 ),
                 child: Text(
                   _getCleanedCtaLabel(widget.carouselAd.callToActionLabel).toUpperCase(),
-                  style: AppTheme.labelMedium.copyWith(
-                    color: AppTheme.textInverse,
+                  style: AppTypography.labelMedium.copyWith(
+                    color: AppColors.textInverse,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
                     fontSize: 13,
@@ -733,7 +737,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   Widget _buildActionButton({
     required IconData icon,
     required VoidCallback onTap,
-    Color iconColor = AppTheme.white,
+    Color iconColor = AppColors.white,
     int? count,
   }) {
     return GestureDetector(
@@ -743,9 +747,9 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.backgroundPrimary.withValues(alpha: 0.6),
+              color: AppColors.backgroundPrimary.withValues(alpha: 0.6),
               shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.white.withValues(alpha: 0.1)),
+              border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
             ),
             child: Icon(
               icon,
@@ -757,8 +761,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             const SizedBox(height: 4),
             Text(
               _formatCount(count),
-              style: AppTheme.labelSmall.copyWith(
-                color: AppTheme.white,
+              style: AppTypography.labelSmall.copyWith(
+                color: AppColors.white,
                 fontWeight: FontWeight.w600,
                 fontSize: 11,
               ),
@@ -867,24 +871,24 @@ class _CarouselVideoAdItemState extends State<_CarouselVideoAdItem> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppTheme.backgroundPrimary,
+      color: AppColors.backgroundPrimary,
       child: Stack(
         alignment: Alignment.center,
         children: [
           // Background (thumbnail or dark)
-          Container(color: AppTheme.backgroundPrimary.withValues(alpha: 0.9)),
+          Container(color: AppColors.backgroundPrimary.withValues(alpha: 0.9)),
           
           // Play Button
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.backgroundPrimary.withValues(alpha: 0.5),
+              color: AppColors.backgroundPrimary.withValues(alpha: 0.5),
               shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.white.withValues(alpha: 0.8), width: 1.5),
+              border: Border.all(color: AppColors.white.withValues(alpha: 0.8), width: 1.5),
             ),
             child: const Icon(
               Icons.play_arrow_rounded,
-              color: AppTheme.white,
+              color: AppColors.white,
               size: 54,
             ),
           ),
@@ -895,14 +899,14 @@ class _CarouselVideoAdItemState extends State<_CarouselVideoAdItem> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppTheme.backgroundPrimary.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                border: Border.all(color: AppTheme.white.withValues(alpha: 0.1)),
+                color: AppColors.backgroundPrimary.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
               ),
               child: Text(
                 'Video Ad Preview',
-                style: AppTheme.labelMedium.copyWith(
-                  color: AppTheme.white,
+                style: AppTypography.labelMedium.copyWith(
+                  color: AppColors.white,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                 ),

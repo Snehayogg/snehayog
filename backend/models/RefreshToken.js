@@ -15,7 +15,7 @@ const RefreshTokenSchema = new mongoose.Schema({
   },
   deviceId: {
     type: String,
-    required: true,
+    required: false, // Made optional
     index: true
   },
   deviceName: {
@@ -47,9 +47,9 @@ const RefreshTokenSchema = new mongoose.Schema({
   }
 });
 
-// Compound index for efficient device-based lookups
-RefreshTokenSchema.index({ userId: 1, deviceId: 1 });
-RefreshTokenSchema.index({ deviceId: 1, isRevoked: 1, expiresAt: 1 });
+// Compound index for efficient user sessions lookup
+RefreshTokenSchema.index({ userId: 1, isRevoked: 1 });
+RefreshTokenSchema.index({ tokenHash: 1, isRevoked: 1 });
 
 // Static method to generate a secure refresh token
 RefreshTokenSchema.statics.generateToken = function() {
@@ -63,11 +63,23 @@ RefreshTokenSchema.statics.hashToken = function(token) {
 
 // Static method to create a new refresh token for a user/device
 RefreshTokenSchema.statics.createForDevice = async function(userId, deviceId, deviceName, platform) {
-  // First, revoke any existing tokens for this device
-  await this.updateMany(
-    { userId, deviceId, isRevoked: false },
-    { $set: { isRevoked: true } }
-  );
+  // **SECURITY FIX: "Loose" Device Validation**
+  // Only revoke existing tokens if the deviceId is reliable.
+  // We skip revocation for generic/fallback IDs to avoid "Session Collision" bugs.
+  const unreliableIds = ['unknown', 'fallback', 'emergency', 'generic', '9774d56d682e549c'];
+  const isReliableId = deviceId && 
+                       deviceId.length > 5 && 
+                       !unreliableIds.some(u => deviceId.toLowerCase().includes(u));
+
+  if (isReliableId) {
+    await this.updateMany(
+      { userId, deviceId, isRevoked: false },
+      { $set: { isRevoked: true } }
+    );
+  } else {
+    // If ID is unreliable, we just continue. This allows multiple "unknown" sessions 
+    // without them kicking each other out.
+  }
 
   // Generate new token
   const rawToken = this.generateToken();
@@ -95,13 +107,12 @@ RefreshTokenSchema.statics.createForDevice = async function(userId, deviceId, de
 };
 
 // Static method to verify and rotate a refresh token
-RefreshTokenSchema.statics.verifyAndRotate = async function(rawToken, deviceId) {
+RefreshTokenSchema.statics.verifyAndRotate = async function(rawToken) {
   const tokenHash = this.hashToken(rawToken);
 
-  // Find valid token
+  // Find valid token by hash only
   const existingToken = await this.findOne({
     tokenHash,
-    deviceId,
     isRevoked: false,
     expiresAt: { $gt: new Date() }
   }).populate('userId', 'googleId name email profilePic');
@@ -124,7 +135,7 @@ RefreshTokenSchema.statics.verifyAndRotate = async function(rawToken, deviceId) 
   const newToken = new this({
     userId: existingToken.userId._id,
     tokenHash: newTokenHash,
-    deviceId,
+    deviceId: existingToken.deviceId, // Preserve if existed
     deviceName: existingToken.deviceName,
     platform: existingToken.platform,
     expiresAt,
@@ -139,8 +150,20 @@ RefreshTokenSchema.statics.verifyAndRotate = async function(rawToken, deviceId) 
   };
 };
 
-// Static method to find valid session by device ID only (for auto-login)
+// Static method to find valid session (most recent)
+RefreshTokenSchema.statics.findValidSession = async function(tokenHash) {
+  const session = await this.findOne({
+    tokenHash,
+    isRevoked: false,
+    expiresAt: { $gt: new Date() }
+  }).populate('userId', 'googleId name email profilePic');
+
+  return session;
+};
+
+// Static method to find valid session by device ID (optional helper)
 RefreshTokenSchema.statics.findValidSessionByDevice = async function(deviceId) {
+  if (!deviceId) return null;
   const session = await this.findOne({
     deviceId,
     isRevoked: false,

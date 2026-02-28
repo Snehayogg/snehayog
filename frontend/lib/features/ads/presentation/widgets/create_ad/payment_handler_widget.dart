@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:snehayog_monetization/snehayog_monetization.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
@@ -33,11 +37,11 @@ class PaymentHandlerWidget {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.payment, color: AppTheme.primary, size: 24),
+            const Icon(Icons.payment, color: AppColors.primary, size: 24),
             const SizedBox(width: 8),
             Text(
               'Payment Required',
-              style: AppTheme.headlineSmall.copyWith(fontSize: 18, color: AppTheme.white),
+              style: AppTypography.headlineSmall.copyWith(fontSize: 18, color: AppColors.white),
             ),
           ],
         ),
@@ -51,22 +55,22 @@ class PaymentHandlerWidget {
             const SizedBox(height: 16),
             const Text(
               'Your ad has been created in draft status. Please complete the payment to activate it.',
-              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.primary.withOpacity(0.1),
+                color: AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                border: Border.all(color: AppColors.primary.withOpacity(0.3)),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '💰 Campaign Metrics:',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.white),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.white),
                   ),
                   SizedBox(height: 8),
                   Text('• Creator-first ecosystem'),
@@ -79,20 +83,18 @@ class PaymentHandlerWidget {
           ],
         ),
         actions: [
-          TextButton(
+          AppButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            variant: AppButtonVariant.text,
           ),
-          ElevatedButton(
+          AppButton(
             onPressed: () {
               Navigator.pop(context);
               _initiatePayment(context, ad, invoice, onPaymentSuccess);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: AppTheme.white,
-            ),
-            child: const Text('Pay Now'),
+            label: 'Pay Now',
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -171,14 +173,14 @@ class PaymentHandlerWidget {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.star, color: AppTheme.warning, size: 24),
+            Icon(Icons.star, color: AppColors.warning, size: 24),
             const SizedBox(width: 12),
             Text(
               'Why Advertise on Vayug?',
-              style: AppTheme.headlineSmall.copyWith(
+              style: AppTypography.headlineSmall.copyWith(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: AppTheme.white,
+                color: AppColors.white,
               ),
             ),
           ],
@@ -192,57 +194,58 @@ class PaymentHandlerWidget {
                 'Guaranteed Ad Impressions',
                 'Unlike other platforms where ad reach is uncertain, Vayug ensures advertisers get guaranteed impressions, providing clear ROI visibility.',
                 Icons.visibility,
-                AppTheme.primary,
+                AppColors.primary,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Creator-First Reward Model',
                 'Creators receive rewards based on engagement, leading to higher motivation and engagement. This results in more authentic content, ensuring advertisers\' ads are placed in highly engaging and trusted environments.',
                 Icons.people,
-                AppTheme.success,
+                AppColors.success,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'High Engagement & Brand Recall',
                 'Since creators are directly incentivized, they actively promote and integrate brand ads, leading to better click-through and conversion rates.',
                 Icons.trending_up,
-                AppTheme.warning,
+                AppColors.warning,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Less Competition, More Attention',
                 'Unlike crowded platforms (YouTube, Instagram, etc.), Vayug offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
                 Icons.psychology,
-                AppTheme.primaryDark,
+                AppColors.primaryDark,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Safe & Relevant Ad Placements',
                 'Ads are displayed only on clean and safe content, ensuring brand safety and alignment with advertiser values.',
                 Icons.security,
-                AppTheme.primaryLight,
+                AppColors.primaryLight,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Focused User Experience',
                 'With a clutter-free interface and fewer distractions, ads receive greater user focus compared to traditional platforms overloaded with content.',
                 Icons.center_focus_strong,
-                AppTheme.info,
+                AppColors.info,
               ),
               const SizedBox(height: 16),
               _buildBenefitItem(
                 'Emerging Market Advantage',
                 'Early advertisers on Vayug benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
                 Icons.rocket_launch,
-                AppTheme.error,
+                AppColors.error,
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(
+          AppButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Got it!'),
+            label: 'Got it!',
+            variant: AppButtonVariant.text,
           ),
         ],
       ),
@@ -285,8 +288,8 @@ class PaymentHandlerWidget {
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: AppTheme.bodySmall.copyWith(
-                    color: AppTheme.textSecondary,
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
                     height: 1.4,
                   ),
                 ),
@@ -302,7 +305,7 @@ class PaymentHandlerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppTheme.success,
+        backgroundColor: AppColors.success,
       ),
     );
   }
@@ -311,7 +314,7 @@ class PaymentHandlerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppTheme.error,
+        backgroundColor: AppColors.error,
       ),
     );
   }

@@ -68,9 +68,7 @@ class RecommendationScoreCron {
     const startTime = Date.now();
 
     try {
-      console.log('🔄 Starting recommendation score recalculation...');
-      
-      // Only update outdated scores (older than 15 minutes) to save resources
+      // 1. Recalculate Video Recommendation Scores
       const stats = await RecommendationService.recalculateAllScores({
         batchSize: 100,
         onlyOutdated: true,
@@ -79,7 +77,7 @@ class RecommendationScoreCron {
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`✅ Score recalculation completed in ${duration}s`);
-      console.log(`📊 Stats: ${stats.processed} processed, ${stats.errors} errors`);
+      console.log(`📊 Video Stats: ${stats.processed} processed, ${stats.errors} errors`);
     } catch (error) {
       console.error('❌ Error in recommendation score recalculation:', error);
     } finally {

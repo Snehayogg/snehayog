@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:vayu/core/design/spacing.dart';
+import 'package:vayu/core/design/radius.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +9,11 @@ import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 /// Compact grid (3 columns) showing top creators from the user's following list.
 /// This reuses the same API as `TopEarnersBottomSheet` but is optimised for the
@@ -140,10 +146,11 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
-              TextButton.icon(
+              AppButton(
                 onPressed: _loadTopCreators,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Retry'),
+                label: 'Retry',
+                variant: AppButtonVariant.text,
               ),
             ],
           ),
@@ -188,13 +195,13 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacing2,
-        vertical: AppTheme.spacing3,
+        horizontal: AppSpacing.spacing2,
+        vertical: AppSpacing.spacing3,
       ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: AppTheme.spacing2,
-        mainAxisSpacing: AppTheme.spacing3,
+        crossAxisSpacing: AppSpacing.spacing2,
+        mainAxisSpacing: AppSpacing.spacing3,
         childAspectRatio: 0.68,
       ),
       itemCount: _topCreators.length,
@@ -226,14 +233,14 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
       onTap: userId != null ? () => _navigateToUserProfile(userId) : null,
       child: Container(
         decoration: BoxDecoration(
-          color: AppTheme.surfacePrimary,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-          boxShadow: AppTheme.shadowMd,
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          boxShadow: AppElevation.shadowMd,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: AppTheme.spacing3),
+            const SizedBox(height: AppSpacing.spacing3),
             // Avatar + rank badge
             Stack(
               alignment: Alignment.bottomRight,
@@ -244,10 +251,10 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border:
-                        Border.all(color: AppTheme.borderPrimary, width: 2),
+                        Border.all(color: AppColors.borderPrimary, width: 2),
                     boxShadow: const [
                       BoxShadow(
-                        color: AppTheme.shadowSecondary,
+                        color: AppColors.shadowSecondary,
                         blurRadius: 4,
                         offset: Offset(0, 2),
                       ),
@@ -259,35 +266,35 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                             imageUrl: profilePic,
                             fit: BoxFit.cover,
                             placeholder: (context, url) => Container(
-                              color: AppTheme.backgroundSecondary,
+                              color: AppColors.backgroundSecondary,
                               child: const Icon(Icons.person, size: 28),
                             ),
                             errorWidget: (context, url, error) => Container(
-                              color: AppTheme.backgroundSecondary,
+                              color: AppColors.backgroundSecondary,
                               child: const Icon(Icons.person, size: 28),
                             ),
                           )
                         : Container(
-                            color: AppTheme.backgroundSecondary,
+                            color: AppColors.backgroundSecondary,
                             child: const Icon(Icons.person, size: 28),
                           ),
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.spacing1 + 3,
+                    horizontal: AppSpacing.spacing1 + 3,
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: badgeColor,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     border: Border.all(
                       color: Colors.white,
                       width: 2,
                     ),
                     boxShadow: const [
                       BoxShadow(
-                        color: AppTheme.shadowSecondary,
+                        color: AppColors.shadowSecondary,
                         blurRadius: 4,
                         offset: Offset(0, 1),
                       ),
@@ -296,53 +303,53 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                   child: Text(
                     '$rank',
                     style: TextStyle(
-                      color: rank <= 3 ? AppTheme.textInverse : AppTheme.textPrimary,
-                      fontSize: AppTheme.fontSizeXS + 1,
-                      fontWeight: AppTheme.weightBold,
+                      color: rank <= 3 ? AppColors.textInverse : AppColors.textPrimary,
+                      fontSize: AppTypography.fontSizeXS + 1,
+                      fontWeight: AppTypography.weightBold,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: AppTheme.spacing2),
+            const SizedBox(height: AppSpacing.spacing2),
             // Name
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacing1 + 2),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spacing1 + 2),
               child: Text(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: AppTheme.fontSizeSM,
-                  fontWeight: AppTheme.weightBold,
-                  color: AppTheme.textPrimary,
+                  fontSize: AppTypography.fontSizeSM,
+                  fontWeight: AppTypography.weightBold,
+                  color: AppColors.textPrimary,
                   letterSpacing: -0.2,
                 ),
               ),
             ),
-            const SizedBox(height: AppTheme.spacing1 + 2),
+            const SizedBox(height: AppSpacing.spacing1 + 2),
             // Score (Only show if > 0)
             if (score > 0)
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.spacing2,
-                  vertical: AppTheme.spacing1,
+                  horizontal: AppSpacing.spacing2,
+                  vertical: AppSpacing.spacing1,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.success.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Text(
                   _formatScore(score),
                   style: const TextStyle(
-                    fontSize: AppTheme.fontSizeXS + 1,
-                    fontWeight: AppTheme.weightBold,
-                    color: AppTheme.success,
+                    fontSize: AppTypography.fontSizeXS + 1,
+                    fontWeight: AppTypography.weightBold,
+                    color: AppColors.success,
                   ),
                 ),
               ),
-            const SizedBox(height: AppTheme.spacing3),
+            const SizedBox(height: AppSpacing.spacing3),
           ],
         ),
       ),

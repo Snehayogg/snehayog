@@ -71,9 +71,10 @@ router.get('/creators', async (req, res) => {
       .limit(limit)
       .lean();
 
-    // Normalize follower count field for frontend convenience
+    // Normalize for frontend convenience
     const normalized = creators.map((u) => ({
       ...u,
+      id: u._id,
       followersCount: Array.isArray(u.followers) ? u.followers.length : 0,
     }));
 

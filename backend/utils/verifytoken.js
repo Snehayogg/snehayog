@@ -10,12 +10,38 @@ import User from '../models/User.js';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
+// **OPTIMIZATION: Cache for verified Google tokens (5 min TTL)**
+const googleTokenCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export const verifyGoogleToken = async (idToken) => {
+    // 1. Check cache first
+    const cached = googleTokenCache.get(idToken);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+        return cached.payload;
+    }
+
     const ticket = await client.verifyIdToken({
         idToken,
         audience: GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
+    
+    // 2. Update cache
+    googleTokenCache.set(idToken, {
+        payload,
+        timestamp: Date.now()
+    });
+
+    // 3. Periodic cleanup (optional, but good for memory)
+    if (googleTokenCache.size > 1000) {
+        const now = Date.now();
+        for (const [key, value] of googleTokenCache.entries()) {
+            if (now - value.timestamp > CACHE_TTL) {
+                googleTokenCache.delete(key);
+            }
+        }
+    }
     
     return payload;
 };

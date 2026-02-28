@@ -929,25 +929,14 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
     await video.save();
     console.log('🎉 Hybrid video processing completed successfully!');
 
-    // **NEW: Trigger Free Local Moderation (replaces Sightengine)**
+    // **NEW: Trigger Free Local Moderation BEFORE file cleanup**
     try {
       const { default: localModerationService } = await import('../services/localModerationService.js');
       
-      // We skip moderation for very short previews if needed, but usually, we scan everything
       console.log('🛡️ Starting local AI moderation scan...');
       
-      // Note: We use the normalizedVideoUrl (R2) for the scan if possible, 
-      // but the service needs a local path. Since processing just finished, 
-      // we might need to be careful about local file cleanup.
-      // However, hybridResult often contains info about where the file was.
-      
-      // If we used Cloudflare Stream, the local processed file might have been cleaned up.
-      // In that case, we can download a few frames from the R2 URL or similar.
-      // BUT, processVideoHybrid in hybridVideoService usually cleans up.
-      
-      // OPTIMIZATION: If we have a local path that hasn't been deleted yet, use it.
-      // If not, we scan the newly created R2 URL (which localModerationService can handle via FFmpeg)
-      const moderationResult = await localModerationService.moderateVideo(normalizedVideoUrl);
+      // Use the LOCAL video path (before cleanup) so FFmpeg can extract frames
+      const moderationResult = await localModerationService.moderateVideo(videoPath);
       
       const updatedVideo = await Video.findById(video._id);
       if (updatedVideo) {
@@ -959,10 +948,10 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
           provider: 'local-transformers'
         };
         
-        // If flagged, we hide it or mark it for review
+        // If flagged, we hide it from the feed
         if (moderationResult.isFlagged) {
           console.log(`🚩 Video ${video._id} FLAGGED by local AI. Marking as hidden.`);
-          updatedVideo.processingStatus = 'flagged'; // Or 'hidden'
+          updatedVideo.processingStatus = 'flagged';
         }
         
         await updatedVideo.save();

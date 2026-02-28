@@ -9,6 +9,10 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   if (!video) return null;
 
   const videoObj = video.toObject ? video.toObject() : video;
+  const dubbedUrls =
+    videoObj.dubbedUrls instanceof Map
+      ? Object.fromEntries(videoObj.dubbedUrls.entries())
+      : (videoObj.dubbedUrls || null);
   
   // Calculate isLiked if user ID provided
   let isLiked = videoObj.isLiked || false;
@@ -39,7 +43,8 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     lowQualityUrl: videoObj.lowQualityUrl || null,
     seriesId: videoObj.seriesId || null,
     episodeNumber: videoObj.episodeNumber || 0,
-    episodes: videoObj.episodes || []
+    episodes: videoObj.episodes || [],
+    dubbedUrls: dubbedUrls
   };
 
   /**
@@ -48,7 +53,7 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   
   // Version: 2025-11-01, 2026-02-08, and 2026-02-17 (Stability & Fix Update)
   // Using a comparison or list for baseline versions
-  if (apiVersion === '2025-11-01' || apiVersion === '2026-02-08' || apiVersion === '2026-02-17' || !apiVersion) {
+  if (apiVersion === '2025-11-01' || apiVersion === '2026-02-08' || apiVersion === '2026-02-17' || apiVersion === '2026-03-01' || !apiVersion) {
     base.uploader = {
       id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
       _id: videoObj.uploader?._id?.toString() || '',

@@ -851,7 +851,7 @@ class RecommendationService {
         }
       }
 
-      // 2. Calculate Ranks if cache miss
+      // 2. Cache miss: Fetch fresh (and update cache background)
       const { rankMap } = await this._calculateAndCacheRanks();
       return rankMap[uploaderIdStr] || 0;
     } catch (error) {

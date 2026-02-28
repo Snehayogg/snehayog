@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/core/design/spacing.dart';
+import 'package:vayu/core/design/radius.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 import 'package:vayu/features/games/data/game_model.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class GameCreatorDashboard extends StatefulWidget {
   const GameCreatorDashboard({super.key});
@@ -39,8 +45,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: AppTheme.primary),
-                      SizedBox(height: AppTheme.spacing4),
+                      CircularProgressIndicator(color: AppColors.primary),
+                      SizedBox(height: AppSpacing.spacing4),
                       Text(
                         'Processing...',
                         style: TextStyle(
@@ -61,8 +67,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
   Widget _buildHeader(GameCreatorManager gameManager) {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacing4,
-        vertical: AppTheme.spacing4,
+        horizontal: AppSpacing.spacing4,
+        vertical: AppSpacing.spacing4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,15 +78,15 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
             children: [
               Text(
                 'Arcade Studio',
-                style: AppTheme.headlineMedium,
+                style: AppTypography.headlineMedium,
               ),
               IconButton(
                 onPressed: () => gameManager.loadCreatorGames(),
-                icon: const Icon(Icons.refresh, color: AppTheme.primary),
+                icon: const Icon(Icons.refresh, color: AppColors.primary),
               ),
             ],
           ),
-          const SizedBox(height: AppTheme.spacing4),
+          const SizedBox(height: AppSpacing.spacing4),
           _buildWebUploadCard(),
         ],
       ),
@@ -89,88 +95,82 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
   Widget _buildWebUploadCard() {
     return Container(
-      padding: const EdgeInsets.all(AppTheme.spacing4),
+      padding: const EdgeInsets.all(AppSpacing.spacing4),
       decoration: BoxDecoration(
-        color: AppTheme.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+        color: AppColors.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.cloud_upload_outlined, color: AppTheme.primary),
-              const SizedBox(width: AppTheme.spacing2),
+              const Icon(Icons.cloud_upload_outlined, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.spacing2),
               Text(
                 'Upload New Content via Web',
-                style: AppTheme.titleMedium.copyWith(color: AppTheme.primary, fontWeight: AppTheme.weightBold),
+                style: AppTypography.titleMedium.copyWith(color: AppColors.primary, fontWeight: AppTypography.weightBold),
               ),
             ],
           ),
-          const SizedBox(height: AppTheme.spacing2),
+          const SizedBox(height: AppSpacing.spacing2),
           Text(
             'To ensure the best deployment experience, arcade content uploads are now handled through our dedicated web portal.',
-            style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+            style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: AppTheme.spacing3),
-          ElevatedButton(
+          const SizedBox(height: AppSpacing.spacing3),
+          AppButton(
             onPressed: () {
               // Show instructions or open URL
               showModalBottomSheet(
                 context: context,
-                backgroundColor: AppTheme.backgroundSecondary,
+                backgroundColor: AppColors.backgroundSecondary,
                 shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLarge)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
                 ),
                 builder: (context) => Padding(
-                  padding: const EdgeInsets.all(AppTheme.spacing6),
+                  padding: const EdgeInsets.all(AppSpacing.spacing6),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Deploy from Computer', style: AppTheme.headlineSmall),
-                      const SizedBox(height: AppTheme.spacing4),
+                      Text('Deploy from Computer', style: AppTypography.headlineSmall),
+                      const SizedBox(height: AppSpacing.spacing4),
                       Text(
                         '1. Visit snehayog.site/creator.html\n2. Log in with your developer token\n3. Upload your Content ZIP',
-                        style: AppTheme.bodyMedium,
+                        style: AppTypography.bodyMedium,
                       ),
-                      const SizedBox(height: AppTheme.spacing6),
+                      const SizedBox(height: AppSpacing.spacing6),
                       Text(
                         'Your Developer Token:',
-                        style: AppTheme.labelSmall.copyWith(color: AppTheme.textTertiary),
+                        style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
                       ),
-                      const SizedBox(height: AppTheme.spacing2),
+                      const SizedBox(height: AppSpacing.spacing2),
                       Container(
-                        padding: const EdgeInsets.all(AppTheme.spacing3),
+                        padding: const EdgeInsets.all(AppSpacing.spacing3),
                         decoration: BoxDecoration(
-                          color: AppTheme.backgroundPrimary,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                          color: AppColors.backgroundPrimary,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                         ),
                         child: const SelectableText(
                           'Copy your token from Profile > Settings',
                           style: TextStyle(fontFamily: 'monospace', fontSize: 12),
                         ),
                       ),
-                      const SizedBox(height: AppTheme.spacing6),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: AppTheme.createButtonStyle(),
-                          child: const Text('GOT IT'),
-                        ),
+                      const SizedBox(height: AppSpacing.spacing6),
+                      AppButton(
+                        isFullWidth: true,
+                        onPressed: () => Navigator.pop(context),
+                        label: 'GOT IT',
+                        variant: AppButtonVariant.primary,
                       ),
                     ],
                   ),
                 ),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMedium)),
-            ),
-            child: const Text('HOW TO UPLOAD'),
+            label: 'HOW TO UPLOAD',
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -180,33 +180,33 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing8),
+        padding: const EdgeInsets.all(AppSpacing.spacing8),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(AppTheme.spacing6),
+              padding: const EdgeInsets.all(AppSpacing.spacing6),
               decoration: BoxDecoration(
-                color: AppTheme.backgroundSecondary,
+                color: AppColors.backgroundSecondary,
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.borderSecondary, width: 2),
+                border: Border.all(color: AppColors.borderSecondary, width: 2),
               ),
               child: Icon(
                 Icons.sports_esports_outlined,
                 size: 64,
-                color: AppTheme.textTertiary.withOpacity(0.5),
+                color: AppColors.textTertiary.withOpacity(0.5),
               ),
             ),
-            const SizedBox(height: AppTheme.spacing6),
+            const SizedBox(height: AppSpacing.spacing6),
             Text(
               'Your Arcade Content',
-              style: AppTheme.headlineSmall.copyWith(color: AppTheme.textPrimary),
+              style: AppTypography.headlineSmall.copyWith(color: AppColors.textPrimary),
             ),
-            const SizedBox(height: AppTheme.spacing2),
+            const SizedBox(height: AppSpacing.spacing2),
             Text(
               'Begin your journey by uploading high-quality interactive arcade content.',
               textAlign: TextAlign.center,
-              style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -229,12 +229,12 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     final isPending = game.status == 'pending';
     
     return Container(
-      margin: const EdgeInsets.only(bottom: AppTheme.spacing4),
+      margin: const EdgeInsets.only(bottom: AppSpacing.spacing4),
       decoration: AppTheme.createCardDecoration(
-        shadows: AppTheme.shadowMd,
+        shadows: AppElevation.shadowMd,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing4),
+        padding: const EdgeInsets.all(AppSpacing.spacing4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -244,62 +244,62 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSecondary,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                    border: Border.all(color: AppTheme.borderSecondary),
+                    color: AppColors.backgroundSecondary,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.borderSecondary),
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     child: game.thumbnailUrl != null && game.thumbnailUrl!.isNotEmpty
                         ? Image.network(game.thumbnailUrl!, fit: BoxFit.cover)
-                        : const Icon(Icons.sports_esports_outlined, color: AppTheme.primary),
+                        : const Icon(Icons.sports_esports_outlined, color: AppColors.primary),
                   ),
                 ),
-                const SizedBox(width: AppTheme.spacing4),
+                const SizedBox(width: AppSpacing.spacing4),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         game.title,
-                        style: AppTheme.titleLarge.copyWith(fontWeight: AppTheme.weightBold),
+                        style: AppTypography.titleLarge.copyWith(fontWeight: AppTypography.weightBold),
                       ),
-                      const SizedBox(height: AppTheme.spacing1),
+                      const SizedBox(height: AppSpacing.spacing1),
                       Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: AppTheme.spacing2,
-                              vertical: AppTheme.spacing1 * 0.5,
+                              horizontal: AppSpacing.spacing2,
+                              vertical: AppSpacing.spacing1 * 0.5,
                             ),
                             decoration: BoxDecoration(
                               color: isPending 
-                                  ? AppTheme.warning.withOpacity(0.1) 
-                                  : AppTheme.success.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                                  ? AppColors.warning.withOpacity(0.1) 
+                                  : AppColors.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
                             ),
                             child: Text(
                               (game.status ?? 'active').toUpperCase(),
-                              style: AppTheme.labelSmall.copyWith(
-                                color: isPending ? AppTheme.warning : AppTheme.success,
-                                fontWeight: AppTheme.weightBold,
+                              style: AppTypography.labelSmall.copyWith(
+                                color: isPending ? AppColors.warning : AppColors.success,
+                                fontWeight: AppTypography.weightBold,
                               ),
                             ),
                           ),
-                          const SizedBox(width: AppTheme.spacing4),
-                          const Icon(Icons.play_arrow_outlined, size: 16, color: AppTheme.primary),
+                          const SizedBox(width: AppSpacing.spacing4),
+                          const Icon(Icons.play_arrow_outlined, size: 16, color: AppColors.primary),
                           const SizedBox(width: 4),
                           Text(
                             '${game.plays} plays',
-                            style: AppTheme.bodySmall.copyWith(fontWeight: AppTheme.weightBold),
+                            style: AppTypography.bodySmall.copyWith(fontWeight: AppTypography.weightBold),
                           ),
                           if (game.totalTimeSpent > 0) ...[
-                             const SizedBox(width: AppTheme.spacing4),
-                            const Icon(Icons.timer_outlined, size: 14, color: AppTheme.warning),
+                             const SizedBox(width: AppSpacing.spacing4),
+                            const Icon(Icons.timer_outlined, size: 14, color: AppColors.warning),
                              const SizedBox(width: 4),
                              Text(
                                '${(game.totalTimeSpent / 60).toStringAsFixed(1)}m',
-                               style: AppTheme.bodySmall,
+                               style: AppTypography.bodySmall,
                              ),
                           ],
                         ],
@@ -308,23 +308,20 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                   ),
                 ),
                 if (isPending)
-                  TextButton(
+                  AppButton(
                     onPressed: () => _confirmPublish(context, game, gameManager),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppTheme.primary,
-                      textStyle: AppTheme.labelMedium.copyWith(fontWeight: AppTheme.weightBold),
-                    ),
-                    child: const Text('PUBLISH'),
+                    label: 'PUBLISH',
+                    variant: AppButtonVariant.text,
                   ),
               ],
             ),
             if (game.description.isNotEmpty) ...[
-              const SizedBox(height: AppTheme.spacing3),
+              const SizedBox(height: AppSpacing.spacing3),
               Text(
                 game.description,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+                style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
               ),
             ],
           ],
@@ -338,20 +335,21 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Publish Content', style: AppTheme.headlineSmall),
+        title: Text('Publish Content', style: AppTypography.headlineSmall),
         content: Text(
           'Are you sure you want to publish "${game.title}"? It will become visible to all users.',
-          style: AppTheme.bodyMedium,
+          style: AppTypography.bodyMedium,
         ),
         actions: [
-          TextButton(
+          AppButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            label: 'Cancel',
+            variant: AppButtonVariant.text,
           ),
-          ElevatedButton(
+          AppButton(
             onPressed: () => Navigator.pop(context, true),
-            style: AppTheme.createButtonStyle(),
-            child: const Text('Yes, Publish'),
+            label: 'Yes, Publish',
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -363,7 +361,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(success ? 'Content published successfully!' : 'Failed to publish content'),
-            backgroundColor: success ? AppTheme.success : AppTheme.error,
+            backgroundColor: success ? AppColors.success : AppColors.error,
           ),
         );
       }

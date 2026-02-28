@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:vibration/vibration.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -13,12 +15,16 @@ import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/shared/managers/carousel_ad_manager.dart';
 import 'package:like_button/like_button.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/radius.dart';
+import 'package:vayu/core/design/spacing.dart';
 
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
 import 'package:vayu/features/video/data/services/video_view_tracker.dart';
 import 'package:vayu/features/ads/data/services/ad_refresh_notifier.dart';
 import 'package:vayu/features/profile/data/services/background_profile_preloader.dart';
+import 'package:vayu/features/profile/data/services/profile_preloader.dart';
 
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
@@ -27,7 +33,6 @@ import 'package:vayu/features/video/presentation/screens/video_feed_advanced/wid
 import 'package:vayu/shared/services/connectivity_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/agent/presentation/screens/agent_screen.dart';
 import 'package:vayu/shared/config/feature_flags.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
@@ -44,6 +49,8 @@ import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/onboarding/presentation/managers/app_initialization_manager.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
 
 
 
@@ -52,6 +59,9 @@ import 'package:vayu/features/video/presentation/widgets/video_feed_skeleton.dar
 import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/services/local_gallery_service.dart';
 import 'package:vayu/features/video/presentation/screens/edit_video_title.dart';
+import 'package:vayu/shared/services/local_dubbing_service.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -60,6 +70,7 @@ part 'video_feed_advanced/video_feed_advanced_initialization.dart';
 part 'video_feed_advanced/video_feed_advanced_data.dart';
 part 'video_feed_advanced/video_feed_advanced_preload.dart';
 part 'video_feed_advanced/video_feed_advanced_ui.dart';
+part 'video_feed_advanced/video_feed_advanced_dubbing.dart';
 
 // #region agent log
 // Debug logging helper for instrumentation
@@ -77,7 +88,6 @@ class VideoFeedAdvanced extends StatefulWidget {
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
   final String? videoType;
-  final bool isFullScreen; // **NEW: Flag for full-screen mode**
   // Removed forceAutoplay; we'll infer autoplay from initialVideos presence
 
   const VideoFeedAdvanced({
@@ -86,7 +96,6 @@ class VideoFeedAdvanced extends StatefulWidget {
     this.initialVideos,
     this.initialVideoId,
     this.videoType, // **NEW: Accept videoType parameter**
-    this.isFullScreen = false, // Default to false
   }) : super(key: key);
 
   @override
@@ -167,6 +176,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
         // Try restoring state after resume
         _restoreBackgroundStateIfAny().then((_) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            
+            // **FIX: Only resume if THIS route is current (not obscured by Settings, etc.)**
+            final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+            if (!isCurrentRoute) {
+              AppLogger.log('⏸️ Resume skipped: route is not current (obscured).');
+              return;
+            }
+
             if (_lifecyclePaused) {
               AppLogger.log(
                 '⏸️ Resume detected but autoplay blocked until user interaction.',
@@ -290,6 +308,21 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      // **FIX: Check if THIS route is currently active/top-most**
+      final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+      
+      // If route is no longer current (e.g. Settings pushed on top), ensure videos are paused
+      if (!isCurrentRoute) {
+        if (_isScreenVisible) {
+          AppLogger.log('⏸️ VideoFeedAdvanced: Obscured by new route, ensuring pause');
+          _isScreenVisible = false;
+          _pauseCurrentVideo();
+        }
+        return;
+      }
+
       // **FIX: Allow autoplay when opened from ProfileScreen OR when on Yug tab AND screen is visible**
       final bool isYugTabActive = _mainController?.currentIndex == 0 &&
           !_mainController!.isMediaPickerActive &&
@@ -562,27 +595,43 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   bool get _openedFromDeepLink =>
       widget.initialVideoId != null && widget.initialVideos == null;
 
-  bool _shouldAutoplayForContext(String context) {
-    if (!_allowAutoplay(context)) {
+  bool _shouldAutoplayForContext(String reason) {
+    if (!_allowAutoplay(reason)) {
       return false;
     }
+
+    // **FIX: Check if THIS route is currently active/top-most**
+    // Using this.context explicitly or renaming the parameter avoids the shadowing error
+    final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!isCurrentRoute) {
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): route is obscured by another screen'); */
+      return false;
+    }
+
+    // **CRITICAL FIX: Always respect _isScreenVisible regardless of context**
+    // This ensures videos pause when the feed is obscured by nested routes or other screens.
+    if (!_isScreenVisible) {
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): screen is not visible'); */
+      return false;
+    }
+
     // **ENHANCED: Allow autoplay for profile videos and deep links**
     if (_openedFromProfile || _openedFromDeepLink) {
       /* AppLogger.log(
-        '✅ Autoplay allowed ($context): ${_openedFromProfile ? "opened from profile" : "opened from deep link"}',
+        '✅ Autoplay allowed ($reason): ${_openedFromProfile ? "opened from profile" : "opened from deep link"}',
       ); */
       return true;
     }
-    final bool isVideoTabActive =
-        (_mainController?.currentIndex ?? 0) == 0 && _isScreenVisible;
+    final bool isVideoTabActive = (_mainController?.currentIndex ?? 0) == 0;
     if (!isVideoTabActive) {
       /* AppLogger.log(
-        '⏸️ Autoplay suppressed ($context): Yug tab not active or screen hidden',
+        '⏸️ Autoplay suppressed ($reason): Yug tab not active',
       ); */
       return false;
     }
     return true;
   }
+
 
   void _scheduleAutoplayAfterLogin() {
     if (!_pendingAutoplayAfterLogin) return;
@@ -614,15 +663,15 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  bool _allowAutoplay(String context) {
+  bool _allowAutoplay(String reason) {
     if (_lifecyclePaused) {
-      AppLogger.log('⏸️ Autoplay blocked ($context) due to lifecycle pause.');
+      AppLogger.log('⏸️ Autoplay blocked ($reason) due to lifecycle pause.');
       return false;
     }
     // **FIX: Extra safeguard - check actual system lifecycle state**
     if (WidgetsBinding.instance.lifecycleState != null && 
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
-      AppLogger.log('⏸️ Autoplay blocked ($context): System state is ${WidgetsBinding.instance.lifecycleState}');
+      AppLogger.log('⏸️ Autoplay blocked ($reason): System state is ${WidgetsBinding.instance.lifecycleState}');
       return false;
     }
     return true;
@@ -1099,6 +1148,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   // Quality indicator methods removed per requirement
 
   void _togglePlayPause(int index) {
+    Vibration.vibrate(duration: 50, amplitude: 128);
     if (index >= _videos.length) return;
     final video = _videos[index];
     final String videoId = video.id;
@@ -1343,6 +1393,16 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Hide animation after 1 second
     Future.delayed(const Duration(milliseconds: 1000), () {
       _showHeartAnimation[video.id]?.value = false;
+    });
+
+    // **NEW: Force-show overlay (action buttons) for confirmation**
+    _forceShowOverlayVN[video.id] ??= ValueNotifier<bool>(false);
+    _forceShowOverlayVN[video.id]!.value = true; 
+    // Cancel any existing timer for this video
+    _forceShowOverlayTimers[video.id]?.cancel();
+    // Auto-hide overlay after 2 seconds
+    _forceShowOverlayTimers[video.id] = Timer(const Duration(seconds: 1), () {
+      _forceShowOverlayVN[video.id]?.value = false;
     });
 
     // Check if valid user
@@ -1609,17 +1669,6 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     }
   }
 
-  /// **CHECK IF USER IS FOLLOWING**
-  bool _isFollowing(String userId) {
-    // **SYNC: Now using global UserProvider state**
-    try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      return userProvider.isFollowingUser(userId);
-    } catch (e) {
-      return false;
-    }
-  }
-
 
 
   /// **NAVIGATE TO CREATOR PROFILE: Navigate to user profile screen**
@@ -1643,6 +1692,9 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
 
     AppLogger.log('🔗 Navigating to creator profile: $targetUserId');
     _pauseVideosForProfileNavigation();
+
+    // Preload profile data before navigation (non-blocking) for instant load
+    ProfilePreloader().preloadProfileOnTap(targetUserId);
 
     // Navigate to profile screen
     Navigator.push(

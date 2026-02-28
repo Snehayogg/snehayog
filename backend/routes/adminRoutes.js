@@ -544,6 +544,9 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
     // Get total videos count (completed only)
     const totalVideos = await Video.countDocuments({ processingStatus: 'completed' });
 
+    // **NEW: Get total users count for App Install data**
+    const totalUsers = await User.countDocuments({});
+
     // **NEW: Get daily upload count (videos uploaded today)**
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -609,9 +612,19 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
     const totalGrossRevenueINR = bannerRevenueINR + carouselRevenueINR;
     const totalCreatorEarningsINR = totalGrossRevenueINR * creatorShare;
 
+    // **NEW: Count flagged videos**
+    const flaggedCount = await Video.countDocuments({
+      $or: [
+        { processingStatus: 'flagged' },
+        { 'moderationResult.isFlagged': true }
+      ]
+    });
+
     res.json({
       success: true,
       totalVideos,
+      totalUsers,
+      flaggedCount,
       dailyUploadCount,
       dailyVayuCount, // **NEW**
       dailyYogCount,  // **NEW**
@@ -1017,6 +1030,73 @@ router.post('/recalculate-scores', requireAdminDashboardKey, async (req, res) =>
       error: 'Failed to recalculate scores',
       message: error.message
     });
+  }
+});
+
+// **NEW: Admin endpoint to get flagged (NSFW) videos**
+router.get('/videos/flagged', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const flaggedVideos = await Video.find({
+      $or: [
+        { processingStatus: 'flagged' },
+        { 'moderationResult.isFlagged': true }
+      ]
+    })
+    .populate('uploader', 'name email googleId')
+    .sort({ updatedAt: -1 })
+    .limit(100)
+    .lean();
+
+    res.json({
+      success: true,
+      count: flaggedVideos.length,
+      videos: flaggedVideos.map(v => ({
+        _id: v._id,
+        videoName: v.videoName,
+        description: v.description,
+        thumbnailUrl: v.thumbnailUrl,
+        videoUrl: v.videoUrl,
+        views: v.views || 0,
+        processingStatus: v.processingStatus,
+        moderationResult: v.moderationResult || {},
+        createdAt: v.createdAt,
+        updatedAt: v.updatedAt,
+        uploader: v.uploader ? {
+          name: v.uploader.name,
+          email: v.uploader.email,
+          googleId: v.uploader.googleId
+        } : null
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error loading flagged videos:', error);
+    res.status(500).json({ success: false, error: 'Failed to load flagged videos' });
+  }
+});
+
+// **NEW: Admin endpoint to unflag a video (approve it)**
+router.post('/videos/:videoId/unflag', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+
+    video.processingStatus = 'completed';
+    video.moderationResult = {
+      ...video.moderationResult,
+      isFlagged: false,
+      processedAt: new Date(),
+      provider: 'admin-override'
+    };
+    await video.save();
+
+    console.log(`✅ Admin unflagged video: ${videoId} - ${video.videoName}`);
+    res.json({ success: true, message: 'Video unflagged and approved' });
+  } catch (error) {
+    console.error('❌ Error unflagging video:', error);
+    res.status(500).json({ success: false, error: 'Failed to unflag video' });
   }
 });
 

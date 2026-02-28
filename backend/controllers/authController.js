@@ -14,10 +14,6 @@ export const googleSignIn = async (req, res) => {
       return res.status(400).json({ error: 'Google ID Token is required' });
     }
 
-    if (!deviceId || deviceId.trim() === '') {
-      return res.status(400).json({ error: 'Device ID is required' });
-    }
-
     // Verify Google ID Token
     const userData = await verifyGoogleToken(idToken);
     console.log('🔐 Google Sign-In: Verified user:', userData.email);
@@ -108,12 +104,8 @@ export const refreshAccessToken = async (req, res) => {
       return res.status(401).json({ error: 'Refresh token required' });
     }
 
-    if (!deviceId) {
-      return res.status(400).json({ error: 'Device ID required' });
-    }
-
-    // Verify and rotate refresh token
-    const result = await RefreshToken.verifyAndRotate(refreshToken, deviceId);
+    // Verify and rotate refresh token (deviceId no longer required for rotation check)
+    const result = await RefreshToken.verifyAndRotate(refreshToken);
 
     if (!result) {
       console.log('❌ Invalid or expired refresh token');

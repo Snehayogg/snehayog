@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/constants/video_constants.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class VideoErrorWidget extends StatelessWidget {
   final String errorMessage;
@@ -46,20 +47,10 @@ class VideoErrorWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
+            AppButton(
               onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(VideoConstants.borderRadius),
-                ),
-              ),
-              child: const Text('Retry'),
+              label: 'Retry',
+              variant: AppButtonVariant.primary,
             ),
           ],
         ),

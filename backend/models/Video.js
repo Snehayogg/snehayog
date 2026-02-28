@@ -109,7 +109,7 @@ const videoSchema = new mongoose.Schema({
   // **NEW: Video processing status**
   processingStatus: {
     type: String,
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: ['pending', 'processing', 'completed', 'failed', 'flagged'],
     default: 'pending'
   },
   processingProgress: {
@@ -203,7 +203,6 @@ const videoSchema = new mongoose.Schema({
     description: 'Timestamp when finalScore was last calculated'
   },
   
-  // **NEW: Moderation system fields (replaces Sightengine)**
   moderationResult: {
     isFlagged: {
       type: Boolean,
@@ -224,6 +223,14 @@ const videoSchema = new mongoose.Schema({
       type: String,
       default: 'local-transformers'
     }
+  },
+  
+  // **NEW: Persistent Dubbed URLs**
+  // Stores URLs of dubbed versions (e.g., { hi: "url", en: "url" })
+  dubbedUrls: {
+    type: Map,
+    of: String,
+    default: {}
   }
 }, {
   timestamps: true
@@ -239,6 +246,9 @@ videoSchema.index({ 'qualitiesGenerated.quality': 1 });
 videoSchema.index({ uploader: 1, videoHash: 1 });
 // **NEW: Index for recommendation system - sort by finalScore**
 videoSchema.index({ finalScore: -1 });
+videoSchema.index({ videoType: 1, finalScore: -1 }); // **OPTIMIZATION: For feed queries**
+videoSchema.index({ videoType: 1, uploadedAt: -1 }); // **OPTIMIZATION: For freshness priority**
+videoSchema.index({ uploadedAt: -1 }); // **OPTIMIZATION: General recency sort**
 
 // **NEW: Virtual field to check if video has multiple qualities**
 videoSchema.virtual('hasMultipleQualities').get(function() {

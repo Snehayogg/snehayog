@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Optimized app configuration for better performonce andsmaller size
 class AppConfig {
   // **NEW: API Version (Date-Based)**
-  static const String kApiVersion = '2026-02-17';
+  static const String kApiVersion = '2026-03-01';
 
-  // **MANUAL: Development mode control*
-  static const bool _isDevelopment =
-      false; // Set to true for local testing, false for production
+  // Use build mode instead of a hardcoded flag:
+  // debug/profile -> development behavior, release -> production behavior.
+  static bool get _isDevelopment => !kReleaseMode;
 
   // **NEW: Smart URL selection with fallback**
   static String? _cachedBaseUrl;
@@ -112,9 +113,17 @@ class AppConfig {
       return _cachedBaseUrl!;
     }
 
-    // Use cache if available
-    if (_cachedBaseUrl != null) {
-      return _cachedBaseUrl!;
+    // **NEW: Try to load from SharedPreferences before race**
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final persistedUrl = prefs.getString('discovered_base_url');
+      if (persistedUrl != null && persistedUrl.isNotEmpty) {
+        print('✅ AppConfig: Using persisted URL from SharedPreferences: $persistedUrl');
+        _cachedBaseUrl = persistedUrl;
+        return persistedUrl;
+      }
+    } catch (e) {
+      print('⚠️ AppConfig: Error loading persisted URL: $e');
     }
 
     print('🔍 AppConfig: Starting parallel "Race to Success" check...');
@@ -155,6 +164,16 @@ class AppConfig {
     // Wait for the winner (or default fallback)
     final winner = await completer.future;
     _cachedBaseUrl = winner;
+
+    // **NEW: Persist the discovered URL for next boot**
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('discovered_base_url', winner);
+      print('💾 AppConfig: Persisted discovered URL for next boot');
+    } catch (e) {
+      print('⚠️ AppConfig: Error persisting URL: $e');
+    }
+
     return winner;
   }
 

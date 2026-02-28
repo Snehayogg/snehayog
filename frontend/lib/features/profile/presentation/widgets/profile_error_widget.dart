@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/constants/profile_constants.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class ProfileErrorWidget extends StatelessWidget {
   final String errorMessage;
@@ -33,17 +34,10 @@ class ProfileErrorWidget extends StatelessWidget {
           ),
           if (onRetry != null) ...[
             const SizedBox(height: ProfileConstants.mediumSpacing),
-            ElevatedButton(
+            AppButton(
               onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(ProfileConstants.blueColor),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: ProfileConstants.largeSpacing,
-                  vertical: ProfileConstants.mediumSpacing,
-                ),
-              ),
-              child: const Text('Retry'),
+              label: 'Retry',
+              variant: AppButtonVariant.primary,
             ),
           ],
         ],

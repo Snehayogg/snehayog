@@ -19,6 +19,16 @@ class MainController extends ChangeNotifier {
   static const String _lastTabIndexKey = 'last_tab_index';
   static const String _lastTabTimestampKey = 'last_tab_timestamp';
 
+  // **NAVIGATION VISIBILITY: Single state for bottom nav**
+  bool _isBottomNavVisible = true;
+  bool get isBottomNavVisible => _isBottomNavVisible;
+
+  void setBottomNavVisibility(bool visible) {
+    if (_isBottomNavVisible == visible) return;
+    _isBottomNavVisible = visible;
+    notifyListeners();
+  }
+
   // Add a callback function to pause videos
   VoidCallback? _pauseVideosCallback;
   VoidCallback? _resumeVideosCallback;
@@ -269,7 +279,7 @@ class MainController extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-
+      AppLogger.log('Error during logout state clear: $e');
     }
   }
 
@@ -282,7 +292,7 @@ class MainController extends ChangeNotifier {
           _lastTabTimestampKey, DateTime.now().millisecondsSinceEpoch);
 
     } catch (e) {
-
+      AppLogger.log('Error saving tab index: $e');
     }
   }
 
@@ -323,7 +333,7 @@ class MainController extends ChangeNotifier {
         return 0;
       }
     } catch (e) {
-
+      AppLogger.log('Error restoring tab index: $e');
       return 0;
     }
   }
@@ -347,6 +357,8 @@ class MainController extends ChangeNotifier {
       
       // 1. Refresh all state providers (clears stale data)
       await LogoutService.refreshAllState(context);
+
+      if (!context.mounted) return;
 
       // 2. Parallel pre-fetch for immediate UI readiness
       // We don't await individual loads to keep them truly parallel

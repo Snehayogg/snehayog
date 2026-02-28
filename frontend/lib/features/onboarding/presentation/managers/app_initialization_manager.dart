@@ -109,7 +109,6 @@ class AppInitializationManager {
       final stage1Future = initializeStage1();
 
       final videoService = VideoService();
-      final authService = AuthService();
 
       // Task B: Fast local auth gate — validates token state without a network call.
       // Full profile fetch runs in the background after navigation.
@@ -120,8 +119,6 @@ class AppInitializationManager {
         await _fastAuthGate();
         initializationProgress.value = 0.65; // checkpoint
         AppLogger.log('✅ InitManager: Fast auth gate complete');
-        // Full profile/session validation runs in background (non-blocking)
-        unawaited(authService.ensureStrictAuth());
       } catch (e) {
         AppLogger.log('⚠️ InitManager: Auth gate error (non-critical): $e');
       }
@@ -204,32 +201,50 @@ class AppInitializationManager {
       final token = prefs.getString('jwt_token');
       final authService = AuthService();
 
-      // No token → let AuthWrapper handle routing to login
+      // 1. No token → let AuthWrapper handle routing to login
       if (token == null || token.isEmpty) {
         AppLogger.log('🔐 InitManager: No token found, proceeding to AuthWrapper');
         return;
       }
 
-      // Token is locally valid → navigate immediately, no network needed
+      // 2. Token is locally valid → Check identity consistency
       if (authService.isTokenValid(token)) {
-        AppLogger.log('✅ InitManager: Token valid locally, fast-tracking to home');
-        return;
+        AppLogger.log('🔍 InitManager: Token valid locally, verifying identity consistency...');
+        
+        // **NEW: Strict Identity Check**
+        // Ensure the active Google account still matches this token
+        final isConsistent = await authService.verifyIdentityConsistency()
+            .timeout(const Duration(seconds: 3), onTimeout: () => true); // Default to true on timeout to avoid blocking
+
+        if (isConsistent) {
+          AppLogger.log('✅ InitManager: Identity verified, fast-tracking to home');
+          
+          // **OPTIMIZATION: Fetch profile in background to warm up cache**
+          unawaited(authService.getUserData());
+          return;
+        } else {
+          // Non-destructive: do not clear active session at startup.
+          // Let explicit logout/account-switch flows manage identity transitions.
+          AppLogger.log('⚠️ InitManager: Identity mismatch detected, preserving existing session');
+          return;
+        }
       }
 
-      // Token is expired → attempt a fast refresh (single network call)
+      // 3. Token is expired → attempt a fast refresh (single network call)
       AppLogger.log('🔄 InitManager: Token expired, attempting fast refresh...');
       final refreshed = await authService.refreshAccessToken()
           .timeout(const Duration(seconds: 3), onTimeout: () => null);
 
       if (refreshed != null) {
         AppLogger.log('✅ InitManager: Token refreshed successfully, proceeding');
+        // Warm up profile cache
+        unawaited(authService.getUserData());
       } else {
-        AppLogger.log('⚠️ InitManager: Refresh failed — clearing expired token, AuthWrapper will show login');
-        await prefs.remove('jwt_token');
+        // Non-destructive on startup: keep token and allow retry later.
+        AppLogger.log('⚠️ InitManager: Refresh failed during startup, preserving token for retry');
       }
     } catch (e) {
       AppLogger.log('⚠️ InitManager: _fastAuthGate error: $e — proceeding anyway');
-      // Fail-safe: always continue, AuthWrapper handles auth state
     }
   }
 

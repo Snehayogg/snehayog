@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 /// Optimized widget components extracted from VideoFeedAdvanced
 /// These widgets use const constructors and RepaintBoundary for better performance
@@ -278,18 +279,11 @@ class ProcessingIndicatorWidget extends StatelessWidget {
                 ),
               const SizedBox(height: 16),
               if (video.processingStatus == 'failed')
-                ElevatedButton.icon(
+                AppButton(
                   onPressed: () => onRetry(video.id),
                   icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
+                  label: 'Retry',
+                  variant: AppButtonVariant.danger,
                 ),
             ],
           ),

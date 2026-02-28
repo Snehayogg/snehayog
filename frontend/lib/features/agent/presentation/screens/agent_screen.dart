@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/agent/data/autonomous_agent_service.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
@@ -167,9 +170,9 @@ class _AgentScreenState extends State<AgentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundPrimary,
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
-        backgroundColor: AppTheme.backgroundPrimary,
+        backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -215,7 +218,7 @@ class _AgentScreenState extends State<AgentScreen> {
           margin: const EdgeInsets.only(bottom: 16, left: 40),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: AppTheme.primary,
+            color: AppColors.primary,
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(16),
               topRight: Radius.circular(4),
@@ -244,10 +247,10 @@ class _AgentScreenState extends State<AgentScreen> {
                   Container(
                     width: 28, height: 28,
                     decoration: BoxDecoration(
-                       color: AppTheme.primary.withOpacity(0.2),
+                       color: AppColors.primary.withOpacity(0.2),
                        shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.auto_awesome, size: 16, color: AppTheme.primary),
+                    child: const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
                   ),
                   const SizedBox(width: 8),
                   const Text('Vayu Agent', style: TextStyle(color: Colors.grey, fontSize: 12)),
@@ -259,7 +262,7 @@ class _AgentScreenState extends State<AgentScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSecondary,
+                    color: AppColors.backgroundSecondary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -277,7 +280,7 @@ class _AgentScreenState extends State<AgentScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSecondary,
+                    color: AppColors.backgroundSecondary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(msg.text, style: const TextStyle(color: Colors.white)),
@@ -300,7 +303,7 @@ class _AgentScreenState extends State<AgentScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.backgroundSecondary,
+        color: AppColors.backgroundSecondary,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
       ),
@@ -310,7 +313,7 @@ class _AgentScreenState extends State<AgentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Generated Draft', style: TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text('Generated Draft', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
               // Copy/Action Icons could go here
             ],
           ),
@@ -321,8 +324,8 @@ class _AgentScreenState extends State<AgentScreen> {
           const SizedBox(height: 12),
           Container(
              padding: const EdgeInsets.all(8),
-             decoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-             child: Text(hashtags, style: const TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+             decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+             child: Text(hashtags, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
           ),
           
           if (imagePrompt.isNotEmpty) ...[
@@ -390,7 +393,7 @@ class _AgentScreenState extends State<AgentScreen> {
                 : const Icon(Icons.arrow_upward, color: Colors.white, size: 20),
               onPressed: _isInputEnabled ? _generateContent : null,
               style: IconButton.styleFrom(
-                 backgroundColor: _isInputEnabled ? AppTheme.primary : Colors.grey,
+                 backgroundColor: _isInputEnabled ? AppColors.primary : Colors.grey,
                  padding: const EdgeInsets.all(8),
                  minimumSize: const Size(36, 36),
               ),

@@ -1,32 +1,29 @@
 import cloudflareR2Service from './cloudflareR2Service.js';
-import cloudflareStreamService from './cloudflareStreamService.js';
 import hlsEncodingService from './hlsEncodingService.js';
 import path from 'path';
 import fs from 'fs';
 
 class HybridVideoService {
   constructor() {
-    // HybridVideoService: Using Cloudflare Stream (FREE transcoding) with HLS fallback
+    // HybridVideoService: Using Local FFmpeg (FREE HLS Encoding) → R2 (FREE Bandwidth)
     console.log('☁️ HybridVideoService: Initialized');
-    console.log('   Primary: Cloudflare Stream (FREE transcoding)');
-    console.log('   Fallback: Local FFmpeg HLS encoding');
+    console.log('   Primary: Local FFmpeg HLS encoding (100% FREE)');
+    console.log('   Storage: Cloudflare R2 (FREE Bandwidth)');
   }
 
   /**
-   * Hybrid Processing: Cloudflare Stream (FREE Transcoding) → R2 (Storage + FREE Bandwidth)
-   * 100% FREE transcoding! Falls back to local FFmpeg HLS if Stream fails.
+   * Process video using Local FFmpeg → R2 (Storage + FREE Bandwidth)
+   * 100% FREE transcoding!
    */
   async processVideoHybrid(videoId, videoPath, videoName, userId) {
     try {
-      console.log('🚀 Starting Hybrid Processing (Cloudflare Stream → R2)...');
+      console.log('🚀 Starting HLS Processing (FFmpeg → R2)...');
       console.log('🆔 Video ID:', videoId);
-      console.log('💰 FREE transcoding with Cloudflare Stream!');
+      console.log('💰 100% FREE transcoding with local FFmpeg!');
       console.log('📁 Video path:', videoPath);
       console.log('📝 Video name:', videoName);
       console.log('👤 User ID:', userId);
       
-      // **FIX: Verify video file exists and is accessible before processing**
-      // **NEW: Handle Remote URLs (Direct Upload)**
       let absoluteVideoPath;
       let isRemoteFile = false;
 
@@ -34,18 +31,12 @@ class HybridVideoService {
         console.log('🌐 Remote video detected (Direct Upload). Downloading to local temp...');
         isRemoteFile = true;
         
-        // Lazy load axios/fs if needed (already imported at top of file?)
-        // Let's rely on cloudflareR2Service.downloadFromCloudinary which effectively downloads a URL
-        // We can reuse that or create a simple download helper here. 
-        // Actually, let's use a new helper to download ANY url.
-
         const tempDir = path.join(process.cwd(), 'temp');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
         
         const tempFileName = `raw_${userId}_${Date.now()}.mp4`;
         const tempFilePath = path.join(tempDir, tempFileName);
 
-        // Download logic
         const { default: axios } = await import('axios');
         const response = await axios({
             method: 'GET',
@@ -73,12 +64,8 @@ class HybridVideoService {
       
       const stats = fs.statSync(absoluteVideoPath);
       console.log('📊 Video file size:', stats.size, 'bytes');
-      console.log('📊 Video file modified:', new Date(stats.mtime).toISOString());
       
-      console.log('📁 Absolute video path:', absoluteVideoPath);
-
       // **SAFE EARLY THUMBNAIL GENERATION**
-      // We generate the thumbnail before the slow encoding starts.
       let r2ThumbnailUrl = '';
       try {
         console.log('📸 Generating thumbnail early for immediate display...');
@@ -86,267 +73,93 @@ class HybridVideoService {
         if (thumbnailPath) {
           console.log('📤 Uploading early thumbnail to R2...');
           r2ThumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
-          console.log(`✅ Early thumbnail uploaded: ${r2ThumbnailUrl}`);
           
-          // Safe Database Update: So users see the thumbnail immediately after refresh
           try {
             const Video = (await import('../models/Video.js')).default;
-            // DIRECT UPDATE: Use videoId for 100% reliability
             const videoRecord = await Video.findById(videoId);
             if (videoRecord) {
               videoRecord.thumbnailUrl = r2ThumbnailUrl;
               await videoRecord.save();
-              console.log('💾 Early Video record updated in DB with videoId:', videoId);
-            } else {
-              console.warn('⚠️ Could not find video record early with videoId:', videoId);
+              console.log('💾 Early Video record updated with thumbnail');
             }
           } catch (dbError) {
-              console.warn('⚠️ Safe DB update failed (non-critical):', dbError.message);
+              console.warn('⚠️ Safe DB update failed:', dbError.message);
           }
 
-          // Cleanup local thumbnail
           if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
         }
       } catch (thumbError) {
-        console.warn('⚠️ Early thumbnail step failed (continuing to video processing):', thumbError.message);
+        console.warn('⚠️ Early thumbnail step failed:', thumbError.message);
       }
       
-      let processingResult;
-      
-      // **SMART BYPASS: Detect if video is already pre-optimized by frontend**
-      console.log('📊 Getting original video info to check for "The Loophole"...');
+      console.log('📊 Getting original video info...');
       const originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);
       
+      // **SMART BYPASS: Detect if video is already pre-optimized**
       const isPreOptimized = originalVideoInfo.height <= 480 && 
                             (originalVideoInfo.codec === 'h264' || originalVideoInfo.codec === 'h265' || originalVideoInfo.codec === 'hevc');
 
+      let hlsResult;
       if (isPreOptimized) {
-        console.log('🎯 THE LOOPHOLE FOUND: Video is already pre-optimized (480p)!');
-        console.log('⚡ Bypassing Cloudflare Stream for INSTANT local packaging...');
-        
-        const videoId = `${videoName}_${Date.now()}`;
-        const hlsResult = await hlsEncodingService.convertToHLS(absoluteVideoPath, videoId, {
+        console.log('🎯 THE LOOPHOLE: Video is already pre-optimized (480p)! Using STREAM COPY.');
+        hlsResult = await hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
           quality: 'medium',
           resolution: '480p',
-          copyVideo: true, // INSTANT!
-          copyAudio: false, // Re-encode audio to ensure AAC compatibility
+          copyVideo: true, 
+          copyAudio: false,
           originalVideoInfo: originalVideoInfo
         });
-
-        processingResult = {
-          videoUrl: hlsResult.playlistUrl,
-          thumbnailUrl: r2ThumbnailUrl || '',
-          streamVideoId: null,
-          duration: originalVideoInfo.duration || 0,
-          size: originalVideoInfo.size || 0,
-          format: 'HLS (Stream Copy)',
-          originalVideoInfo: originalVideoInfo,
-          aspectRatio: originalVideoInfo.aspectRatio,
-          width: originalVideoInfo.width,
-          height: originalVideoInfo.height,
-          isPortrait: originalVideoInfo.aspectRatio < 1.0,
-          outputDir: hlsResult.outputDir,
-          localPath: null
-        };
       } else {
-        // Step 1: Process video to 480p using Cloudflare Stream (FREE transcoding!)
-        console.log('☁️ Step 1: Processing with Cloudflare Stream (FREE transcoding)...');
-        let streamVideoId = null;
-        
-        try {
-          console.log('⏱️ Starting Cloudflare Stream processing at:', new Date().toISOString());
-          processingResult = await this.processWithCloudflareStream(videoId, absoluteVideoPath, videoName, userId);
-          streamVideoId = processingResult.streamVideoId;
-        } catch (streamError) {
-          console.error('❌ Cloudflare Stream processing failed:', streamError.message);
-          console.log('🔄 Falling back to Pure HLS Processing (FFmpeg → R2)...');
-          
-          const hlsFallbackResult = await hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
-            quality: 'medium',
-            resolution: '480p',
-            codec: 'h265',
-            originalVideoInfo: originalVideoInfo
-          });
-          
-          processingResult = {
-            videoUrl: hlsFallbackResult.playlistUrl,
-            thumbnailUrl: r2ThumbnailUrl || hlsFallbackResult.thumbnailUrl || '',
-            streamVideoId: null,
-            duration: originalVideoInfo.duration || 0,
-            size: hlsFallbackResult.size || 0,
-            format: 'HLS',
-            originalVideoInfo: originalVideoInfo,
-            aspectRatio: originalVideoInfo.aspectRatio,
-            width: originalVideoInfo.width,
-            height: originalVideoInfo.height,
-            isPortrait: originalVideoInfo.aspectRatio < 1.0,
-            outputDir: hlsFallbackResult.outputDir,
-            localPath: null
-          };
-        }
+        console.log('🎬 Processing with Local FFmpeg → HLS...');
+        hlsResult = await hlsEncodingService.convertToHLS(absoluteVideoPath, `${videoName}_${Date.now()}`, {
+          quality: 'medium',
+          resolution: '480p',
+          codec: 'h265', // H.265 for bandwidth efficiency
+          originalVideoInfo: originalVideoInfo
+        });
       }
       
-      // Step 2: Handle video processing result based on processing method
-      let r2VideoResult, localVideoPath; // r2ThumbnailUrl is now declared earlier
+      // Upload HLS results to R2
+      console.log('📤 Uploading HLS directory to R2...');
+      const r2HLSResult = await cloudflareR2Service.uploadHLSDirectoryToR2(
+        hlsResult.outputDir, 
+        videoName, 
+        userId
+      );
       
-      if (processingResult.streamVideoId && processingResult.localPath) {
-        // Cloudflare Stream processing was successful
-        console.log('📥 Using processed video from Cloudflare Stream...');
-        localVideoPath = processingResult.localPath;
-        
-        // Step 3: Upload 480p video to Cloudflare R2 (FREE bandwidth!)
-        console.log('⏱️ Starting R2 video upload at:', new Date().toISOString());
-        r2VideoResult = await cloudflareR2Service.uploadVideoToR2(
-          localVideoPath, 
-          videoName, 
-          userId
-        );
-        console.log('✅ R2 video upload completed at:', new Date().toISOString());
-        
-        // Step 4: Get thumbnail from Stream and upload to R2 if we don't have one yet
-        if (!r2ThumbnailUrl) {
-          console.log('📸 Getting thumbnail from Cloudflare Stream...');
-          const streamThumbnailUrl = await cloudflareStreamService.getThumbnailUrl(processingResult.streamVideoId);
-          
-          if (streamThumbnailUrl) {
-            console.log('⏱️ Starting R2 thumbnail upload at:', new Date().toISOString());
-            r2ThumbnailUrl = await cloudflareR2Service.uploadThumbnailToR2(
-              streamThumbnailUrl, 
-              videoName, 
-              userId
-            );
-            console.log('✅ R2 thumbnail upload completed at:', new Date().toISOString());
-          }
-        }
-      } else {
-        // HLS processing fallback was used
-        console.log('📥 Using HLS processing result directly...');
-        
-        // Upload HLS files to R2
-        const hlsResult = await cloudflareR2Service.uploadHLSDirectoryToR2(
-          processingResult.outputDir, 
-          videoName, 
-          userId
-        );
-        
-        r2VideoResult = {
-          url: hlsResult.playlistUrl,
-          key: hlsResult.playlistKey,
-          size: 0, // HLS size calculation would be complex
-          format: 'hls'
-        };
-        
-        localVideoPath = null; // No local file for HLS processing
-      }
-      
-      // Step 5: **DELETE FROM CLOUDFLARE STREAM** to avoid storage costs!
-      const finalStreamVideoId = processingResult.streamVideoId;
-      if (finalStreamVideoId) {
-        console.log('🗑️ Deleting video from Cloudflare Stream (no longer needed)...');
-        try {
-          await cloudflareStreamService.deleteVideo(finalStreamVideoId);
-          console.log('✅ Video deleted from Cloudflare Stream successfully');
-          console.log('💰 Cost saved: Stream storage charges avoided');
-        } catch (deleteError) {
-          console.warn('⚠️ Failed to delete video from Stream:', deleteError.message);
-          console.warn('   Manual cleanup recommended to avoid storage costs');
-        }
-      }
-      
-      // Step 6: Cleanup temp files
-      if (localVideoPath) {
-        await cloudflareR2Service.cleanupLocalFile(localVideoPath);
-      }
-      // **FIX: Use absolute path for cleanup to ensure correct file is deleted**
-      // If it was a remote file, we MUST delete the temp downloaded file.
-      // If it was a local upload (legacy), uploadRoutes handles cleanup usually, 
-      // but if we are here, we might want to clean it up depending on who owns it.
-      // For now, let's strictly clean up if we created the temp file (remote flow).
-      
+      // Cleanup temp files
       if (isRemoteFile) {
           await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
-          console.log('🧹 Cleaned up downloaded remote file:', absoluteVideoPath);
-      } else {
-         // Existing logic: cleanup if it was passed in? 
-         // Usually uploadRoutes cleans up req.file.path. 
-         // Let's leave legacy behavior mostly alone but safe.
-         // await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
+      }
+
+      // Cleanup HLS output dir
+      if (fs.existsSync(hlsResult.outputDir)) {
+          fs.rmSync(hlsResult.outputDir, { recursive: true, force: true });
       }
       
       return {
         success: true,
-        videoUrl: r2VideoResult.url,
-        thumbnailUrl: r2ThumbnailUrl,
-        format: finalStreamVideoId ? 'MP4 with Progressive Loading' : 'HLS (HTTP Live Streaming)',
-        quality: originalVideoInfo ? `${originalVideoInfo.height}p (original preserved)` : 'original',
+        videoUrl: r2HLSResult.playlistUrl,
+        thumbnailUrl: r2ThumbnailUrl || '',
+        format: 'HLS (Adaptive Stream)',
+        quality: `${originalVideoInfo.height}p (balanced)`,
         storage: 'Cloudflare R2',
         bandwidth: 'FREE Forever',
-        size: r2VideoResult.size,
-        processing: finalStreamVideoId ? 'Cloudflare Stream → R2 Hybrid' : 'HLS → R2',
-        costSavings: '100% FREE transcoding',
-        // **NEW: Ensure duration is passed correctly to calling function**
-        duration: processingResult.duration,
-        // **NEW: Include original resolution in result**
-        width: originalVideoInfo?.width,
-        height: originalVideoInfo?.height,
-        aspectRatio: originalVideoInfo?.aspectRatio,
+        size: stats.size, // Size from stats
+        processing: 'Local FFmpeg (100% FREE)',
+        duration: originalVideoInfo.duration,
+        width: originalVideoInfo.width,
+        height: originalVideoInfo.height,
+        aspectRatio: originalVideoInfo.aspectRatio,
         originalVideoInfo: originalVideoInfo
       };
       
     } catch (error) {
-      console.error('❌ Hybrid processing error:', error);
-      
-      // Cleanup on error
+      console.error('❌ Video processing error:', error);
       try {
         await cloudflareR2Service.cleanupTempDirectory();
-      } catch (cleanupError) {
-        console.warn('⚠️ Cleanup error:', cleanupError);
-      }
-      
-      throw new Error(`Hybrid processing failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * Process video to single 480p quality using Cloudflare Stream (FREE transcoding!)
-   */
-  async processWithCloudflareStream(videoId, videoPath, videoName, userId) {
-    try {
-      console.log('☁️ Processing video with Cloudflare Stream (FREE transcoding)...');
-      
-      // Upload to Stream and wait for transcoding
-      const streamResult = await cloudflareStreamService.uploadAndTranscode(
-        videoPath,
-        videoName,
-        userId
-      );
-      
-      console.log('✅ Cloudflare Stream processing completed');
-      console.log('🔗 Processed video ID:', streamResult.videoId);
-      console.log('📊 Video processing summary:');
-      console.log(`   - Dimensions: ${streamResult.width}x${streamResult.height}`);
-      console.log(`   - Aspect ratio: ${streamResult.aspectRatio}`);
-      console.log('   - Quality: 480p (auto-transcoded)');
-      console.log('   - Cost: $0 (FREE transcoding!)');
-      
-      return {
-        videoUrl: streamResult.videoUrl,
-        thumbnailUrl: streamResult.thumbnailUrl || '',
-        streamVideoId: streamResult.videoId,
-        duration: streamResult.duration,
-        size: streamResult.size,
-        format: streamResult.format,
-        originalVideoInfo: streamResult.originalVideoInfo,
-        aspectRatio: streamResult.aspectRatio,
-        width: streamResult.width,
-        height: streamResult.height,
-        isPortrait: streamResult.isPortrait,
-        localPath: streamResult.localPath
-      };
-      
-    } catch (error) {
-      console.error('❌ Cloudflare Stream processing error:', error);
-      throw new Error(`Cloudflare Stream processing failed: ${error.message}`);
+      } catch (_) {}
+      throw new Error(`Video processing failed: ${error.message}`);
     }
   }
 

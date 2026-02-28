@@ -6,7 +6,10 @@ import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/services/share_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
@@ -121,7 +124,7 @@ class _ActionButton extends StatelessWidget {
           width: containerSize,
           height: containerSize,
           decoration: BoxDecoration(
-            color: AppTheme.overlayMedium,
+            color: AppColors.overlayMedium,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -156,7 +159,7 @@ class _ActionButton extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppTheme.textInverse,
+            color: AppColors.textInverse,
             fontWeight: FontWeight.w600,
             shadows: [
               const Shadow(

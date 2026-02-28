@@ -11,7 +11,6 @@ import 'package:video_player/video_player.dart';
 
 
 import 'package:video_compress/video_compress.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
@@ -369,15 +368,28 @@ class VideoService {
         return VideoModel.fromJson(data);
       } else if (res.statusCode == 401 || res.statusCode == 403) {
         AppLogger.log(
-            '❌ VideoService: Authentication failed (${res.statusCode})');
-        // **FIX: Clear invalid token**
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('jwt_token');
-          AppLogger.log('⚠️ VideoService: Cleared invalid token');
-        } catch (e) {
-          AppLogger.log('⚠️ VideoService: Error clearing token: $e');
+            '⚠️ VideoService: Authentication failed (${res.statusCode}), attempting one token refresh + retry');
+
+        final refreshedToken = await _authService.refreshAccessToken();
+        if (refreshedToken != null && refreshedToken.isNotEmpty) {
+          final retryHeaders = await _getAuthHeaders();
+          retryHeaders['Content-Type'] = 'application/json';
+
+          final retryRes = await http
+              .post(
+                Uri.parse('${NetworkHelper.apiBaseUrl}/videos/$videoId/like'),
+                headers: retryHeaders,
+                body: json.encode({}),
+              )
+              .timeout(const Duration(seconds: 15));
+
+          if (retryRes.statusCode == 200) {
+            final retryData = json.decode(retryRes.body);
+            AppLogger.log('✅ VideoService: Like toggled successfully after token refresh');
+            return VideoModel.fromJson(retryData);
+          }
         }
+
         throw Exception('Please sign in again to like videos');
       } else if (res.statusCode == 400) {
         // **FIX: Handle 400 Bad Request (user not authenticated or missing googleId)**

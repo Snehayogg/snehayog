@@ -364,15 +364,15 @@
             </div>
 
             <div class="stat-card warning">
-                <div class="stat-icon">🤖</div>
-                <div class="stat-number" id="totalPayouts">-</div>
-                <div class="stat-label">Total Payouts</div>
+                <div class="stat-icon">📱</div>
+                <div class="stat-number" id="totalUsers">-</div>
+                <div class="stat-label">Total App Installs</div>
             </div>
 
-            <div class="stat-card danger">
-                <div class="stat-icon">⏳</div>
-                <div class="stat-number" id="pendingPayouts">-</div>
-                <div class="stat-label">Pending</div>
+            <div class="stat-card danger" onclick="loadFlaggedVideos()" style="cursor: pointer;">
+                <div class="stat-icon">🚩</div>
+                <div class="stat-number" id="flaggedCount">-</div>
+                <div class="stat-label">Flagged (NSFW)</div>
             </div>
 
             <div class="stat-card success">
@@ -427,6 +427,18 @@
                 <button class="btn btn-primary" onclick="sendNotification()">
                     🚀 Send Notification
                 </button>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2 class="section-title">🚩 Flagged Videos (NSFW/Content Moderation)</h2>
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="loadFlaggedVideos()">
+                    📥 Load Flagged Videos
+                </button>
+            </div>
+            <div id="flaggedVideosList">
+                <p>Click "Load Flagged Videos" to view moderation results</p>
             </div>
         </div>
 
@@ -1761,9 +1773,8 @@
                 // Payout status cards
                 if (payoutResponse && payoutResponse.ok) {
                     const stats = await payoutResponse.json();
-                    document.getElementById('totalPayouts').textContent = stats.total || 0;
+                    // document.getElementById('totalPayouts').textContent = stats.total || 0; // REPLACED BY TOTAL USERS
                     document.getElementById('successfulPayouts').textContent = stats.successful || 0;
-                    document.getElementById('pendingPayouts').textContent = stats.pending || 0;
                     document.getElementById('failedPayouts').textContent = stats.failed || 0;
                 }
 
@@ -1772,6 +1783,8 @@
                 if (platformStatsResponse && platformStatsResponse.ok) {
                     platformStats = await platformStatsResponse.json();
                     document.getElementById('totalVideos').textContent = formatNumber(platformStats.totalVideos || 0);
+                    document.getElementById('flaggedCount').textContent = formatNumber(platformStats.flaggedCount || 0);
+                    document.getElementById('totalUsers').textContent = formatNumber(platformStats.totalUsers || 0);
                     
                     const dailyTotal = platformStats.dailyUploadCount || 0;
                     const dailyVayu = platformStats.dailyVayuCount || 0;
@@ -2341,6 +2354,122 @@
             document.getElementById('dailyUploadsModal').addEventListener('click', function(e) {
                 if (e.target === this) this.remove();
             });
+        }
+        // **NEW: Flagged Videos Management**
+        async function loadFlaggedVideos() {
+            const container = document.getElementById('flaggedVideosList');
+            try {
+                container.innerHTML = '<p>Loading flagged videos...</p>';
+                const response = await authorizedFetch(`${API_BASE}/admin/videos/flagged`);
+                if (!response || !response.ok) {
+                    container.innerHTML = '<p class="error-message">Failed to load flagged videos</p>';
+                    return;
+                }
+                const data = await response.json();
+                renderFlaggedVideos(data.videos || []);
+            } catch (error) {
+                console.error('Error loading flagged videos:', error);
+                container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+            }
+        }
+
+        function renderFlaggedVideos(videos) {
+            const container = document.getElementById('flaggedVideosList');
+
+            if (!videos || videos.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 30px; color: #28a745;"><h3>✅ No flagged videos!</h3><p>All content has passed moderation.</p></div>';
+                return;
+            }
+
+            const tableRows = videos.map(video => {
+                const name = escapeHtml(video.videoName || 'Untitled');
+                const uploader = video.uploader ? escapeHtml(video.uploader.name || 'Unknown') : 'Unknown';
+                const uploaderEmail = video.uploader ? escapeHtml(video.uploader.email || '—') : '—';
+                const confidence = video.moderationResult?.confidence ? (video.moderationResult.confidence * 100).toFixed(1) + '%' : '—';
+                const label = escapeHtml(video.moderationResult?.label || 'unknown');
+                const flaggedAt = video.moderationResult?.processedAt ? formatDate(video.moderationResult.processedAt) : formatDate(video.updatedAt);
+                const videoId = video._id;
+
+                const confidenceColor = video.moderationResult?.confidence > 0.9 ? '#dc3545' : video.moderationResult?.confidence > 0.8 ? '#ff9800' : '#ffc107';
+
+                return `
+                    <tr>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                ${video.thumbnailUrl ? `<img src="${video.thumbnailUrl}" style="width: 80px; height: 45px; object-fit: cover; border-radius: 6px; border: 2px solid #dc3545;">` : '<div style="width:80px;height:45px;background:#f0f0f0;border-radius:6px;display:flex;align-items:center;justify-content:center;">🎬</div>'}
+                                <div>
+                                    <strong>${name}</strong><br>
+                                    <small style="color: #666;">${escapeHtml((video.description || '').substring(0, 40))}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${uploader}<br><small style="color: #666;">${uploaderEmail}</small></td>
+                        <td>
+                            <span class="status-badge" style="background: ${confidenceColor}20; color: ${confidenceColor}; font-weight: bold;">
+                                ${confidence}
+                            </span><br>
+                            <small style="color: #666;">${label}</small>
+                        </td>
+                        <td>${flaggedAt}</td>
+                        <td>
+                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                <button class="btn btn-primary btn-sm" onclick="window.open('${video.videoUrl}', '_blank')" style="padding: 4px 8px; font-size: 0.75rem;">
+                                    ▶ Review
+                                </button>
+                                <button class="btn btn-success btn-sm" onclick="unflagVideo('${videoId}', '${escapeHtml(name)}')" style="padding: 4px 8px; font-size: 0.75rem;">
+                                    ✅ Approve
+                                </button>
+                                <button class="btn btn-sm" onclick="deleteVideo('${videoId}', '${escapeHtml(name)}')" style="padding: 4px 8px; font-size: 0.75rem; background: #dc3545; color: white;">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div style="overflow-x: auto;">
+                    <table class="payout-table">
+                        <thead>
+                            <tr>
+                                <th>Video</th>
+                                <th>Uploader</th>
+                                <th>Confidence</th>
+                                <th>Flagged At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function unflagVideo(videoId, videoName) {
+            if (!confirm(`Are you sure you want to APPROVE this video?\n\nVideo: ${videoName}\n\nThis will make it visible in the feed again.`)) {
+                return;
+            }
+
+            try {
+                const response = await authorizedFetch(`${API_BASE}/admin/videos/${videoId}/unflag`, {
+                    method: 'POST'
+                });
+
+                if (response && response.ok) {
+                    showSuccess(`Video "${videoName}" approved and unflagged ✅`);
+                    loadFlaggedVideos();
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    showError(`Failed to unflag: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error unflagging video:', error);
+                showError(`Error: ${error.message}`);
+            }
         }
     </script>
 </body>

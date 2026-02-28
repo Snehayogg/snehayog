@@ -36,13 +36,20 @@ const SUPPORTED_VERSIONS = {
     deprecatedDate: null,
     endOfLifeDate: null,
     description: 'Upload Fix & Version Sync (February 17, 2026)'
+  },
+  '2026-03-01': {
+    releaseDate: new Date('2026-03-01'),
+    deprecated: false,
+    deprecatedDate: null,
+    endOfLifeDate: null,
+    description: 'API Optimization & Batch Endpoints (March 1, 2026)'
   }
 };
 
 /**
  * Default API version if none specified
  */
-const DEFAULT_VERSION = '2026-02-17';
+const DEFAULT_VERSION = '2026-03-01';
 
 /**
  * Header name for API version

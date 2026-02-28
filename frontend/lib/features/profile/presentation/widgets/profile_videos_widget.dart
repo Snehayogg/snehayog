@@ -7,8 +7,12 @@ import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
 import 'dart:ui';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
+import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -181,8 +185,8 @@ class ProfileVideosWidget extends StatelessWidget {
 
         const gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          crossAxisSpacing: 1,
-          mainAxisSpacing: 1,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
           childAspectRatio: 0.5,
         );
 
@@ -200,7 +204,7 @@ class ProfileVideosWidget extends StatelessWidget {
             children: [
               if (showHeader) ...[
                 const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     'Your Videos',
                     style: TextStyle(
@@ -213,12 +217,15 @@ class ProfileVideosWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
               ],
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: gridDelegate,
-                itemCount: displayVideos.length,
-                itemBuilder: (context, index) => _buildVideoItem(context, manager, displayVideos[index], index),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: gridDelegate,
+                  itemCount: displayVideos.length,
+                  itemBuilder: (context, index) => _buildVideoItem(context, manager, displayVideos[index], index),
+                ),
               ),
             ],
           ),
@@ -277,7 +284,6 @@ class ProfileVideosWidget extends StatelessWidget {
                   builder: (context) => VideoScreen(
                     initialVideos: manager.userVideos,
                     initialVideoId: video.id,
-                    isFullScreen: true, // **NEW: Full-screen mode**
                   ),
                 ),
               );
@@ -293,40 +299,52 @@ class ProfileVideosWidget extends StatelessWidget {
           }
         },
         child: Container(
-          decoration: const BoxDecoration(),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
           child: ClipRRect(
-            borderRadius: BorderRadius.zero,
+            borderRadius: BorderRadius.circular(8),
             child: Stack(
               children: [
                 // Video Thumbnail
-                Container(
-                  width: double.infinity,
-                  height: double.infinity,
-                  color: isProcessing ? AppTheme.backgroundSecondary : const Color(0xFFF3F4F6),
-                  child: video.thumbnailUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: video.thumbnailUrl,
-                          memCacheWidth: 350, // Optimize memory for grid
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                          errorWidget: (context, url, error) {
-                            return const Center(
-                              child: Icon(
-                                Icons.video_library,
-                                color: Color(0xFF9CA3AF),
-                                size: 32,
-                              ),
-                            );
-                          },
-                        )
-                      : const Center(
-                          child: Icon(
-                            Icons.video_library,
-                            color: Color(0xFF9CA3AF),
-                            size: 32,
+                Hero(
+                  tag: 'video_player_${video.id}',
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    color: isProcessing ? AppColors.backgroundSecondary : const Color(0xFFF3F4F6),
+                    child: video.thumbnailUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: video.thumbnailUrl,
+                            memCacheWidth: 350, // Optimize memory for grid
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorWidget: (context, url, error) {
+                              return const Center(
+                                child: Icon(
+                                  Icons.video_library,
+                                  color: Color(0xFF9CA3AF),
+                                  size: 32,
+                                ),
+                              );
+                            },
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.video_library,
+                              color: Color(0xFF9CA3AF),
+                              size: 32,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
 
                 // SERIES BADGE
@@ -364,7 +382,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 if (isProcessing)
                   Positioned.fill(
                     child: Container(
-                      color: AppTheme.backgroundPrimary.withValues(alpha: 0.72),
+                      color: AppColors.backgroundPrimary.withValues(alpha: 0.72),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -375,15 +393,15 @@ class ProfileVideosWidget extends StatelessWidget {
                               child: CircularProgressIndicator(
                                 strokeWidth: 3,
                                 value: video.processingProgress.clamp(0, 100) / 100.0,
-                                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                                backgroundColor: AppTheme.borderPrimary,
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                backgroundColor: AppColors.borderPrimary,
                               ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               _processingLabel(video),
                               style: const TextStyle(
-                                color: AppTheme.textPrimary,
+                                color: AppColors.textPrimary,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -400,13 +418,13 @@ class ProfileVideosWidget extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.warning.withValues(alpha: 0.95),
+                        color: AppColors.warning.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         _processingLabel(video),
                         style: const TextStyle(
-                          color: AppTheme.textInverse,
+                          color: AppColors.textInverse,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
@@ -417,48 +435,30 @@ class ProfileVideosWidget extends StatelessWidget {
                 // Views Overlay
                 if (!isProcessing)
                   Positioned(
-                    bottom: 10,
-                    left: 10,
+                    bottom: 8,
+                    left: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6), // **Darker background for readability without Blur**
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.15),
-                          width: 0.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.visibility_rounded,
-                            color: Colors.white.withOpacity(0.9),
-                            size: 13,
+                            color: Colors.white,
+                            size: 12,
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 4),
                           Text(
                             _formatViews(video.views),
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.3,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black26,
-                                  offset: Offset(0, 1),
-                                  blurRadius: 2,
-                                ),
-                              ],
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
                             ),
                           ),
                         ],
@@ -534,163 +534,102 @@ class ProfileVideosWidget extends StatelessWidget {
   }
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
-    showModalBottomSheet(
+    VayuBottomSheet.show(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.5,
-          minChildSize: 0.3,
-          maxChildSize: 0.8,
-          builder: (context, scrollController) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  // Handle bar
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  // Title
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.playlist_play, color: Colors.black),
-                        const SizedBox(width: 8),
-                        Text(
-                          'More Episodes',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(),
-                  // List
-                  Expanded(
-                    child: GridView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 0.7,
-                      ),
-                      itemCount: video.episodes!.length,
-                      itemBuilder: (context, index) {
-                        // **FIX: Handle both Map (from backend) and VideoModel types**
-                        final episodeData = video.episodes![index];
-                        final String episodeId = (episodeData['_id'] ?? episodeData['id']);
-                        final String thumbnailUrl = (episodeData['thumbnailUrl'] ?? video.thumbnailUrl);
-                        final String sequenceNumber = (index + 1).toString();
+      title: 'More Episodes',
+      useDraggable: true,
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.8,
+      padding: const EdgeInsets.all(16),
+      child: GridView.builder(
+        padding: EdgeInsets.zero,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 0.7,
+        ),
+        itemCount: video.episodes!.length,
+        itemBuilder: (context, index) {
+          final episodeData = video.episodes![index];
+          final String episodeId = (episodeData['_id'] ?? episodeData['id']);
+          final String thumbnailUrl =
+              (episodeData['thumbnailUrl'] ?? video.thumbnailUrl);
+          final String sequenceNumber = (index + 1).toString();
 
-                        return GestureDetector(
-                          onTap: () {
-                              Navigator.pop(context);
-                              // Navigate to the selected episode using VideoScreen (Profile Player)
-                              // To match "Feed" behavior exactly, we should use VideoFeedAdvanced, 
-                              // but this is Profile, so VideoScreen is safer for context.
-                              // User said "same as we do in when user click on episode button".
-                              // The original code navigates to `VideoFeedAdvanced`.
-                              // I will stick to `VideoScreen` for Profile consistency, 
-                              // but keep the UI identical.
-                              
-                              // ... actually, let's use VideoScreen which is already imported.
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => VideoScreen(
-                                    initialVideos: stateManager.userVideos, // Context of profile videos
-                                    initialVideoId: episodeId,
-                                    isFullScreen: true, // **NEW: Full-screen mode**
-                                  ),
-                                ),
-                              );
-                              AppLogger.log('Selected episode $sequenceNumber: $episodeId');
-                          },
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: thumbnailUrl.isNotEmpty 
-                                ? CachedNetworkImage(
-                                  imageUrl: thumbnailUrl,
-                                  memCacheWidth: 350, // Optimize memory for grid
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(color: Colors.grey[300]),
-                                  errorWidget: (context, url, error) => Container(
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.error),
-                                  ),
-                                )
-                                : Container(color: Colors.black12),
-                              ),
-                              // Sequence Number Overlay
-                              Positioned(
-                                top: 4,
-                                left: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    sequenceNumber,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // Play Icon Overlay
-                              Center(
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.play_arrow,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ],
+          return GestureDetector(
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => VideoScreen(
+                    initialVideos: stateManager.userVideos,
+                    initialVideoId: episodeId,
+                  ),
+                ),
+              );
+              AppLogger.log('Selected episode $sequenceNumber: $episodeId');
+            },
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: thumbnailUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: thumbnailUrl,
+                          memCacheWidth: 350,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) =>
+                              Container(color: Colors.grey[300]),
+                          errorWidget: (context, url, error) => Container(
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.error),
                           ),
-                        );
-                      },
+                        )
+                      : Container(color: Colors.black12),
+                ),
+                Positioned(
+                  top: 4,
+                  left: 4,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      sequenceNumber,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+                ),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

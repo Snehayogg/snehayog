@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:hugeicons/hugeicons.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/radius.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/shared/utils/responsive_helper.dart';
 
@@ -23,7 +25,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: ResponsiveHelper.isMobile(context) ? 100 : 150,
                       height: ResponsiveHelper.isMobile(context) ? 100 : 150,
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                        color: AppColors.backgroundTertiary.withOpacity(0.5),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -34,7 +36,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 200,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                        color: AppColors.backgroundTertiary.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -45,7 +47,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 120,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                        color: AppColors.backgroundTertiary.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
@@ -60,8 +62,8 @@ class ProfileSkeleton extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 decoration: const BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: AppTheme.borderPrimary),
-                    bottom: BorderSide(color: AppTheme.borderPrimary),
+                    top: BorderSide(color: AppColors.borderPrimary),
+                    bottom: BorderSide(color: AppColors.borderPrimary),
                   ),
                 ),
                 child: Row(
@@ -74,7 +76,7 @@ class ProfileSkeleton extends StatelessWidget {
                                 width: 60,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                                  color: AppColors.backgroundTertiary.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
@@ -83,7 +85,7 @@ class ProfileSkeleton extends StatelessWidget {
                                 width: 80,
                                 height: 20,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                                  color: AppColors.backgroundTertiary.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               ),
@@ -105,7 +107,7 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 150,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                        color: AppColors.backgroundTertiary.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -125,7 +127,7 @@ class ProfileSkeleton extends StatelessWidget {
                       itemCount: 6,
                       itemBuilder: (context, index) => Container(
                         decoration: BoxDecoration(
-                          color: AppTheme.backgroundTertiary.withOpacity(0.5),
+                          color: AppColors.backgroundTertiary.withOpacity(0.5),
                           borderRadius: BorderRadius.zero,
                         ),
                       ),
@@ -158,16 +160,15 @@ class ProfileSignInView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.account_circle,
+              const HugeIcon(icon: HugeIcons.strokeRoundedUserCircle,
                 size: 100,
-                color: AppTheme.textTertiary,
+                color: AppColors.textTertiary,
               ),
               const SizedBox(height: 20),
               Text(
                 AppText.get('profile_sign_in_title'),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: AppTheme.textPrimary,
+                  color: AppColors.textPrimary,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
@@ -176,7 +177,7 @@ class ProfileSignInView extends StatelessWidget {
               Text(
                 AppText.get('profile_sign_in_desc'),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.textSecondary,
+                  color: AppColors.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -189,12 +190,12 @@ class ProfileSignInView extends StatelessWidget {
                 ),
                 label: Text(AppText.get('profile_sign_in_button')),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.textPrimary,
-                  foregroundColor: AppTheme.textInverse,
+                  backgroundColor: AppColors.textPrimary,
+                  foregroundColor: AppColors.textInverse,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                    borderRadius: BorderRadius.circular(AppRadius.radiusMedium),
                   ),
                 ),
               ),

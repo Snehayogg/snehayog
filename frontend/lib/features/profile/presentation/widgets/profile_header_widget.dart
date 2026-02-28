@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
@@ -9,6 +11,7 @@ import 'package:vayu/shared/utils/app_text.dart';
 
 class ProfileHeaderWidget extends StatelessWidget {
   final bool isViewingOwnProfile;
+  final bool hasReferralBillingUnlock;
   final VoidCallback? onProfilePhotoChange;
   final VoidCallback? onAddUpiId;
   final VoidCallback? onReferFriends;
@@ -19,6 +22,7 @@ class ProfileHeaderWidget extends StatelessWidget {
   const ProfileHeaderWidget({
     super.key,
     required this.isViewingOwnProfile,
+    this.hasReferralBillingUnlock = false,
     this.onProfilePhotoChange,
     this.onAddUpiId,
     this.onReferFriends,
@@ -56,7 +60,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                         Container(
                           height: 24,
                           width: 1,
-                          color: AppTheme.borderPrimary,
+                          color: AppColors.borderPrimary,
                         ),
                         Expanded(
                           child: _buildStatItem(
@@ -68,7 +72,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                         Container(
                           height: 24,
                           width: 1,
-                          color: AppTheme.borderPrimary,
+                          color: AppColors.borderPrimary,
                         ),
                         Expanded(
                           child: _buildStatItem(
@@ -89,8 +93,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                 stateManager.userData?['bio'] ?? '',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppTheme.bodySmall.copyWith(
-                  color: AppTheme.textSecondary,
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -113,7 +117,7 @@ class ProfileHeaderWidget extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: AppTheme.borderPrimary,
+                color: AppColors.borderPrimary,
                 width: 2,
               ),
             ),
@@ -129,8 +133,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                   }
                 }
                 return Container(
-                  color: AppTheme.backgroundSecondary,
-                  child: const Icon(Icons.person, color: AppTheme.textTertiary, size: 40),
+                  color: AppColors.backgroundSecondary,
+                  child: const HugeIcon(icon: HugeIcons.strokeRoundedUser, color: AppColors.textTertiary, size: 40),
                 );
               }(),
             ),
@@ -142,8 +146,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   color: Colors.black.withValues(alpha: 0.4),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.camera_alt,
+                child: const HugeIcon(icon: HugeIcons.strokeRoundedCamera01,
                   color: Colors.white,
                   size: 24,
                 ),
@@ -168,8 +171,8 @@ class ProfileHeaderWidget extends StatelessWidget {
         children: [
           Text(
             value,
-            style: AppTheme.titleMedium.copyWith(
-              color: isHighlighted ? AppTheme.primary : AppTheme.textPrimary,
+            style: AppTypography.titleMedium.copyWith(
+              color: isHighlighted ? AppColors.primary : AppColors.textPrimary,
               fontSize: isLoadingText ? 10 : 18,
               fontWeight: isLoadingText ? FontWeight.w600 : FontWeight.w700,
             ),
@@ -177,8 +180,11 @@ class ProfileHeaderWidget extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: AppTheme.bodySmall.copyWith(
-              color: AppTheme.textSecondary,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -245,7 +251,6 @@ class ProfileHeaderWidget extends StatelessWidget {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.red,
                             side: const BorderSide(color: Colors.red),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -258,9 +263,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                         child: ElevatedButton(
                           onPressed: onSaveProfile,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.success,
+                            backgroundColor: AppColors.success,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -273,15 +277,14 @@ class ProfileHeaderWidget extends StatelessWidget {
                   )
                 : ElevatedButton.icon(
                     onPressed: onAddUpiId,
-                    icon: const Icon(Icons.account_balance_wallet, size: 18),
+                    icon: const HugeIcon(icon: HugeIcons.strokeRoundedWallet01, size: 18),
                     label: Text(
                       AppText.get('btn_add_upi_id'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: AppTheme.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -295,14 +298,23 @@ class ProfileHeaderWidget extends StatelessWidget {
             child: OutlinedButton(
               onPressed: onReferFriends,
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.textSecondary,
-                side: const BorderSide(color: AppTheme.borderPrimary),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                foregroundColor: AppColors.textSecondary,
+                side: const BorderSide(color: AppColors.borderPrimary),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: Text(AppText.get('btn_refer_friends')),
+              child: Text(
+                AppText.get('btn_refer_friends'),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ]

@@ -38,7 +38,16 @@ class AuthService {
   // **OPTIMIZATION: Short-term (30s) In-memory Cache**
   static Map<String, dynamic>? _cachedProfile;
   static DateTime? _lastProfileFetch;
-  static const Duration _cacheTtl = Duration(seconds: 30);
+  static const Duration _cacheTtl = Duration(minutes: 5);
+  static const String _lastSlidingRefreshAtKey = 'auth_last_sliding_refresh_at';
+  static const Duration _slidingRefreshInterval = Duration(hours: 12);
+  
+  // **THROTTLING: Prevent redundant network requests**
+  static DateTime? _lastReLoginCheckTime;
+  static const Duration _throttleInterval = Duration(seconds: 30);
+  
+  // **CONCURRENCY: Prevent parallel refresh requests**
+  static Future<String?>? _pendingRefreshRequest;
 
   /// **NEW: Get the currently logged-in user ID (using memory cache)**
   String? get currentUserId {
@@ -46,6 +55,71 @@ class AuthService {
       return (_cachedProfile!['googleId'] ?? _cachedProfile!['id'])?.toString();
     }
     return null;
+  }
+
+  /// **NEW: Proactively verify if the stored JWT belongs to the current Google user**
+  /// Returns [true] if consistent, [false] if there's a mismatch or missing info.
+  Future<bool> verifyIdentityConsistency() async {
+    try {
+      // 1. Get current Google user silently
+      final googleUser = await _googleSignIn.signInSilently();
+      if (googleUser == null) {
+        // Do not hard-fail backend session if Google silent auth is unavailable.
+        // Backend JWT + refresh token is the source of truth for app session.
+        AppLogger.log('ℹ️ IdentityCheck: No active Google account found (non-fatal)');
+        return true;
+      }
+
+      // 2. Get local JWT info
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+      if (token == null) {
+        AppLogger.log('ℹ️ IdentityCheck: No local JWT found');
+        return false;
+      }
+
+      final tokenInfo = getTokenInfo(token);
+      if (tokenInfo == null) {
+        AppLogger.log('⚠️ IdentityCheck: Stored JWT is invalid');
+        return false;
+      }
+
+      final jwtGoogleId = tokenInfo['userId']?.toString();
+      final activeGoogleId = googleUser.id;
+
+      if (jwtGoogleId != null && activeGoogleId != jwtGoogleId) {
+        AppLogger.log('❌ IDENTITY MISMATCH: JWT user ($jwtGoogleId) != Google user ($activeGoogleId)');
+        return false;
+      }
+
+      AppLogger.log('✅ IdentityCheck: Session is consistent with Google account');
+      return true;
+    } catch (e) {
+      AppLogger.log('⚠️ IdentityCheck error: $e');
+      return false;
+    }
+  }
+
+  Future<void> _markSlidingRefreshActivity(SharedPreferences prefs) async {
+    await prefs.setInt(
+      _lastSlidingRefreshAtKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  bool _shouldPerformSlidingRefresh(SharedPreferences prefs) {
+    final refreshToken = prefs.getString('refresh_token');
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
+
+    final lastRefreshAtMs = prefs.getInt(_lastSlidingRefreshAtKey);
+    if (lastRefreshAtMs == null) {
+      return true;
+    }
+
+    final lastRefreshAt = DateTime.fromMillisecondsSinceEpoch(lastRefreshAtMs);
+    return DateTime.now().difference(lastRefreshAt) >= _slidingRefreshInterval;
   }
 
   Future<Map<String, dynamic>?> signInWithGoogle(
@@ -189,6 +263,7 @@ class AuthService {
           // **NEW: Save Refresh Token**
           if (authData['refreshToken'] != null) {
             await prefs.setString('refresh_token', authData['refreshToken']);
+            await _markSlidingRefreshActivity(prefs);
             AppLogger.log('🔑 Refresh Token received and saved');
           }
 
@@ -533,16 +608,9 @@ class AuthService {
         return; // Token was refreshed, keep session
       }
 
-        // Only remove if token is actually expired AND refresh failed
-        if (!isTokenValid(token)) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('jwt_token');
-          AppLogger.log(
-              '⚠️ Removed expired token after refresh attempt failed');
-        } else {
-          AppLogger.log(
-              'ℹ️ Token is still valid according to expiry, keeping it (may be backend issue)');
-        }
+        // Non-destructive behavior: keep local token and allow future retries.
+        AppLogger.log(
+            '⚠️ Refresh attempt failed after unauthorized response; keeping local session for retry.');
       } else if (response.statusCode == 200) {
         AppLogger.log('✅ Token verified successfully in background');
       } else {
@@ -552,20 +620,8 @@ class AuthService {
     } catch (e) {
       AppLogger.log('⚠️ Background token verification failed: $e');
       // **IMPROVED: Keep session even if backend is unreachable - don't remove token on network errors**
-      // Only remove if token is clearly expired (not just network issue)
-      try {
-        if (!isTokenValid(token)) {
-          AppLogger.log(
-              '⚠️ Token is expired and backend unreachable, removing token');
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('jwt_token');
-        } else {
-          AppLogger.log(
-              'ℹ️ Network error but token still valid, keeping session');
-        }
-      } catch (_) {
-        // Ignore errors in expiry check
-      }
+      // Keep session and retry later through central refresh flow.
+      AppLogger.log('ℹ️ Network/backend error during verification, keeping local session');
     }
   }
 
@@ -1009,6 +1065,24 @@ class AuthService {
 
   /// **NEW: Refresh the access token using the refresh token (with Google Silent Sign-In fallback)**
   Future<String?> refreshAccessToken() async {
+    // **CONCURRENCY: Prevent parallel refresh requests**
+    if (_pendingRefreshRequest != null) {
+      AppLogger.log('ℹ️ AuthService: Joining existing pending refresh request');
+      return await _pendingRefreshRequest;
+    }
+
+    _pendingRefreshRequest = _doRefreshAccessToken();
+    try {
+      return await _pendingRefreshRequest;
+    } finally {
+      // Clear the lock after it completes, but allow a tiny grace period
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _pendingRefreshRequest = null;
+      });
+    }
+  }
+
+  Future<String?> _doRefreshAccessToken() async {
     try {
       AppLogger.log('🔄 Attempting to refresh access token...');
       final prefs = await SharedPreferences.getInstance();
@@ -1017,18 +1091,15 @@ class AuthService {
       // 1. Try Refresh Token first (fast, server-side)
       if (refreshToken != null && refreshToken.isNotEmpty) {
         try {
-          // Get device ID for token rotation
-          final platformIdService = PlatformIdService();
-          final deviceId = await platformIdService.getPlatformId();
+          // Refresh token request no longer requires deviceId for rotation check
 
           final response = await http.post(
             Uri.parse('${NetworkHelper.authEndpoint}/refresh'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'refreshToken': refreshToken,
-              'deviceId': deviceId,
             }),
-          ).timeout(const Duration(seconds: 5));
+          ).timeout(const Duration(seconds: 10)); // Increased timeout for reliability
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -1041,6 +1112,7 @@ class AuthService {
               if (newRefreshToken != null) {
                 await prefs.setString('refresh_token', newRefreshToken);
               }
+              await _markSlidingRefreshActivity(prefs);
               AppLogger.log('✅ Access token refreshed successfully via refresh_token');
               return newToken;
             } else {
@@ -1049,13 +1121,27 @@ class AuthService {
           } else {
             AppLogger.log('⚠️ Token refresh endpoint failed with status: ${response.statusCode}');
             AppLogger.log('⚠️ Response body: ${response.body}');
-            if (response.statusCode == 403) {
-              AppLogger.log('🔐 Refresh token is invalid or expired. Removing from local storage.');
-              await prefs.remove('refresh_token');
+            // **FIX: Only clear refresh token when backend explicitly requires login.**
+            if (response.statusCode == 401 || response.statusCode == 403) {
+              bool requiresLogin = false;
+              try {
+                final body = jsonDecode(response.body);
+                requiresLogin = body is Map<String, dynamic> &&
+                    body['requiresLogin'] == true;
+              } catch (_) {
+                // Keep token on non-JSON/error bodies to avoid accidental session loss.
+              }
+
+              if (requiresLogin) {
+                AppLogger.log('🔐 Backend requires login. Removing refresh token from local storage.');
+                await prefs.remove('refresh_token');
+              } else {
+                AppLogger.log('ℹ️ Refresh rejected but login not explicitly required; keeping refresh token for retry.');
+              }
             }
           }
         } catch (e) {
-          AppLogger.log('⚠️ Refresh token endpoint error: $e');
+          AppLogger.log('⚠️ Refresh token endpoint error (likely network): $e');
         }
       }
 
@@ -1068,11 +1154,6 @@ class AuthService {
       }
 
       AppLogger.log('❌ All automatic refresh methods failed');
-      
-      // **FIX: Force logout and redirect to prevent loop**
-      AppLogger.log('🔒 Enforcing logout due to expired session...');
-      await signOut();
-      navigatorKey.currentState?.pushNamedAndRemoveUntil('/home', (route) => false);
       
       return null;
     } catch (e) {
@@ -1110,11 +1191,7 @@ class AuthService {
         return null;
       }
 
-      // **FIXED: Include device identification in re-authentication**
-      final platformIdService = PlatformIdService();
-      final deviceId = await platformIdService.getPlatformId();
-      final deviceName = await platformIdService.getDeviceName();
-      final platform = platformIdService.getPlatformType();
+      // Re-authentication with backend (deviceId no longer strictly required)
 
       // Authenticate with backend to get new JWT
       final authResponse = await http
@@ -1123,9 +1200,6 @@ class AuthService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'idToken': idToken,
-              'deviceId': deviceId,
-              'deviceName': deviceName,
-              'platform': platform,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -1142,6 +1216,7 @@ class AuthService {
         if (newRefreshToken != null) {
           await prefs.setString('refresh_token', newRefreshToken);
         }
+        await _markSlidingRefreshActivity(prefs);
 
         AppLogger.log('✅ Successfully obtained new JWT token via re-authentication');
         return newToken;
@@ -1174,13 +1249,21 @@ class AuthService {
 
   /// Check if user needs to re-login due to expired tokens
   Future<bool> needsReLogin() async {
+    // **THROTTLING: Prevent rapid successive needsReLogin checks**
+    if (_lastReLoginCheckTime != null && 
+        DateTime.now().difference(_lastReLoginCheckTime!) < _throttleInterval) {
+      AppLogger.log('ℹ️ AuthService: Skipping needsReLogin check (throttled)');
+      return false; // Assume current state is fine during throttle window
+    }
+    _lastReLoginCheckTime = DateTime.now();
+
     try {
       final prefs = await SharedPreferences.getInstance();
 
       // **FIXED: Check if user has skipped login - don't require re-login if skipped**
       final skipLogin = prefs.getBool('auth_skip_login') ?? false;
       if (skipLogin) {
-        AppLogger.log('ℹ️ User has skipped login, not requiring re-login');
+        AppLogger.log('User has skipped login, not requiring re-login');
         return false;
       }
 
@@ -1188,25 +1271,50 @@ class AuthService {
 
       // If no token, user needs to login (unless they skipped)
       if (token == null || token.isEmpty) {
-        AppLogger.log('⚠️ No token found, user needs to re-login');
+        AppLogger.log('No token found, user needs to re-login');
         return true;
       }
 
       // Check if it's a fallback token (starts with "temp_")
       if (token.startsWith('temp_')) {
-        AppLogger.log('ℹ️ Fallback token detected, skipping expiry check');
+        AppLogger.log('Fallback token detected, skipping expiry check');
         return false; // Fallback tokens are always considered valid
       }
 
-      // Check if real JWT token is expired
+      // Expired access token: try refresh once before forcing re-login.
       if (!isTokenValid(token)) {
-        AppLogger.log('⚠️ Token is expired, user needs to re-login');
-        return true;
+        AppLogger.log('Token is expired, attempting refresh before re-login');
+        final refreshedToken = await refreshAccessToken();
+        if (refreshedToken != null && refreshedToken.isNotEmpty) {
+          AppLogger.log('Token refreshed during needsReLogin check');
+          return false;
+        }
+        
+        // **FIX: Only force re-login if we definitively lost the session (refresh_token gone)**
+        final currentRefreshToken = prefs.getString('refresh_token');
+        if (currentRefreshToken == null || currentRefreshToken.isEmpty) {
+          AppLogger.log('Token refresh failed and refresh token is missing. User needs to re-login.');
+          return true;
+        } else {
+          AppLogger.log('Token refresh failed (likely network), but refresh token exists. Keeping session active.');
+          return false;
+        }
+      }
+
+      // Sliding session: periodically rotate refresh token while user is active.
+      if (_shouldPerformSlidingRefresh(prefs)) {
+        AppLogger.log('Sliding session: refresh interval reached, rotating tokens');
+        final rotatedToken = await refreshAccessToken();
+        if (rotatedToken != null && rotatedToken.isNotEmpty) {
+          AppLogger.log('Sliding session refresh successful');
+        } else {
+          AppLogger.log('Sliding session refresh failed; keeping valid session');
+        }
       }
 
       return false;
     } catch (e) {
-      AppLogger.log('❌ Error checking re-login status: $e');
+      AppLogger.log('Error checking re-login status: $e');
       // On error, check if user skipped login - if yes, don't require re-login
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -1215,7 +1323,8 @@ class AuthService {
           return false;
         }
       } catch (_) {}
-      return true;
+      // **FIX: Don't logout on unexpected errors (e.g., SharedPreferences issue)**
+      return false;
     }
   }
 
@@ -1320,3 +1429,4 @@ class AuthService {
     }
   }
 }
+

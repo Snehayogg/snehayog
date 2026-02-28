@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 class ProfileTabsWidget extends StatelessWidget {
   final int activeIndex;
@@ -16,9 +19,9 @@ class ProfileTabsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       decoration: BoxDecoration(
-        color: AppTheme.backgroundSecondary,
+        color: AppColors.backgroundSecondary,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -48,7 +51,7 @@ class ProfileTabsWidget extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.surfacePrimary : Colors.transparent,
+          color: isSelected ? AppColors.surfacePrimary : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           boxShadow: isSelected
               ? [
@@ -65,7 +68,7 @@ class ProfileTabsWidget extends StatelessWidget {
             label,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+              color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
             ),
           ),
         ),

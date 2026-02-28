@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/services/report_service.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class ReportDialogWidget extends StatefulWidget {
   final String targetType;
@@ -97,18 +98,16 @@ class _ReportDialogWidgetState extends State<ReportDialogWidget> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton(
           onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          variant: AppButtonVariant.text,
         ),
-        ElevatedButton(
+        AppButton(
           onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(
-                  height: 16,
-                  width: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Submit'),
+          label: 'Submit',
+          variant: AppButtonVariant.primary,
+          isLoading: _submitting,
         ),
       ],
     );

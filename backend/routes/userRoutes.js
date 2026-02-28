@@ -689,6 +689,50 @@ router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
   }
 });
 
+// ✅ **OPTIMIZED: Batch check follow status for multiple users in one call**
+router.post('/isfollowing/batch', verifyToken, async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    const currentUserId = req.user.id;
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.json({ statuses: {} });
+    }
+
+    // Cap at 50 to prevent abuse
+    const limitedIds = userIds.slice(0, 50);
+
+    const currentUser = await User.findOne({ googleId: currentUserId }).select('following').lean();
+    if (!currentUser || !currentUser.following || currentUser.following.length === 0) {
+      // Not following anyone — all false
+      const statuses = {};
+      for (const id of limitedIds) { statuses[id] = false; }
+      return res.json({ statuses });
+    }
+
+    // Find all target users by googleId in one query
+    const targetUsers = await User.find({ googleId: { $in: limitedIds } })
+      .select('_id googleId')
+      .lean();
+
+    // Build a set of followed ObjectIds for O(1) lookup
+    const followingSet = new Set(currentUser.following.map(id => id.toString()));
+
+    const statuses = {};
+    const targetMap = new Map(targetUsers.map(u => [u.googleId, u._id.toString()]));
+
+    for (const id of limitedIds) {
+      const mongoId = targetMap.get(id);
+      statuses[id] = mongoId ? followingSet.has(mongoId) : false;
+    }
+
+    res.json({ statuses });
+  } catch (err) {
+    console.error('Batch follow status error:', err);
+    res.status(500).json({ error: 'Failed to check batch follow status' });
+  }
+});
+
 // **NEW: JWT Token validation endpoint (for debugging)**
 router.get('/validate-token', verifyToken, async (req, res) => {
   try {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class ExternalLinkButton extends StatelessWidget {
   final String url;
@@ -9,56 +10,22 @@ class ExternalLinkButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final uri = Uri.tryParse(url.trim());
-          if (uri != null && await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Could not open link.')),
-            );
-          }
-        },
-        child: Container(
-          // **UPDATED: Set minimum width for longer button while keeping height same**
-          width: 270, // Fixed width for longer button
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: const LinearGradient(
-              colors: [
-                Color(
-                    0x1CFFFFFF), // White with 0.108 opacity (0.18 * 0.6)
-                Color(0x99444444), // Grey with 0.6 opacity
-              ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-          child: Row(
-            // **UPDATED: Use max to fill the container width**
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.open_in_new, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Visit Now',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.5,
-                  fontSize: 15,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return AppButton(
+      onPressed: () async {
+        final uri = Uri.tryParse(url.trim());
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open link.')),
+          );
+        }
+      },
+      label: 'Visit Now',
+      icon: const Icon(Icons.open_in_new, color: Colors.white, size: 20),
+      variant: AppButtonVariant.primary,
+      size: AppButtonSize.medium,
+      isFullWidth: true,
     );
   }
 }

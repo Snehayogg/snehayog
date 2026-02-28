@@ -7,7 +7,11 @@ import 'package:vayu/features/profile/data/services/profile_preloader.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class VideoInfoWidget extends StatefulWidget {
   final VideoModel video;
@@ -49,7 +53,7 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
                 Text(
                   widget.video.videoName,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textInverse,
+                    color: AppColors.textInverse,
                     fontWeight: FontWeight.w600,
                   ),
                   maxLines: _isExpanded ? null : 1,
@@ -64,10 +68,10 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
                     child: Text(
                       _isExpanded ? 'view less' : 'view more',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppTheme.textInverse.withOpacity(0.9),
+                        color: AppColors.textInverse.withOpacity(0.9),
                         fontWeight: FontWeight.w500,
                         decoration: TextDecoration.underline,
-                        decorationColor: AppTheme.textInverse.withOpacity(0.9),
+                        decorationColor: AppColors.textInverse.withOpacity(0.9),
                       ),
                     ),
                   ),
@@ -158,7 +162,7 @@ class _UploaderInfoSection extends StatelessWidget {
                   child: Text(
                     video.uploader.name,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textInverse,
+                      color: AppColors.textInverse,
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -176,6 +180,8 @@ class _UploaderInfoSection extends StatelessWidget {
               ? video.uploader.googleId!.trim()
               : video.uploader.id,
           uploaderName: video.uploader.name,
+          followText: 'Subscribe',
+          followingText: 'Subscribed',
           onFollowChanged: () {
             // Optionally refresh video data or update UI
             print('Follow status changed for ${video.uploader.name}');
@@ -247,7 +253,7 @@ class _UploaderAvatar extends StatelessWidget {
         child: Text(
           initials,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppTheme.textInverse,
+            color: AppColors.textInverse,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -268,7 +274,7 @@ class _VisitNowButton extends StatelessWidget {
       // **UPDATED: Increased width significantly while keeping height same**
       width: MediaQuery.of(context).size.width * 0.75, // 60% of screen width
       margin: const EdgeInsets.only(right: 8),
-      child: ElevatedButton(
+      child: AppButton(
         onPressed: () async {
           final Uri uri = Uri.parse(link);
           if (await canLaunchUrl(uri)) {
@@ -280,39 +286,10 @@ class _VisitNowButton extends StatelessWidget {
             );
           }
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.overlayMedium,
-          foregroundColor: Colors.white,
-          surfaceTintColor:
-              Colors.transparent, // Remove Material 3 surface tint
-          shadowColor: Colors.transparent, // Remove shadow
-          // **REDUCED padding for more compact button**
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-          ),
-          elevation: 0, // Set to 0 for transparent effect
-          // **NEW: Ensure button takes full width of container**
-          minimumSize: const Size(double.infinity, 0),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          // **UPDATED: Use max to fill the button width**
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            // **REDUCED icon size from 16 to 14**
-            const Icon(Icons.open_in_new, color: Colors.white, size: 14),
-            // **REDUCED spacing from 8 to 6**
-            const SizedBox(width: 6),
-            Text(
-              'Visit Now',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppTheme.textInverse,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
+        icon: const Icon(Icons.open_in_new, size: 14),
+        label: 'Visit Now',
+        variant: AppButtonVariant.primary,
+        isFullWidth: true,
       ),
     );
   }

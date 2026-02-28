@@ -15,14 +15,18 @@ import 'package:vayu/shared/services/http_client_service.dart';
 import 'package:dio/dio.dart';
 import 'package:vayu/features/ads/presentation/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/features/ads/presentation/screens/ad_management_screen.dart';
-import 'package:vayu/features/video/presentation/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/spacing.dart';
 import 'package:vayu/shared/managers/activity_recovery_manager.dart';
 import 'package:vayu/shared/models/app_activity.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayu/features/video/presentation/widgets/upload_advanced_settings_section.dart';
+import 'package:vayu/features/video/presentation/screens/make_episode_screen.dart';
 
 
 
@@ -78,7 +82,7 @@ class _UploadScreenState extends State<UploadScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(AppText.get('upload_cancelled', fallback: 'Upload cancelled')),
-        backgroundColor: Colors.grey.shade800,
+        backgroundColor: AppColors.backgroundSecondary,
       ),
     );
   }
@@ -183,230 +187,8 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   /// Get current phase icon
-  IconData _getCurrentPhaseIcon(String currentPhase) {
-    return _progressPhases[currentPhase]?['icon'] ?? Icons.upload;
-  }
 
-  /// Get current phase color
-  Color _getCurrentPhaseColor(String currentPhase) {
-    switch (currentPhase) {
-      case 'preparation':
-        return AppTheme.info;
-      case 'upload':
-        return AppTheme.primary;
-      case 'validation':
-        return AppTheme.warning;
-      case 'processing':
-        return AppTheme.primary;
-      case 'finalizing':
-        return AppTheme.info;
-      case 'completed':
-        return AppTheme.success;
-      default:
-        return AppTheme.primary;
-    }
-  }
 
-  /// **UNIFIED PROGRESS WIDGET** - Beautiful progress display
-  Widget _buildUnifiedProgressWidget() {
-    return ValueListenableBuilder<String>(
-      valueListenable: _currentPhase,
-      builder: (context, currentPhase, _) {
-        return ValueListenableBuilder<String>(
-          valueListenable: _phaseDescription,
-          builder: (context, phaseDescription, _) {
-            return ValueListenableBuilder<double>(
-              valueListenable: _unifiedProgress,
-              builder: (context, unifiedProgress, _) {
-                return ValueListenableBuilder<int>(
-                  valueListenable: _elapsedSeconds,
-                  builder: (context, elapsedSeconds, _) {
-                    return Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppTheme.backgroundPrimary,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: AppTheme.shadowPrimary,
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          // Phase Icon and Name
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: _getCurrentPhaseColor(currentPhase)
-                                      .withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  _getCurrentPhaseIcon(currentPhase),
-                                  color: _getCurrentPhaseColor(currentPhase),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _progressPhases[currentPhase]?['name'] ??
-                                          'Processing',
-                                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      phaseDescription,
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: AppTheme.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Progress Bar
-                          Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    AppText.get('upload_progress'),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${(unifiedProgress * 100).toInt()}%',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color:
-                                          _getCurrentPhaseColor(currentPhase),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: LinearProgressIndicator(
-                                  value: unifiedProgress,
-                                  backgroundColor: AppTheme.borderPrimary,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      _getCurrentPhaseColor(currentPhase)),
-                                  minHeight: 8,
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Time Information
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.access_time,
-                                    size: 16,
-                                    color: AppTheme.textTertiary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${AppText.get('upload_time')} ${_formatTime(elapsedSeconds)}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textTertiary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Cancel Button
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _cancelUpload,
-                              icon: Icon(Icons.cancel_outlined),
-                              label: Text(AppText.get('btn_cancel_upload', fallback: 'Cancel Upload')),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppTheme.error,
-                                side: const BorderSide(color: AppTheme.error),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Finish in Background Button (only during processing phase)
-                          if (currentPhase == 'processing')
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  _isMinimizing.value = true;
-                                },
-                                icon: const Icon(Icons.arrow_forward),
-                                label: const Text('Finish in Background'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.info,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// Format time in MM:SS format
-  String _formatTime(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-  }
 
   // Professional helper to render a notice bullet point
   Widget _buildNoticePoint({required String title, required String body}) {
@@ -419,13 +201,13 @@ class _UploadScreenState extends State<UploadScreen> {
             title,
             style: const TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontWeight: AppTypography.weightBold,
             ),
           ),
-          const SizedBox(height: 4),
+          AppSpacing.vSpace4,
           Text(
             body,
-            style: AppTheme.bodySmall.copyWith(fontSize: 13),
+            style: AppTypography.bodySmall.copyWith(fontSize: 13),
           ),
         ],
       ),
@@ -437,7 +219,7 @@ class _UploadScreenState extends State<UploadScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.backgroundPrimary,
+      backgroundColor: AppColors.backgroundPrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -448,7 +230,7 @@ class _UploadScreenState extends State<UploadScreen> {
           minChildSize: 0.5,
           maxChildSize: 0.95,
           builder: (context, scrollController) => Padding(
-            padding: const EdgeInsets.all(16),
+            padding: AppSpacing.edgeInsetsAll16,
             child: SingleChildScrollView(
               controller: scrollController,
               child: Column(
@@ -459,28 +241,28 @@ class _UploadScreenState extends State<UploadScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppTheme.error.withValues(alpha: 0.1),
+                          color: AppColors.error.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.gavel, color: AppTheme.error),
+                        child: const Icon(Icons.gavel, color: AppColors.error),
                       ),
-                      const SizedBox(width: 12),
+                      AppSpacing.hSpace12,
                       Expanded(
                         child: Text(
                           AppText.get('upload_terms_title'),
                           style: const TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: AppTypography.weightBold,
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                        icon: const Icon(Icons.close, color: AppColors.textSecondary),
                         onPressed: () => Navigator.pop(context),
                       )
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  AppSpacing.vSpace12,
                   _buildNoticePoint(
                     title: AppText.get('upload_terms_user_responsibility'),
                     body: AppText.get('upload_terms_user_responsibility_desc'),
@@ -505,18 +287,15 @@ class _UploadScreenState extends State<UploadScreen> {
                     title: AppText.get('upload_terms_liability'),
                     body: AppText.get('upload_terms_liability_desc'),
                   ),
-                  const SizedBox(height: 16),
+                  AppSpacing.vSpace16,
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton.icon(
+                    child: AppButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.check_circle_outline),
-                      label: Text(AppText.get('btn_i_understand')),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: AppTheme.error,
-                        foregroundColor: AppTheme.textPrimary,
-                      ),
+                      icon: Icon(Icons.check_circle_outline),
+                      label: AppText.get('btn_i_understand'),
+                      variant: AppButtonVariant.danger,
+                      isFullWidth: true,
                     ),
                   )
                 ],
@@ -550,6 +329,7 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
+
   @override
   void initState() {
     _selectedCategory.value = _defaultCategory;
@@ -572,6 +352,29 @@ class _UploadScreenState extends State<UploadScreen> {
     // Only save if not currently uploading
     if (!_isUploading.value && !_isProcessing.value) {
       _saveCurrentActivity();
+
+      // [REMOVED] Auto-trigger upload
+      // _uploadVideo();
+    }
+  }
+
+  void _handleMakeEpisode() {
+    if (_selectedVideo.value == null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const MakeEpisodeScreen(),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MakeEpisodeScreen(
+            initialFile: _selectedVideo.value,
+          ),
+        ),
+      );
     }
   }
 
@@ -619,7 +422,7 @@ class _UploadScreenState extends State<UploadScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppText.get('upload_resumed', fallback: 'Upload progress restored')),
-          backgroundColor: AppTheme.success.withOpacity(0.8),
+          backgroundColor: AppColors.success.withValues(alpha: 0.8),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1047,11 +850,11 @@ class _UploadScreenState extends State<UploadScreen> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppTheme.backgroundPrimary,
+              color: AppColors.backgroundPrimary,
               borderRadius: BorderRadius.circular(20),
               boxShadow: const [
                 BoxShadow(
-                  color: AppTheme.shadowPrimary,
+                  color: AppColors.shadowPrimary,
                   blurRadius: 20,
                   spreadRadius: 2,
                 ),
@@ -1065,102 +868,69 @@ class _UploadScreenState extends State<UploadScreen> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: AppColors.success.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.check_circle,
-                    color: Colors.green,
+                    color: AppColors.success,
                     size: 50,
                   ),
                 ),
-                const SizedBox(height: 24),
+                AppSpacing.vSpace24,
 
                 // Success title
                 Text(
                   AppText.get('upload_success_title'),
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: AppTypography.weightBold,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
+                AppSpacing.vSpace16,
 
                 // Success message
                 Text(
                   AppText.get('upload_success_message'),
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: AppTheme.textSecondary,
+                    color: AppColors.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                AppSpacing.vSpace24,
 
                 // Processing info
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: AppSpacing.edgeInsetsAll16,
                   decoration: BoxDecoration(
-                    color: AppTheme.success.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                   child: Row(
                     children: [
                       const Icon(Icons.check_circle_outline,
-                          color: AppTheme.success, size: 20),
-                      const SizedBox(width: 12),
+                          color: AppColors.success, size: 20),
+                      AppSpacing.hSpace12,
                       Expanded(
                         child: Text(
                           AppText.get('upload_processed_ready'),
                           style: const TextStyle(
-                            color: AppTheme.success,
+                            color: AppColors.success,
                             fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: AppTypography.weightMedium,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                AppSpacing.vSpace24,
 
                 // Action buttons
                 Row(
                   children: [
                     Expanded(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          // **NEW: Clear state for another upload**
-                          _selectedVideo.value = null;
-                          _unifiedProgress.value = 0.0;
-                          _currentPhase.value = '';
-                          _titleController.clear();
-                          _linkController.clear();
-                          _errorMessage.value = null;
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: const BorderSide(
-                              color: AppTheme.borderPrimary,
-                            ),
-                          ),
-                        ),
-                        child: Text(
-                          AppText.get('btn_upload_another'),
-                          style: const TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
+                      child: AppButton(
                         onPressed: () {
                           Navigator.of(context).pop(); // Close dialog
                           
@@ -1173,22 +943,9 @@ class _UploadScreenState extends State<UploadScreen> {
                             // Navigator.of(context).pop(); // REMOVED: Safety pop
                           }
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.success,
-                          foregroundColor: AppTheme.textPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          AppText.get('btn_view_in_feed'),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        label: AppText.get('btn_view_in_feed'),
+                        variant: AppButtonVariant.primary,
+                        isFullWidth: true,
                       ),
                     ),
                   ],
@@ -1208,11 +965,12 @@ class _UploadScreenState extends State<UploadScreen> {
         title: Text(AppText.get('upload_login_required')),
         content: Text(AppText.get('upload_please_sign_in_upload')),
         actions: [
-          TextButton(
+          AppButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(AppText.get('btn_cancel')),
+            label: AppText.get('btn_cancel'),
+            variant: AppButtonVariant.text,
           ),
-          TextButton(
+          AppButton(
             onPressed: () async {
               final authController = Provider.of<GoogleSignInController>(
                 context,
@@ -1224,7 +982,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 await LogoutService.refreshAllState(this.context);
               }
             },
-            child: Text(AppText.get('btn_sign_in')),
+            label: AppText.get('btn_sign_in'),
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -1377,6 +1136,9 @@ class _UploadScreenState extends State<UploadScreen> {
         _titleController.text = _deriveTitleFromFile(pickedFile);
         _selectedCategory.value ??= _defaultCategory;
         _isProcessing.value = false;
+        
+        // **AUTO-TRIGGER REMOVED** - User now clicks "Start Upload"
+        // _uploadVideo();
 
         AppLogger.log('✅ Media selected: ${pickedFile.path}');
         AppLogger.log(
@@ -1420,10 +1182,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: _authService.getUserData(),
-      builder: (context, snapshot) {
-        final isSignedIn = snapshot.hasData && snapshot.data != null;
+    return Consumer<GoogleSignInController>(
+      builder: (context, authController, _) {
+        final isSignedIn = authController.isSignedIn;
 
         return Scaffold(
           appBar: AppBar(
@@ -1445,496 +1206,370 @@ class _UploadScreenState extends State<UploadScreen> {
                 ),
             ],
           ),
-          body: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+          body: ValueListenableBuilder<bool>(
+            valueListenable: _isUploading,
+            builder: (context, isUploading, _) {
+              return ValueListenableBuilder<File?>(
+                valueListenable: _selectedVideo,
+                builder: (context, selectedVideo, _) {
+                  // State 1: Selection Dashboard
+                  if (!isUploading && selectedVideo == null) {
+                    return _buildInitialChoiceView(context, isSignedIn, authController);
+                  }
+                  
+                  // State 2: Upload Progress Dashboard (Visual-First)
+                  return _buildUploadProgressDashboard(context);
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInitialChoiceView(BuildContext context, bool isSignedIn, GoogleSignInController authController) {
+    if (!isSignedIn) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 64, color: AppColors.textTertiary),
+              const SizedBox(height: 24),
+              Text(
+                AppText.get('upload_login_required_title', fallback: 'Login Required'),
+                style: AppTypography.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                AppText.get('upload_login_required_desc', fallback: 'Please login to share your creativity with the world.'),
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 32),
+              AppButton(
+                onPressed: () async {
+                  final user = await authController.signIn();
+                  if (user != null) {
+                    await LogoutService.refreshAllState(context);
+                  }
+                },
+                label: AppText.get('btn_login', fallback: 'Login with Google'),
+                variant: AppButtonVariant.primary,
+                isFullWidth: true,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Column(
+          children: [
+            Text(
+              AppText.get('upload_choose_what_create'),
+              style: AppTypography.headlineLarge.copyWith(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 48),
+            
+            // Visual Choice: Video
+            _buildChoiceCard(
+              context: context,
+              icon: Icons.video_library,
+              title: AppText.get('upload_video'),
+              desc: AppText.get('upload_video_desc'),
+              color: AppColors.primary,
+              onTap: _pickVideo,
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Visual Choice: Ad
+            _buildChoiceCard(
+              context: context,
+              icon: Icons.campaign,
+              title: AppText.get('upload_create_ad'),
+              desc: AppText.get('upload_create_ad_desc'),
+              color: AppColors.success,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CreateAdScreenRefactored()),
+                );
+              },
+            ),
+            
+            const SizedBox(height: 40),
+            
+            // Policy Note
+            TextButton.icon(
+              onPressed: _showWhatToUploadDialog,
+              icon: const Icon(Icons.help_outline, size: 16),
+              label: Text(
+                AppText.get('upload_what_to_upload'),
+                style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary, decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChoiceCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String desc,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 32, color: color),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!isSignedIn)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.warning.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            color: AppTheme.warning,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              AppText.get('upload_please_sign_in'),
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.warning,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              final authController =
-                                  Provider.of<GoogleSignInController>(
-                                context,
-                                listen: false,
-                              );
-                              final user = await authController.signIn();
-                              if (user != null) {
-                                await LogoutService.refreshAllState(context);
-                              }
-                            },
-                            child: Text(AppText.get('btn_sign_in')),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  const SizedBox(height: 32),
-
-                  // T&C card moved into a modal; show entry point above in AppBar
-
-                  // Main Options Section
                   Text(
-                    AppText.get('upload_choose_what_create'),
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
+                    title,
+                    style: AppTypography.headlineSmall.copyWith(fontWeight: FontWeight.bold),
                   ),
-
-                  const SizedBox(height: 32),
-
-                  // Two Main Options
-                  Row(
-                    children: [
-                      // Upload Video Option
-                      Expanded(
-                        child: Card(
-                          elevation: 4,
-                          child: InkWell(
-                            onTap: isSignedIn
-                                ? () {
-                                    // **Directly pick video and show form**
-                                    _showUploadForm.value = true;
-                                    _pickVideo();
-                                  }
-                                : () {
-                                    _showLoginPrompt();
-                                  },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primary.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.video_library,
-                                      size: 48,
-                                      color: AppTheme.primary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    AppText.get('upload_video'),
-                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    AppText.get('upload_video_desc'),
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 16),
-
-                      // Create Ad Option
-                      Expanded(
-                        child: Card(
-                          elevation: 4,
-                          child: InkWell(
-                            onTap: isSignedIn
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const CreateAdScreenRefactored(),
-                                      ),
-                                    );
-                                  }
-                                : () {
-                                    _showLoginPrompt();
-                                  },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.success.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.campaign,
-                                      size: 48,
-                                      color: AppTheme.success,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    AppText.get('upload_create_ad'),
-                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    AppText.get('upload_create_ad_desc'),
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Video Upload Form (Conditional)
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _showUploadForm,
-                    builder: (context, showUploadForm, _) {
-                      if (!showUploadForm) return const SizedBox.shrink();
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.video_library,
-                                    color: AppTheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'Upload',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  IconButton(
-                                    onPressed: () {
-                                      // **NO setState: Use ValueNotifier**
-                                      _showUploadForm.value = false;
-                                      _deselectVideo();
-                                    },
-                                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Container(
-                                height: 200,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: AppTheme.borderPrimary),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: ValueListenableBuilder<bool>(
-                                  valueListenable: _isProcessing,
-                                  builder: (context, isProcessing, _) {
-                                    return ValueListenableBuilder<File?>(
-                                      valueListenable: _selectedVideo,
-                                      builder: (context, selectedVideo, _) {
-                                        return Stack(
-                                          children: [
-                                            InkWell(
-                                              onTap: isProcessing ? null : _pickVideo,
-                                              borderRadius: BorderRadius.circular(12),
-                                              child: Center(
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    if (isProcessing) ...[
-                                                      const CircularProgressIndicator(),
-                                                      const SizedBox(height: 16),
-                                                      Text(
-                                                        AppText.get('upload_processing_video'),
-                                                        style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
-                                                      ),
-                                                    ] else if (selectedVideo != null) ...[
-                                                      const Icon(Icons.perm_media, size: 48, color: AppTheme.primary),
-                                                      const SizedBox(height: 16),
-                                                      Text(
-                                                        selectedVideo.path.split('/').last,
-                                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                                        textAlign: TextAlign.center,
-                                                      ),
-                                                      const SizedBox(height: 8),
-                                                      Text(
-                                                        'Click to change',
-                                                        style: TextStyle(fontSize: 12, color: AppTheme.primary.withValues(alpha: 0.7)),
-                                                      ),
-                                                    ] else ...[
-                                                      const Icon(Icons.add_to_photos, size: 48, color: AppTheme.textSecondary),
-                                                      const SizedBox(height: 16),
-                                                      Text(
-                                                        AppText.get('btn_select_video', fallback: 'Select Video'),
-                                                        style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
-                                                      ),
-                                                    ],
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            if (selectedVideo != null && !isProcessing)
-                                              Positioned(
-                                                top: 8,
-                                                right: 8,
-                                                child: IconButton(
-                                                  onPressed: _deselectVideo,
-                                                  icon: Container(
-                                                    padding: const EdgeInsets.all(4),
-                                                    decoration: BoxDecoration(
-                                                      color: AppTheme.error.withValues(alpha: 0.1),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: const Icon(Icons.close, size: 20, color: AppTheme.error),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              UploadAdvancedSettingsSection(
-                                isExpanded: _showAdvancedSettings,
-                                onToggle: _toggleAdvancedSettings,
-                                titleController: _titleController,
-                                defaultCategory: _defaultCategory,
-                                selectedCategory: _selectedCategory,
-                                onCategoryChanged: (value) {
-                                  _selectedCategory.value =
-                                      value ?? _defaultCategory;
-                                },
-                                linkController: _linkController,
-                                tagInputController: _tagInputController,
-                                tags: _tags,
-                                onAddTag: _handleAddTag,
-                                onRemoveTag: _handleRemoveTag,
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: _showWhatToUploadDialog,
-                                  icon: const Icon(Icons.help_outline),
-                                  label: Text(
-                                      AppText.get('upload_what_to_upload')),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 14),
-                                    side: BorderSide(
-                                      color: Colors.blue.shade300,
-                                    ),
-                                    foregroundColor: Colors.blue.shade700,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-
-                              // **UNIFIED PROGRESS INDICATOR** - Shows complete upload + processing flow
-                              ValueListenableBuilder<bool>(
-                                valueListenable: _isUploading,
-                                builder: (context, isUploading, _) {
-                                  if (!isUploading) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Column(
-                                    children: [
-                                      _buildUnifiedProgressWidget(),
-                                      const SizedBox(height: 16),
-                                    ],
-                                  );
-                                },
-                              ),
-
-                              ValueListenableBuilder<String?>(
-                                valueListenable: _errorMessage,
-                                builder: (context, errorMessage, _) {
-                                  if (errorMessage == null) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return ValueListenableBuilder<bool>(
-                                    valueListenable: _isUploading,
-                                    builder: (context, isUploading, _) {
-                                      return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 16.0),
-                                        child: Column(
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.all(12.0),
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.error.withValues(alpha: 0.05),
-                                                borderRadius:
-                                                    BorderRadius.circular(8.0),
-                                                border: Border.all(
-                                                  color: AppTheme.error.withValues(alpha: 0.2),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.error_outline,
-                                                    color: AppTheme.error,
-                                                    size: 20,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      errorMessage,
-                                                      style: const TextStyle(
-                                                        color: AppTheme.error,
-                                                        fontSize: 14,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            const SizedBox(height: 12),
-                                            // Retry button
-                                            SizedBox(
-                                              width: double.infinity,
-                                              child: ElevatedButton.icon(
-                                                onPressed: isUploading
-                                                    ? null
-                                                    : () {
-                                                        // Clear error and retry upload
-                                                        _errorMessage.value =
-                                                            null;
-                                                        _uploadVideo();
-                                                      },
-                                                icon: const Icon(Icons.refresh),
-                                                label: Text(AppText.get(
-                                                    'btn_retry_upload')),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppTheme.primary,
-                                                  foregroundColor: Colors.white,
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    vertical: 12,
-                                                  ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                              ValueListenableBuilder<bool>(
-                                valueListenable: _isUploading,
-                                builder: (context, isUploading, _) {
-                                  return ValueListenableBuilder<File?>(
-                                    valueListenable: _selectedVideo,
-                                    builder: (context, selectedVideo, _) {
-                                      final bool hasVideo = selectedVideo != null;
-                                      
-                                      return SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton.icon(
-                                          onPressed: isUploading 
-                                            ? null 
-                                            : (hasVideo ? _uploadVideo : _pickVideo),
-                                          icon: isUploading
-                                              ? const SizedBox(
-                                                  width: 20,
-                                                  height: 20,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                                  ),
-                                                )
-                                              : Icon(hasVideo ? Icons.cloud_upload : Icons.video_library),
-                                          label: Text(
-                                            isUploading
-                                                ? AppText.get('upload_uploading')
-                                                : (hasVideo 
-                                                    ? AppText.get('btn_upload_media') 
-                                                    : AppText.get('btn_select_media')),
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: AppTheme.primary,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 16),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                  const SizedBox(height: 4),
+                  Text(
+                    desc,
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             ),
+            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.3)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUploadProgressDashboard(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          // Visual Video Preview / Progress Ring
+          Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ValueListenableBuilder<double>(
+                  valueListenable: _unifiedProgress,
+                  builder: (context, progress, _) {
+                    return SizedBox(
+                      width: 180,
+                      height: 180,
+                      child: CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 8,
+                        backgroundColor: AppColors.borderPrimary,
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      ),
+                    );
+                  },
+                ),
+                Container(
+                  width: 156,
+                  height: 156,
+                  decoration: const BoxDecoration(
+                    color: AppColors.backgroundSecondary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.movie_outlined, size: 72, color: AppColors.primary),
+                ),
+                // Done indicator
+                ValueListenableBuilder<String>(
+                  valueListenable: _currentPhase,
+                  builder: (context, phase, _) {
+                    if (phase != 'completed') return const SizedBox.shrink();
+                    return Container(
+                      width: 180,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check_circle, size: 80, color: AppColors.success),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-          bottomNavigationBar: null,
-        );
-      },
+          
+          const SizedBox(height: 32),
+          
+          // Current Status
+          ValueListenableBuilder<String>(
+            valueListenable: _currentPhase,
+            builder: (context, phase, _) {
+              return Text(
+                _progressPhases[phase]?['name'] ?? 'Processing...',
+                style: AppTypography.headlineSmall.copyWith(fontWeight: FontWeight.bold),
+              );
+            },
+          ),
+          
+          ValueListenableBuilder<String>(
+            valueListenable: _phaseDescription,
+            builder: (context, desc, _) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  desc,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 48),
+
+          // Advanced Settings Section (Integrated)
+          UploadAdvancedSettingsSection(
+            isExpanded: _showAdvancedSettings,
+            onToggle: _toggleAdvancedSettings,
+            titleController: _titleController,
+            selectedCategory: _selectedCategory,
+            defaultCategory: _defaultCategory,
+            onCategoryChanged: (val) => _selectedCategory.value = val,
+            linkController: _linkController,
+            tagInputController: _tagInputController,
+            tags: _tags,
+            onAddTag: _handleAddTag,
+            onRemoveTag: _handleRemoveTag,
+            onMakeEpisode: _handleMakeEpisode,
+          ),
+          
+          const SizedBox(height: 48),
+
+          // Error Message Display
+          ValueListenableBuilder<String?>(
+            valueListenable: _errorMessage,
+            builder: (context, error, _) {
+              if (error == null) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: AppColors.error),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(error, style: const TextStyle(color: AppColors.error))),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          // Action Buttons
+          ValueListenableBuilder<String>(
+            valueListenable: _currentPhase,
+            builder: (context, phase, _) {
+              final isComplete = phase == 'completed' || phase == 'finalizing';
+              final isError = _errorMessage.value != null;
+              final hasSelected = _selectedVideo.value != null;
+              final isUploading = _isUploading.value;
+
+              if (isError) {
+                return AppButton(
+                  onPressed: () {
+                    _errorMessage.value = null;
+                    _uploadVideo();
+                  },
+                  label: 'Retry Upload',
+                  variant: AppButtonVariant.primary,
+                  isFullWidth: true,
+                );
+              }
+
+              // Show "Start Upload" if video selected but not uploading
+              if (hasSelected && !isUploading && !isComplete) {
+                return AppButton(
+                  onPressed: _uploadVideo,
+                  label: 'Start Upload',
+                  variant: AppButtonVariant.primary,
+                  isFullWidth: true,
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                );
+              }
+
+              return Column(
+                children: [
+                  if (!isComplete)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppButton(
+                            onPressed: _cancelUpload,
+                            label: 'Cancel',
+                            variant: AppButtonVariant.outline,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: AppButton(
+                            onPressed: () => Navigator.pop(context),
+                            label: 'Run in BG',
+                            variant: AppButtonVariant.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (isComplete)
+                    AppButton(
+                      onPressed: () {
+                        widget.onVideoUploaded?.call();
+                        Navigator.pop(context);
+                      },
+                      label: 'Done',
+                      variant: AppButtonVariant.primary,
+                      isFullWidth: true,
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

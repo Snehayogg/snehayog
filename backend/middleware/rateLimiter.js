@@ -81,13 +81,23 @@ export const apiLimiter = rateLimit({
 // Strict limit to prevent brute-force password guessing
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 40, // **INCREASED**: 40 attempts (User requested 4x increase)
+  max: 60, // **INCREASED**: 60 attempts (Slightly more headroom for active sessions)
   standardHeaders: true,
   legacyHeaders: false,
   store: getStore('auth'),
-  // Auth routes are usually public, so keyGenerator will naturally use IP
-  // This is correct: we want to block the IP attempting to hack accounts
   message: 'Too many login attempts. Please try again in 15 minutes.',
+  handler: handler,
+});
+
+// 3.1 REFRESH LIMITER: More lenient for background token rotation
+export const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100, // Background refreshes can be frequent in multi-tab/active usage
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: getStore('refresh'),
+  keyGenerator: keyGenerator,
+  message: 'Too many session refresh requests. Please slow down.',
   handler: handler,
 });
 

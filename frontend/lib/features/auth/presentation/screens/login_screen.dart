@@ -6,6 +6,7 @@ import 'package:vayu/features/onboarding/data/services/location_onboarding_servi
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'dart:async';
 import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -197,55 +198,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                           // Skip Button
                                           Expanded(
                                             flex: 2,
-                                            child: SizedBox(
-                                              height: 50,
-                                              child: ElevatedButton.icon(
-                                                onPressed: () async {
-                                                  // Skip sign-in and go to home even during error
-                                                  // Clear error state and set skip flag
-                                                  authController.clearError();
-                                                  final prefs =
-                                                      await SharedPreferences
-                                                          .getInstance();
-                                                  await prefs.setBool(
-                                                      'auth_skip_login', true);
-                                                  if (context.mounted) {
-                                                    Navigator
-                                                        .pushReplacementNamed(
-                                                            context, '/home');
-                                                  }
-                                                },
-                                                icon: const Icon(
-                                                  Icons.arrow_forward_ios,
-                                                  color: Colors.black87,
-                                                  size: 16,
-                                                ),
-                                                label: const Text(
-                                                  'Skip',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.black87,
-                                                  ),
-                                                ),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.white,
-                                                  foregroundColor:
-                                                      Colors.black87,
-                                                  elevation: 0,
-                                                  shadowColor:
-                                                      Colors.transparent,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12),
-                                                    side: const BorderSide(
-                                                      color: Colors.black87,
-                                                      width: 1.2,
-                                                    ),
-                                                  ),
-                                                ),
+                                            child: AppButton(
+                                              isFullWidth: true,
+                                              onPressed: () async {
+                                                // Skip sign-in and go to home even during error
+                                                // Clear error state and set skip flag
+                                                authController.clearError();
+                                                final prefs =
+                                                    await SharedPreferences
+                                                        .getInstance();
+                                                await prefs.setBool(
+                                                    'auth_skip_login', true);
+                                                if (context.mounted) {
+                                                  Navigator
+                                                      .pushReplacementNamed(
+                                                          context, '/home');
+                                                }
+                                              },
+                                              icon: const Icon(
+                                                Icons.arrow_forward_ios,
+                                                size: 16,
                                               ),
+                                              label: 'Skip',
+                                              variant: AppButtonVariant.outline,
                                             ),
                                           ),
 
@@ -254,63 +229,40 @@ class _LoginScreenState extends State<LoginScreen> {
                                           // Retry Button
                                           Expanded(
                                             flex: 3,
-                                            child: SizedBox(
-                                              height: 50,
-                                              child: ElevatedButton.icon(
-                                                onPressed: () async {
-                                                  // Clear error and retry
-                                                  authController.clearError();
-                                                  final user =
-                                                      await authController
-                                                          .signIn();
-                                                  if (user != null &&
-                                                      context.mounted) {
-                                                    // Show location permission dialog for new user
-                                                    final result =
-                                                        await LocationOnboardingService
-                                                            .showLocationOnboarding(
-                                                                context);
-                                                    if (result) {
-                                                      AppLogger.log(
-                                                          '✅ User granted location permission');
-                                                    } else {
-                                                      AppLogger.log(
-                                                          '❌ User denied location permission');
-                                                    }
-
-                                                    Navigator
-                                                        .pushReplacementNamed(
-                                                            context, '/home');
+                                            child: AppButton(
+                                              isFullWidth: true,
+                                              onPressed: () async {
+                                                // Clear error and retry
+                                                authController.clearError();
+                                                final user =
+                                                    await authController
+                                                        .signIn();
+                                                if (user != null &&
+                                                    context.mounted) {
+                                                  // Show location permission dialog for new user
+                                                  final result =
+                                                      await LocationOnboardingService
+                                                          .showLocationOnboarding(
+                                                              context);
+                                                  if (result) {
+                                                    AppLogger.log(
+                                                        '✅ User granted location permission');
+                                                  } else {
+                                                    AppLogger.log(
+                                                        '❌ User denied location permission');
                                                   }
-                                                },
-                                                icon: const Icon(
-                                                  Icons.refresh_rounded,
-                                                  color: Colors.white,
-                                                  size: 18,
-                                                ),
-                                                label: const Text(
-                                                  'Retry Connection',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                                style:
-                                                    ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.red[600],
-                                                  foregroundColor: Colors.white,
-                                                  elevation: 0,
-                                                  shadowColor:
-                                                      Colors.transparent,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12),
-                                                  ),
-                                                ),
+
+                                                  Navigator
+                                                      .pushReplacementNamed(
+                                                          context, '/home');
+                                                }
+                                              },
+                                              icon: const Icon(
+                                                Icons.refresh_rounded,
+                                                size: 18,
                                               ),
+                                              label: 'Retry Connection',
+                                              variant: AppButtonVariant.danger,
                                             ),
                                           ),
                                         ],
@@ -333,128 +285,80 @@ class _LoginScreenState extends State<LoginScreen> {
                           ] else ...[
                             Column(
                               children: [
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 45,
-                                  child: ElevatedButton.icon(
-                                    onPressed: authController.isLoading
-                                        ? null
-                                        : () async {
-                                            final prefs =
-                                                await SharedPreferences
-                                                    .getInstance();
-                                            await prefs.setBool(
-                                                'auth_skip_login', true);
-                                            Navigator.pushReplacementNamed(
-                                                context, '/home');
-                                          },
-                                    icon: const Icon(
-                                      Icons.arrow_forward_ios,
-                                      color: Colors.black87,
-                                      size: 16,
-                                    ),
-                                    label: const Text(
-                                      'Skip',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: Colors.black87,
-                                      elevation: 0,
-                                      shadowColor: Colors.transparent,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        side: const BorderSide(
-                                          color: Colors.black87,
-                                          width: 1.2,
-                                        ),
-                                      ),
-                                    ),
+                                AppButton(
+                                  isFullWidth: true,
+                                  isDisabled: authController.isLoading,
+                                  onPressed: () async {
+                                    final prefs =
+                                        await SharedPreferences
+                                            .getInstance();
+                                    await prefs.setBool(
+                                        'auth_skip_login', true);
+                                    Navigator.pushReplacementNamed(
+                                        context, '/home');
+                                  },
+                                  icon: const Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 16,
                                   ),
+                                  label: 'Skip',
+                                  variant: AppButtonVariant.outline,
                                 ),
 
                                 const SizedBox(height: 12),
 
                                 // Google Sign-In Button
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 48,
-                                  child: ElevatedButton.icon(
-                                    onPressed: authController.isLoading
-                                        ? null
-                                        : () async {
-                                            final user =
-                                                await authController.signIn();
-                                            if (user != null &&
-                                                context.mounted) {
-                                              final result =
-                                                  await LocationOnboardingService
-                                                      .showLocationOnboarding(
-                                                          context);
-                                              if (result) {
-                                                AppLogger.log(
-                                                    '✅ User granted location permission');
-                                              } else {
-                                                AppLogger.log(
-                                                    '❌ User denied location permission');
-                                              }
+                                AppButton(
+                                  isFullWidth: true,
+                                  isDisabled: authController.isLoading,
+                                  onPressed: () async {
+                                    final user =
+                                        await authController.signIn();
+                                    if (user != null &&
+                                        context.mounted) {
+                                      final result =
+                                          await LocationOnboardingService
+                                              .showLocationOnboarding(
+                                                  context);
+                                      if (result) {
+                                        AppLogger.log(
+                                            '✅ User granted location permission');
+                                      } else {
+                                        AppLogger.log(
+                                            '❌ User denied location permission');
+                                      }
 
-                                               // **OPTIMIZED: Parallel state refresh and pre-fetch**
-                                               if (context.mounted) {
-                                                 setState(() => _isLocalLoading = true);
-                                                 final mainController =
-                                                     Provider.of<MainController>(
-                                                         context,
-                                                         listen: false);
-                                                 await mainController
-                                                     .refreshAppStateAfterSwitch(
-                                                         context);
-                                               }
+                                       // **OPTIMIZED: Parallel state refresh and pre-fetch**
+                                       if (context.mounted) {
+                                         setState(() => _isLocalLoading = true);
+                                         final mainController =
+                                             Provider.of<MainController>(
+                                                 context,
+                                                 listen: false);
+                                         await mainController
+                                             .refreshAppStateAfterSwitch(
+                                                 context);
+                                       }
 
-                                               if (context.mounted) {
-                                                 Navigator.pushReplacementNamed(
-                                                     context, '/home');
-                                               }
-                                            }
-                                          },
-                                    icon: Image.network(
-                                      'https://www.google.com/favicon.ico',
+                                       if (context.mounted) {
+                                         Navigator.pushReplacementNamed(
+                                             context, '/home');
+                                       }
+                                    }
+                                  },
+                                  icon: Image.network(
+                                    'https://www.google.com/favicon.ico',
+                                    height: 24,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Image.asset(
+                                      'assets/icons/google_logo.png',
+                                      width: 24,
                                       height: 24,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Image.asset(
-                                        'assets/icons/google_logo.png',
-                                        width: 24,
-                                        height: 24,
-                                      ),
-                                    ),
-                                    label: const Text(
-                                      'Sign in with Google',
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.grey[700],
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 24, vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        side: BorderSide(
-                                            color: Colors.grey[600]!),
-                                      ),
-                                      elevation: 2,
                                     ),
                                   ),
+                                  label: 'Sign in with Google',
+                                  variant: AppButtonVariant.primary,
                                 ),
                               ],
                             ),

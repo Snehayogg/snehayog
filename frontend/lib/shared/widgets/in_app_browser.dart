@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
+import 'package:vayu/core/design/radius.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 class InAppBrowser extends StatefulWidget {
   final String url;
@@ -67,10 +71,10 @@ class _InAppBrowserState extends State<InAppBrowser> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.backgroundPrimary,
+        color: AppColors.backgroundPrimary,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(AppTheme.radiusLarge),
-          topRight: Radius.circular(AppTheme.radiusLarge),
+          topLeft: Radius.circular(AppRadius.lg),
+          topRight: Radius.circular(AppRadius.lg),
         ),
       ),
       child: Column(
@@ -79,10 +83,10 @@ class _InAppBrowserState extends State<InAppBrowser> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: AppTheme.backgroundSecondary,
+              color: AppColors.backgroundSecondary,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(AppTheme.radiusLarge),
-                topRight: Radius.circular(AppTheme.radiusLarge),
+                topLeft: Radius.circular(AppRadius.lg),
+                topRight: Radius.circular(AppRadius.lg),
               ),
               boxShadow: [
                 BoxShadow(
@@ -95,7 +99,7 @@ class _InAppBrowserState extends State<InAppBrowser> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.close, color: AppTheme.textPrimary),
+                  icon: const Icon(Icons.close, color: AppColors.textPrimary),
                   onPressed: () => Navigator.of(context).pop(),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -107,8 +111,8 @@ class _InAppBrowserState extends State<InAppBrowser> {
                     children: [
                       Text(
                         widget.title,
-                        style: AppTheme.titleMedium.copyWith(
-                          color: AppTheme.textPrimary,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: AppColors.textPrimary,
                           fontWeight: FontWeight.bold,
                         ),
                         maxLines: 1,
@@ -116,8 +120,8 @@ class _InAppBrowserState extends State<InAppBrowser> {
                       ),
                       Text(
                         widget.url,
-                        style: AppTheme.bodySmall.copyWith(
-                          color: AppTheme.textSecondary,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
                           fontSize: 12,
                         ),
                         maxLines: 1,
@@ -131,7 +135,7 @@ class _InAppBrowserState extends State<InAppBrowser> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.open_in_browser, size: 20, color: AppTheme.white),
+                      icon: const Icon(Icons.open_in_browser, size: 20, color: AppColors.white),
                       tooltip: 'Open in external browser',
                       onPressed: () async {
                         final currentUrl = await _controller.currentUrl();
@@ -144,7 +148,7 @@ class _InAppBrowserState extends State<InAppBrowser> {
                       },
                     ),
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios, size: 16, color: AppTheme.textSecondary),
+                      icon: const Icon(Icons.arrow_back_ios, size: 16, color: AppColors.textSecondary),
                       onPressed: () async {
                         if (await _controller.canGoBack()) {
                           _controller.goBack();
@@ -152,7 +156,7 @@ class _InAppBrowserState extends State<InAppBrowser> {
                       },
                     ),
                     IconButton(
-                      icon: const Icon(Icons.refresh, size: 20, color: AppTheme.textSecondary),
+                      icon: const Icon(Icons.refresh, size: 20, color: AppColors.textSecondary),
                       onPressed: () => _controller.reload(),
                     ),
                   ],
@@ -165,8 +169,8 @@ class _InAppBrowserState extends State<InAppBrowser> {
           if (_isLoading || _progress < 1.0)
             LinearProgressIndicator(
               value: _progress,
-              backgroundColor: AppTheme.backgroundSecondary,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+              backgroundColor: AppColors.backgroundSecondary,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
               minHeight: 2,
             ),
             

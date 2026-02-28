@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 /// Loading indicator widget for better performance
 class LoadingIndicatorWidget extends StatelessWidget {
@@ -67,45 +68,38 @@ class EmptyVideoStateWidget extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          AppButton(
             onPressed: onRefresh,
-            child: const Text('Refresh'),
+            label: 'Refresh',
+            variant: AppButtonVariant.primary,
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          AppButton(
             onPressed: onTestApi,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
-            child: const Text('Test API Connection'),
+            label: 'Test API Connection',
+            variant: AppButtonVariant.secondary,
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          AppButton(
             onPressed: onTestVideoLink,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
-            ),
-            child: const Text('Test Video Links'),
+            label: 'Test Video Links',
+            variant: AppButtonVariant.secondary,
           ),
           const SizedBox(height: 16),
           // Add cache management buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ElevatedButton(
+              AppButton(
                 onPressed: onClearCache,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                ),
-                child: const Text('Clear Cache'),
+                label: 'Clear Cache',
+                variant: AppButtonVariant.danger,
               ),
               const SizedBox(width: 16),
-              ElevatedButton(
+              AppButton(
                 onPressed: onGetCacheInfo,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                ),
-                child: const Text('Cache Info'),
+                label: 'Cache Info',
+                variant: AppButtonVariant.secondary,
               ),
             ],
           ),

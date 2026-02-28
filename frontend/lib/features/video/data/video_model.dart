@@ -24,6 +24,7 @@
   final String? hlsPlaylistUrl;
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
+  final Map<String, String>? dubbedUrls;
   bool isLiked;
 
   // **SIMPLIFIED: Since all videos are 480p, we only need one quality URL**
@@ -71,6 +72,7 @@
     this.episodes, // **NEW: Related episodes**
     this.seriesId,
     this.episodeNumber,
+    this.dubbedUrls,
     this.isLiked = false,
   });
 
@@ -317,6 +319,12 @@
         episodeNumber: (json['episodeNumber'] is int)
             ? json['episodeNumber']
             : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
+        dubbedUrls: () {
+          if (json['dubbedUrls'] is Map) {
+            return Map<String, String>.from(json['dubbedUrls'] as Map);
+          }
+          return null;
+        }(),
         isLiked: json['isLiked'] == true,
       );
     } catch (e) {
@@ -377,6 +385,7 @@
       'episodes': episodes,
       'seriesId': seriesId,
       'episodeNumber': episodeNumber,
+      'dubbedUrls': dubbedUrls,
       'isLiked': isLiked,
     };
   }
@@ -411,6 +420,7 @@
     List<Map<String, dynamic>>? episodes,
     String? seriesId,
     int? episodeNumber,
+    Map<String, String>? dubbedUrls,
     bool? isLiked,
   }) {
     return VideoModel(
@@ -445,6 +455,7 @@
       episodes: episodes ?? this.episodes,
       seriesId: seriesId ?? this.seriesId,
       episodeNumber: episodeNumber ?? this.episodeNumber,
+      dubbedUrls: dubbedUrls ?? this.dubbedUrls,
       isLiked: isLiked ?? this.isLiked,
     );
   }

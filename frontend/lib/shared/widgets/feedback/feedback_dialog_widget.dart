@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class FeedbackDialogWidget extends StatefulWidget {
   const FeedbackDialogWidget({super.key});
@@ -95,20 +96,18 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
               content: const Text(
                   'Since you liked the app, would you mind giving us a 5-star rating on the Google Play Store? It really helps us grow!'),
               actions: [
-                TextButton(
+                AppButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Maybe Later'),
+                  label: 'Maybe Later',
+                  variant: AppButtonVariant.text,
                 ),
-                ElevatedButton(
+                AppButton(
                   onPressed: () {
                     Navigator.pop(context);
                     _launchPlayStore();
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Rate Now'),
+                  label: 'Rate Now',
+                  variant: AppButtonVariant.primary,
                 ),
               ],
             ),
@@ -230,39 +229,18 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
                 ),
               ),
               const SizedBox(height: 24),
-               SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: _submitting ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  child: _submitting
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text(
-                          'RATE',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                ),
+              AppButton(
+                onPressed: _submitting ? null : _submit,
+                label: 'RATE',
+                variant: AppButtonVariant.primary,
+                isLoading: _submitting,
+                isFullWidth: true,
               ),
                const SizedBox(height: 8),
-               TextButton(
+                AppButton(
                   onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Maybe Later', style: TextStyle(color: Colors.grey)),
+                  label: 'Maybe Later',
+                  variant: AppButtonVariant.text,
                 ),
             ],
           ),

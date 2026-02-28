@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 /// **AdTypeSelectorWidget - Handles ad type selection**
 class AdTypeSelectorWidget extends StatelessWidget {
@@ -26,16 +30,16 @@ class AdTypeSelectorWidget extends StatelessWidget {
           children: [
             Text(
               'Ad Type',
-              style: AppTheme.headlineSmall.copyWith(
+              style: AppTypography.headlineSmall.copyWith(
                 fontWeight: FontWeight.bold,
-                color: AppTheme.white,
+                color: AppColors.white,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _getAdTypeDescription(selectedAdType),
-              style: TextStyle(
-                color: AppTheme.textSecondary,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
               ),
@@ -44,20 +48,20 @@ class AdTypeSelectorWidget extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.primary.withOpacity(0.05),
+                color: AppColors.primary.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      size: 16, color: AppTheme.primary),
+                  const Icon(Icons.info_outline,
+                      size: 16, color: AppColors.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _getAdTypeInfo(selectedAdType),
-                      style: TextStyle(
-                        color: AppTheme.primary,
+                      style: const TextStyle(
+                        color: AppColors.primary,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -83,30 +87,13 @@ class AdTypeSelectorWidget extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             // Benefits Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
+            AppButton(
                 onPressed: onShowBenefits,
                 icon: const Icon(Icons.info_outline, size: 20),
-                label: const Text(
-                  'Why Advertise on Vayug?',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary.withOpacity(0.12),
-                  foregroundColor: AppTheme.white,
-                  elevation: 0,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(color: AppTheme.primary.withOpacity(0.3), width: 1),
-                  ),
-                ),
-              ),
+                label: 'Why Advertise on Vayug?',
+                variant: AppButtonVariant.outline,
+                isFullWidth: true,
+                size: AppButtonSize.medium,
             ),
           ],
         ),

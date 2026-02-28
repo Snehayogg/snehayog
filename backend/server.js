@@ -35,13 +35,14 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import searchRoutes from './routes/searchRoutes.js';
 import appConfigRoutes from './routes/appConfigRoutes.js';
 import gameRoutes from './routes/gameRoutes.js'; // **NEW**
+import dubbingRoutes from './routes/dubbingRoutes.js'; // **NEW**
 
 // Import services
 import automatedPayoutService from './services/automatedPayoutService.js';
-import adCleanupService from './services/adCleanupService.js';
 import redisService from './services/redisService.js';
 import monthlyNotificationCron from './services/monthlyNotificationCron.js';
 import recommendationScoreCron from './services/recommendationScoreCron.js';
+import adCleanupService from './services/adCleanupService.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -140,13 +141,9 @@ app.use(cors({
       'http://localhost:8080', // Flutter web default port
       /^http:\/\/localhost:\d+$/, // Any localhost port (for Flutter web)
       'http://127.0.0.1', // Localhost alternative (any port)
-      'http://127.0.0.1:5000', // Localhost alternative
-      'http://127.0.0.1:5001', // Localhost alternative
-      'http://127.0.0.1:8080', // Flutter web default port
       /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 port (for Flutter web)
-      'http://192.168.0.184:5001', // Local development (LAN)
       'http:/192.168.0.187:5001', // Local development (User Laptop)
-      'http://192.168.0.198:5001', // Local development (LAN)
+      'http:/192.168.0.190:5001', 
       /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Any LAN IP (for mobile devices)
       'http://10.0.2.2:5001', // Android emulator
     ];
@@ -290,6 +287,7 @@ apiRouter.use('/report', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/search', searchRoutes);
 apiRouter.use('/games', gameRoutes); // **NEW**
+apiRouter.use('/dubbing', dubbingRoutes); // **NEW**
 
 // Apply versioning middleware to the API router
 import { verifyToken, passiveVerifyToken } from './utils/verifytoken.js';

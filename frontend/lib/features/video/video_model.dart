@@ -24,6 +24,7 @@
   final String? hlsPlaylistUrl;
   final List<Map<String, dynamic>>? hlsVariants;
   final bool? isHLSEncoded;
+  final Map<String, String>? dubbedUrls;
   bool isLiked;
   bool isSaved; // **NEW: Track if video is saved by current user**
   final bool isOptimistic; // **NEW: Track optimistically injected videos**
@@ -73,6 +74,7 @@
     this.episodes, // **NEW: Related episodes**
     this.seriesId,
     this.episodeNumber,
+    this.dubbedUrls,
     this.isLiked = false,
     this.isSaved = false, // **NEW: Default to false**
     this.isOptimistic = false, // **NEW: Default to false**
@@ -321,6 +323,12 @@
         episodeNumber: (json['episodeNumber'] is int)
             ? json['episodeNumber']
             : int.tryParse(json['episodeNumber']?.toString() ?? '0') ?? 0,
+        dubbedUrls: () {
+          if (json['dubbedUrls'] is Map) {
+            return Map<String, String>.from(json['dubbedUrls'] as Map);
+          }
+          return null;
+        }(),
         isLiked: json['isLiked'] == true,
         isSaved: json['isSaved'] == true, // **NEW: Parse isSaved from backend**
         isOptimistic: json['isOptimistic'] == true,
@@ -383,6 +391,7 @@
       'episodes': episodes,
       'seriesId': seriesId,
       'episodeNumber': episodeNumber,
+      'dubbedUrls': dubbedUrls,
       'isLiked': isLiked,
       'isSaved': isSaved, // **NEW: Include isSaved in JSON**
       'isOptimistic': isOptimistic,
@@ -419,6 +428,7 @@
     List<Map<String, dynamic>>? episodes,
     String? seriesId,
     int? episodeNumber,
+    Map<String, String>? dubbedUrls,
     bool? isLiked,
     bool? isSaved, 
     bool? isOptimistic,
@@ -454,6 +464,7 @@
       episodes: episodes ?? this.episodes,
       seriesId: seriesId ?? this.seriesId,
       episodeNumber: episodeNumber ?? this.episodeNumber,
+      dubbedUrls: dubbedUrls ?? this.dubbedUrls,
       isLiked: isLiked ?? this.isLiked,
       isSaved: isSaved ?? this.isSaved,
       isOptimistic: isOptimistic ?? this.isOptimistic,

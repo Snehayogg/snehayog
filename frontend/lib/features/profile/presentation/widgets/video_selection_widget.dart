@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/constants/profile_constants.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class VideoSelectionWidget extends StatelessWidget {
   final bool isVisible;
@@ -54,33 +55,32 @@ class VideoSelectionWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: ProfileConstants.mediumSpacing),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.delete),
-                  label: Text('${ProfileConstants.deleteSelectedText} ($selectedCount)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(ProfileConstants.redColor),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(ProfileConstants.greyColor),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: ProfileConstants.mediumSpacing,
+                runSpacing: ProfileConstants.smallSpacing,
+                children: [
+                  AppButton(
+                    icon: const Icon(Icons.delete),
+                    label: '${ProfileConstants.deleteSelectedText} ($selectedCount)',
+                    variant: AppButtonVariant.danger,
+                    isDisabled: selectedCount <= 0,
+                    onPressed: onDelete,
                   ),
-                  onPressed: selectedCount > 0 ? onDelete : null,
-                ),
-                const SizedBox(width: ProfileConstants.mediumSpacing),
-                TextButton.icon(
-                  icon: const Icon(Icons.clear),
-                  label: const Text(ProfileConstants.clearSelectionText),
-                  onPressed: onClearSelection,
-                ),
-                const SizedBox(width: ProfileConstants.mediumSpacing),
-                TextButton.icon(
-                  icon: const Icon(Icons.close),
-                  label: const Text(ProfileConstants.exitSelectionText),
-                  onPressed: onExitSelection,
-                ),
-              ],
-            ),
+                  AppButton(
+                    icon: const Icon(Icons.clear),
+                    label: ProfileConstants.clearSelectionText,
+                    variant: AppButtonVariant.text,
+                    onPressed: onClearSelection,
+                  ),
+                  AppButton(
+                    icon: const Icon(Icons.close),
+                    label: ProfileConstants.exitSelectionText,
+                    variant: AppButtonVariant.text,
+                    onPressed: onExitSelection,
+                  ),
+                ],
+              ),
           ],
         ),
       ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/radius.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../theme/app_theme.dart';
+
 
 class VayuLogo extends StatelessWidget {
   final double fontSize;
@@ -22,8 +25,8 @@ class VayuLogo extends StatelessWidget {
       'ᴠᴀʏᴜ',
       style: GoogleFonts.inter(
         fontSize: fontSize,
-        fontWeight: AppTheme.weightBold, // Bold for logo prominence
-        color: textColor ?? AppTheme.primary,
+        fontWeight: AppTypography.weightBold, // Bold for logo prominence
+        color: textColor ?? AppColors.primary,
         letterSpacing: -0.5, // Slightly tighter tracking for modern look
         height: 1.2,
       ),
@@ -36,12 +39,12 @@ class VayuLogo extends StatelessWidget {
           vertical: fontSize * 0.25,
         ),
         decoration: BoxDecoration(
-          color: AppTheme.backgroundPrimary,
+          color: AppColors.backgroundPrimary,
           borderRadius: BorderRadius.circular(
-            borderRadius ?? AppTheme.radiusMedium,
+            borderRadius ?? AppRadius.md,
           ),
           border: Border.all(
-            color: AppTheme.borderPrimary.withOpacity(0.5),
+            color: AppColors.borderPrimary.withOpacity(0.5),
             width: 1,
           ),
         ),

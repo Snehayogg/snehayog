@@ -8,7 +8,10 @@ import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/services/search_service.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 
 /// Global search UI for videos and creators.
 class VideoCreatorSearchDelegate extends SearchDelegate<void> {
@@ -34,17 +37,17 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
   ThemeData appBarTheme(BuildContext context) {
     return AppTheme.lightTheme.copyWith(
       appBarTheme: AppBarTheme(
-        backgroundColor: AppTheme.backgroundPrimary,
+        backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
-        iconTheme: const IconThemeData(color: AppTheme.textPrimary),
-        titleTextStyle: AppTheme.titleLarge.copyWith(
-          color: AppTheme.textPrimary,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        titleTextStyle: AppTypography.titleLarge.copyWith(
+          color: AppColors.textPrimary,
           fontWeight: FontWeight.w600,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: InputBorder.none,
-        hintStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+        hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
       ),
     );
   }
@@ -359,25 +362,25 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     return ListTile(
       leading: CircleAvatar(
         radius: 24,
-        backgroundColor: AppTheme.backgroundSecondary,
+        backgroundColor: AppColors.backgroundSecondary,
         backgroundImage: creator.profilePic.isNotEmpty
             ? CachedNetworkImageProvider(creator.profilePic)
             : null,
         child: creator.profilePic.isEmpty
-            ? const Icon(Icons.person, color: AppTheme.textSecondary)
+            ? const Icon(Icons.person, color: AppColors.textSecondary)
             : null,
       ),
       title: Text(
         creator.name,
-        style: AppTheme.titleMedium.copyWith(fontWeight: FontWeight.w600),
+        style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w600),
       ),
       subtitle: Text(
         (creator.bio?.isNotEmpty ?? false) ? creator.bio! : 'View profile',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTheme.bodySmall,
+        style: AppTypography.bodySmall,
       ),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textTertiary),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textTertiary),
       onTap: () {
         close(context, null);
         
@@ -416,25 +419,25 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       dense: true,
       leading: CircleAvatar(
         radius: 18,
-        backgroundColor: AppTheme.backgroundSecondary,
+        backgroundColor: AppColors.backgroundSecondary,
         backgroundImage: creator.profilePic.isNotEmpty
             ? CachedNetworkImageProvider(creator.profilePic)
             : null,
         child: creator.profilePic.isEmpty
-            ? const Icon(Icons.person, color: AppTheme.textSecondary, size: 18)
+            ? const Icon(Icons.person, color: AppColors.textSecondary, size: 18)
             : null,
       ),
       title: Text(
         creator.name,
-        style: AppTheme.titleSmall.copyWith(fontWeight: FontWeight.w600),
+        style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600),
       ),
       subtitle: Text(
         (creator.bio?.isNotEmpty ?? false) ? creator.bio! : 'View profile',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTheme.labelSmall,
+        style: AppTypography.labelSmall,
       ),
-      trailing: const Icon(Icons.north_west, size: 14, color: AppTheme.textTertiary),
+      trailing: const Icon(Icons.north_west, size: 14, color: AppColors.textTertiary),
       onTap: () {
         close(context, null);
         
@@ -494,22 +497,22 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                 errorWidget: (context, url, error) => Container(
                   width: 72,
                   height: 72,
-                  color: AppTheme.backgroundSecondary,
+                  color: AppColors.backgroundSecondary,
 child:
-                      const Icon(Icons.play_circle_outline, color: AppTheme.textTertiary),
+                      const Icon(Icons.play_circle_outline, color: AppColors.textTertiary),
                 ),
               )
             : Container(
                 width: 72,
                 height: 72,
-                color: AppTheme.backgroundSecondary,
+                color: AppColors.backgroundSecondary,
                 child: const Icon(Icons.play_circle_outline,
-                    color: AppTheme.textTertiary, size: 32),
+                    color: AppColors.textTertiary, size: 32),
               ),
       ),
       title: Text(
         video.videoName,
-        style: AppTheme.titleMedium.copyWith(fontWeight: FontWeight.w600),
+        style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.w600),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -517,11 +520,11 @@ child:
         padding: const EdgeInsets.only(top: 4),
         child: Row(
           children: [
-            const Icon(Icons.visibility, size: 14, color: AppTheme.textTertiary),
+            const Icon(Icons.visibility, size: 14, color: AppColors.textTertiary),
             const SizedBox(width: 4),
             Text(
               _formatViewCount(video.views),
-              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+              style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -575,28 +578,28 @@ child:
                 errorWidget: (context, url, error) => Container(
                   width: 56,
                   height: 56,
-                  color: AppTheme.backgroundSecondary,
+                  color: AppColors.backgroundSecondary,
                   child: const Icon(Icons.play_circle_outline,
-                      color: AppTheme.textTertiary, size: 24),
+                      color: AppColors.textTertiary, size: 24),
                 ),
               )
             : Container(
                 width: 56,
                 height: 56,
-                color: AppTheme.backgroundSecondary,
+                color: AppColors.backgroundSecondary,
                 child: const Icon(Icons.play_circle_outline,
-                    color: AppTheme.textTertiary, size: 24),
+                    color: AppColors.textTertiary, size: 24),
               ),
       ),
       title: Text(
         video.videoName,
-        style: AppTheme.titleSmall.copyWith(fontWeight: FontWeight.w500),
+        style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w500),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
         '${_formatViewCount(video.views)} views',
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+        style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
       ),
       trailing:
           Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),

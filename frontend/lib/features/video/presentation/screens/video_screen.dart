@@ -12,7 +12,6 @@ class VideoScreen extends StatefulWidget {
   final String? initialVideoId;
   final String? videoType; // **NEW: Allow passing videoType**
 
-  final bool isFullScreen; // **NEW: Flag for full-screen mode**
 
   const VideoScreen({
     Key? key,
@@ -20,7 +19,6 @@ class VideoScreen extends StatefulWidget {
     this.initialVideos,
     this.initialVideoId,
     this.videoType,
-    this.isFullScreen = false, // Default to false
   }) : super(key: key);
 
   @override
@@ -47,22 +45,34 @@ class _VideoScreenState extends State<VideoScreen> {
   void initState() {
     super.initState();
     AppLogger.log('🎬 VideoScreen: Initializing VideoScreen');
+
+    // **FIX: Pause all background videos when entering a new VideoScreen**
+    // This ensures Yug tab videos pause if this screen is pushed as a full-screen player
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final state = _videoFeedKey.currentState;
-      if (state != null) {
-        try {
-          (state as dynamic).forcePlayCurrent();
-        } catch (_) {}
-      }
-      // Some devices need a short delay for the first frame to attach
-      Future.delayed(const Duration(milliseconds: 120), () {
-        final s = _videoFeedKey.currentState;
-        if (s != null) {
+      try {
+        final mainController =
+            Provider.of<MainController>(context, listen: false);
+        mainController.forcePauseVideos();
+
+        final state = _videoFeedKey.currentState;
+        if (state != null) {
           try {
-            (s as dynamic).forcePlayCurrent();
+            (state as dynamic).forcePlayCurrent();
           } catch (_) {}
         }
-      });
+      } catch (e) {
+        AppLogger.log('⚠️ VideoScreen: Error pausing background videos: $e');
+      }
+    });
+
+    // Some devices need a short delay for the first frame to attach
+    Future.delayed(const Duration(milliseconds: 120), () {
+      final s = _videoFeedKey.currentState;
+      if (s != null) {
+        try {
+          (s as dynamic).forcePlayCurrent();
+        } catch (_) {}
+      }
     });
   }
 
@@ -110,7 +120,6 @@ class _VideoScreenState extends State<VideoScreen> {
       initialVideos: widget.initialVideos,
       initialVideoId: widget.initialVideoId,
       videoType: videoType,
-      isFullScreen: widget.isFullScreen,
     );
   }
 }

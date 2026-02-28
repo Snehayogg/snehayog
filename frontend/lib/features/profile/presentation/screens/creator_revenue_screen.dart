@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:vayu/core/design/spacing.dart';
+import 'package:vayu/core/design/radius.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
 
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
@@ -13,6 +16,7 @@ import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/features/profile/data/datasources/profile_local_datasource.dart'; // Added for cache fallback
+import 'package:vayu/shared/widgets/app_button.dart';
 
 // Lightweight holder for per-video stats used in the breakdown list
 class _VideoStats {
@@ -249,7 +253,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
            ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                content: Text('Unable to load video details.'),
-               backgroundColor: Colors.orange,
+               backgroundColor: AppColors.warning,
                duration:  Duration(seconds: 4),
              ),
            );
@@ -384,19 +388,20 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+         const Icon(
             Icons.lock_outline,
             size: 64,
-            color: Colors.grey,
+            color: AppColors.textSecondary,
           ),
-          const SizedBox(height: 16),
+          AppSpacing.vSpace16,
           Text(
             AppText.get('revenue_sign_in_to_view'),
-            style: const TextStyle(fontSize: 18, color: Colors.grey),
+            style: const TextStyle(fontSize: 18, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
-          ElevatedButton(
+          AppSpacing.vSpace24,
+          AppButton(
+            isFullWidth: true,
             onPressed: () async {
               final authController = Provider.of<GoogleSignInController>(
                 context,
@@ -410,7 +415,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 }
               }
             },
-            child: Text(AppText.get('btn_sign_in_google')),
+            label: AppText.get('btn_sign_in_google'),
+            variant: AppButtonVariant.primary,
           ),
         ],
       ),
@@ -427,17 +433,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
+            const Icon(Icons.error_outline, size: 64, color: AppColors.error),
+            AppSpacing.vSpace16,
             Text(
               _errorMessage!,
-              style: const TextStyle(color: Colors.red),
+              style: const TextStyle(color: AppColors.error),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
+            AppSpacing.vSpace16,
+            AppButton(
               onPressed: () => _loadRevenueData(forceRefresh: true),
-              child: Text(AppText.get('btn_retry')),
+              label: AppText.get('btn_retry'),
+              variant: AppButtonVariant.primary,
             ),
           ],
         ),
@@ -453,28 +460,28 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return RefreshIndicator(
       onRefresh: () async => await _loadRevenueData(forceRefresh: true),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppTheme.spacing4),
+        padding: const EdgeInsets.all(AppSpacing.spacing4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // **NEW: Revenue Overview Card**
           _buildRevenueOverviewCard(),
 
-          const SizedBox(height: 16),
+          AppSpacing.vSpace16,
 
           // **NEW: Monthly Views Card**
           _buildMonthlyViewsCard(),
 
-          const SizedBox(height: 24),
+          AppSpacing.vSpace24,
 
           // **NEW: Revenue Analytics Card**
           _buildRevenueAnalyticsCard(),
 
-          const SizedBox(height: 24),
+          AppSpacing.vSpace24,
 
           // **NEW: Revenue Breakdown**
           _buildRevenueBreakdownCard(),
-          const SizedBox(height: 24),
+          AppSpacing.vSpace24,
         ],
       ),
     ));
@@ -492,29 +499,29 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: const BorderSide(color: AppColors.borderPrimary, width: 1),
       ),
-      color: AppTheme.backgroundPrimary,
+      color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing5),
+        padding: const EdgeInsets.all(AppSpacing.spacing5),
         child: Column(
           children: [
             Text(
               AppText.get('revenue_creator_earnings'),
               style: const TextStyle(
                 fontSize: 16,
-                color: AppTheme.textSecondary,
+                color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 8),
+            AppSpacing.vSpace8,
             Text(
               creatorRevenue.toStringAsFixed(2),
-              style: AppTheme.displaySmall.copyWith(
-                color: AppTheme.success, // Use success color for positive rewards
+              style: AppTypography.displaySmall.copyWith(
+                color: AppColors.success, // Use success color for positive rewards
               ),
             ),
-            const SizedBox(height: 20),
+            AppSpacing.vSpace24,
             Row(
               children: [
                 Expanded(
@@ -522,7 +529,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     AppText.get('revenue_gross_revenue'),
                     grossRevenue.toStringAsFixed(2),
                     Icons.receipt_long,
-                    AppTheme.textPrimary,
+                    AppColors.textPrimary,
                   ),
                 ),
                 Expanded(
@@ -530,7 +537,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     AppText.get('revenue_last_month'),
                     lastMonth.toStringAsFixed(2),
                     Icons.history,
-                    AppTheme.textPrimary,
+                    AppColors.textPrimary,
                   ),
                 ),
               ],
@@ -546,18 +553,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return Column(
       children: [
         Icon(icon, color: color, size: 24),
-        const SizedBox(height: AppTheme.spacing1),
+        const SizedBox(height: AppSpacing.spacing1),
         Text(
           value,
-          style: AppTheme.titleLarge.copyWith(
-            fontWeight: AppTheme.weightBold,
+          style: AppTypography.titleLarge.copyWith(
+            fontWeight: AppTypography.weightBold,
             color: color,
           ),
         ),
         Text(
           label,
-          style: AppTheme.bodySmall.copyWith(
-            color: AppTheme.textTertiary,
+          style: AppTypography.bodySmall.copyWith(
+            color: AppColors.textTertiary,
           ),
         ),
       ],
@@ -572,12 +579,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: const BorderSide(color: AppColors.borderPrimary, width: 1),
       ),
-      color: AppTheme.backgroundPrimary,
+      color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing5),
+        padding: const EdgeInsets.all(AppSpacing.spacing5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -586,35 +593,35 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               children: [
                 Text(
                   AppText.get('revenue_view_cycle'),
-                  style: AppTheme.headlineSmall.copyWith(
-                    fontWeight: AppTheme.weightBold,
+                  style: AppTypography.headlineSmall.copyWith(
+                    fontWeight: AppTypography.weightBold,
                   ),
                 ),
-                Icon(
+               const Icon(
                   Icons.visibility,
-                  color: AppTheme.textSecondary,
+                  color: AppColors.textSecondary,
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            AppSpacing.vSpace16,
             if (_isMonthlyViewsLoading)
               const Center(child: CircularProgressIndicator())
             else ...[
               Text(
                 AppText.get('revenue_current_cycle_views'),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
-                  color: AppTheme.textSecondary,
+                  color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 4),
+              AppSpacing.vSpace4,
               Text(
                 _currentMonthViews.toString(),
-                style: AppTheme.displaySmall.copyWith(
-                  color: AppTheme.success,
+                style: AppTypography.displaySmall.copyWith(
+                  color: AppColors.success,
                 ),
               ),
-              const SizedBox(height: 20),
+              AppSpacing.vSpace24,
               _buildAnalyticsRow(
                 AppText.get('revenue_all_time_views'),
                 _allTimeViews.toString(),
@@ -636,26 +643,26 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildAnalyticsRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.spacing2),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.spacing2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
             child: Text(
               label,
-              style: AppTheme.bodyMedium.copyWith(
-                color: AppTheme.textSecondary,
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
               ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: AppTheme.spacing2),
+          SizedBox(width: AppSpacing.spacing2),
           Flexible(
             child: Text(
               value,
-              style: AppTheme.titleSmall.copyWith(
-                fontWeight: AppTheme.weightBold,
-                color: AppTheme.textPrimary,
+              style: AppTypography.titleSmall.copyWith(
+                fontWeight: AppTypography.weightBold,
+                color: AppColors.textPrimary,
               ),
               textAlign: TextAlign.right,
               overflow: TextOverflow.ellipsis,
@@ -708,12 +715,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: AppColors.borderPrimary, width: 1),
       ),
-      color: AppTheme.backgroundPrimary,
+      color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing5),
+        padding: const EdgeInsets.all(AppSpacing.spacing5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -721,29 +728,29 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               children: [
                 Text(
                   AppText.get('revenue_analytics'),
-                  style: AppTheme.headlineSmall.copyWith(
-                    fontWeight: AppTheme.weightBold,
+                  style: AppTypography.headlineSmall.copyWith(
+                    fontWeight: AppTypography.weightBold,
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: AppColors.primary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     AppText.get('revenue_analytics_this_month'),
-                    style: AppTheme.labelSmall.copyWith(
-                      fontWeight: AppTheme.weightBold,
-                      color: Colors.blue[700],
+                    style: AppTypography.labelSmall.copyWith(
+                      fontWeight: AppTypography.weightBold,
+                      color: AppColors.primary,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: AppTheme.spacing4),
+            const SizedBox(height: AppSpacing.spacing4),
             _buildAnalyticsRow(AppText.get('revenue_creator_earnings'),
                 thisMonth.toStringAsFixed(2)),
             _buildAnalyticsRow(AppText.get('revenue_gross_revenue'),
@@ -794,22 +801,22 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-        side: const BorderSide(color: AppTheme.borderPrimary, width: 1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: AppColors.borderPrimary, width: 1),
       ),
-      color: AppTheme.backgroundPrimary,
+      color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppTheme.spacing4),
+        padding: const EdgeInsets.all(AppSpacing.spacing4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               AppText.get('revenue_breakdown'),
-              style: AppTheme.headlineSmall.copyWith(
-                fontWeight: AppTheme.weightBold,
+              style: AppTypography.headlineSmall.copyWith(
+                fontWeight: AppTypography.weightBold,
               ),
             ),
-            const SizedBox(height: AppTheme.spacing4),
+            SizedBox(height: AppSpacing.spacing4),
 
             // **NEW: Revenue split visualization**
             Row(
@@ -819,7 +826,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   child: Container(
                     height: 8,
                     decoration: BoxDecoration(
-                      color: Colors.green,
+                      color: AppColors.success,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -829,7 +836,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                   child: Container(
                     height: 8,
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: AppColors.error,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -837,17 +844,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               ],
             ),
 
-            const SizedBox(height: 16),
+            AppSpacing.vSpace16,
 
             _buildBreakdownRow(AppText.get('revenue_gross_revenue'),
-                grossRevenue.toStringAsFixed(2), Colors.green),
+                grossRevenue.toStringAsFixed(2), AppColors.success),
             const Divider(),
             _buildBreakdownRow(
                 AppText.get('revenue_creator_earnings',
                         fallback: 'Creator Earnings ({percent}%)')
                     .replaceAll('{percent}', creatorSharePercent),
                 creatorRevenue.toStringAsFixed(2),
-                Colors.grey[700]!, // Changed from Colors.blue
+                AppColors.textSecondary, // Changed from AppColors.primary
                 isTotal: true),
           ],
         ),
@@ -858,18 +865,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   Widget _buildBreakdownRow(String label, String value, Color color,
       {bool isTotal = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.spacing2),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.spacing2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
-            style: isTotal ? AppTheme.titleMedium : AppTheme.bodyMedium,
+            style: isTotal ? AppTypography.titleMedium : AppTypography.bodyMedium,
           ),
           Text(
             value,
-            style: (isTotal ? AppTheme.titleMedium : AppTheme.bodyMedium).copyWith(
-              fontWeight: isTotal ? AppTheme.weightBold : AppTheme.weightRegular,
+            style: (isTotal ? AppTypography.titleMedium : AppTypography.bodyMedium).copyWith(
+              fontWeight: isTotal ? AppTypography.weightBold : AppTypography.weightRegular,
               color: color,
             ),
           ),

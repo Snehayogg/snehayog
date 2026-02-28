@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/enums/video_state.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class VideoLoadingStates extends StatelessWidget {
   final VideoLoadState loadState;
@@ -95,17 +96,16 @@ class _ErrorState extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
-          ElevatedButton(
+          AppButton(
             onPressed: onRefresh,
-            child: const Text('Retry'),
+            label: 'Retry',
+            variant: AppButtonVariant.primary,
           ),
           const SizedBox(height: 8),
-          ElevatedButton(
+          AppButton(
             onPressed: onTestApi,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
-            child: const Text('Test API Connection'),
+            label: 'Test API Connection',
+            variant: AppButtonVariant.secondary,
           ),
         ],
       ),
@@ -182,17 +182,16 @@ class VideoEmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          AppButton(
             onPressed: onRefresh,
-            child: const Text('Refresh'),
+            label: 'Refresh',
+            variant: AppButtonVariant.primary,
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          AppButton(
             onPressed: onTestApi,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
-            child: const Text('Test API Connection'),
+            label: 'Test API Connection',
+            variant: AppButtonVariant.secondary,
           ),
         ],
       ),

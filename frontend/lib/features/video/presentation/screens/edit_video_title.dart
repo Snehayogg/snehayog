@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 class EditVideoTitle extends StatefulWidget {
   final VideoModel video;
@@ -73,11 +77,11 @@ class _EditVideoTitleState extends State<EditVideoTitle> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.surfacePrimary,
+      backgroundColor: AppColors.surfacePrimary,
       appBar: AppBar(
         title: const Text('Edit Video Title'),
-        backgroundColor: AppTheme.surfacePrimary,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppColors.surfacePrimary,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
         actions: [
           if (_isSaving)
@@ -89,21 +93,16 @@ class _EditVideoTitleState extends State<EditVideoTitle> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppTheme.primary,
+                    color: AppColors.primary,
                   ),
                 ),
               ),
             )
           else
-            TextButton(
+            AppButton(
               onPressed: _saveChanges,
-              child: const Text(
-                'SAVE',
-                style: TextStyle(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              label: 'SAVE',
+              variant: AppButtonVariant.text,
             ),
         ],
       ),
@@ -125,7 +124,7 @@ class _EditVideoTitleState extends State<EditVideoTitle> {
               controller: _titleController,
               autofocus: true,
               style: const TextStyle(
-                color: AppTheme.textPrimary,
+                color: AppColors.textPrimary,
                 fontSize: 16,
               ),
               decoration: InputDecoration(
@@ -135,7 +134,7 @@ class _EditVideoTitleState extends State<EditVideoTitle> {
                   borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
                 ),
                 focusedBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppTheme.primary),
+                  borderSide: BorderSide(color: AppColors.primary),
                 ),
                 errorText: _error,
               ),

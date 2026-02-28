@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
@@ -695,6 +696,12 @@ class AdService {
 
   // **NEW: Get creator revenue summary - FAST & SIMPLE**
   // **UPDATED: Supports optional userId to fetch revenue for ANY user (e.g. other creators)**
+
+  // **OPTIMIZED: In-memory cache for revenue data (5-min TTL)**
+  static Map<String, dynamic>? _cachedRevenue;
+  static DateTime? _lastRevenueFetch;
+  static const Duration _revenueCacheTtl = Duration(minutes: 5);
+
   Future<Map<String, dynamic>> getCreatorRevenueSummary({String? userId, bool forceRefresh = false}) async {
     try {
       final userData = await _authService.getUserData();
@@ -721,9 +728,6 @@ class AdService {
             'Authentication token not found. Please sign in again.');
       }
 
-      AppLogger.log(
-          '✅ AdService: Token retrieved successfully (length: ${token.length})');
-
       // Determine target user ID
       final targetUserId = userId ?? (userData['googleId'] ?? userData['id']);
 
@@ -731,7 +735,16 @@ class AdService {
         throw Exception('Target user ID not found');
       }
 
-      // **NO CACHE: Always fetch fresh revenue data for earnings**
+      // **OPTIMIZED: Return cached data if valid (5-min TTL) and not force-refreshing**
+      if (!forceRefresh && _cachedRevenue != null && _lastRevenueFetch != null) {
+        final age = DateTime.now().difference(_lastRevenueFetch!);
+        if (age < _revenueCacheTtl) {
+          AppLogger.log(
+              '♻️ AdService: Returning cached revenue data (${age.inSeconds}s old)');
+          return _cachedRevenue!;
+        }
+      }
+
       AppLogger.log('🔍 AdService: Fetching fresh revenue from API for user: $targetUserId');
 
       // **FIX: Use async base URL resolver for proper server detection**
@@ -747,19 +760,22 @@ class AdService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as Map<String, dynamic>;
 
-        // **DEBUG: Log API response for troubleshooting**
-        AppLogger.log(
-            '🔍 AdService: Revenue API response keys: ${data.keys.toList()}');
         AppLogger.log(
             '🔍 AdService: thisMonth: ${data['thisMonth']}, lastMonth: ${data['lastMonth']}, totalRevenue: ${data['totalRevenue']}');
 
-        // **DEBUG: Check if thisMonth is null or missing**
-        if (data['thisMonth'] == null) {
-          AppLogger.log('⚠️ AdService: thisMonth is NULL in API response!');
-        } else if (data['thisMonth'] == 0) {
-          AppLogger.log(
-              '⚠️ AdService: thisMonth is 0 - no earnings this month or no ad impressions');
-        }
+        // **OPTIMIZED: Cache in memory**
+        _cachedRevenue = data;
+        _lastRevenueFetch = DateTime.now();
+
+        // **OPTIMIZED: Also persist to SharedPreferences with timestamp for bottom sheet**
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final myId = userData['googleId'] ?? userData['id'];
+          if (myId != null) {
+            await prefs.setString('earnings_cache_$myId', json.encode(data));
+            await prefs.setInt('earnings_cache_ts_$myId', DateTime.now().millisecondsSinceEpoch);
+          }
+        } catch (_) {}
 
         return data;
       } else {

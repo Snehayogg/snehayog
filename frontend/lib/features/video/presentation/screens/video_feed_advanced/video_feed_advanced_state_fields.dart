@@ -190,6 +190,10 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
   // Double tap animations
   final Map<String, ValueNotifier<bool>> _showHeartAnimation = {};
 
+  // **NEW: Force-show overlay after double-tap like for confirmation**
+  final Map<String, ValueNotifier<bool>> _forceShowOverlayVN = {};
+  final Map<String, Timer> _forceShowOverlayTimers = {};
+
   // **NEW: Granular Like State Notifiers (Keyed by Video ID)**
   final Map<String, ValueNotifier<bool>> _isLikedVN = {};
   final Map<String, ValueNotifier<int>> _likeCountVN = {};
@@ -221,6 +225,43 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // Background page preload logic
   bool _hasStartedBackgroundPreload = false;
+
+  // Dubbing State
+  final Map<String, String> _dubbedVideoUrls = {};
+  final Map<String, ValueNotifier<bool>> _isDubbedActiveVN = {};
+  final Map<String, ValueNotifier<double>> _dubbingProgressVN = {};
+
+  bool _isLikelyLocalPath(String value) {
+    return value.startsWith('/') ||
+        value.startsWith('file://') ||
+        value.contains(':\\');
+  }
+
+  bool _isLikelyPlaceholderSource(String value) {
+    final v = value.toLowerCase();
+    return v.contains('placeholder') ||
+        v.contains('dummy') ||
+        v.contains('mock') ||
+        v.contains('sample');
+  }
+
+  bool _isValidDubbedPlaybackSource(String? value) {
+    if (value == null) return false;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return false;
+    if (_isLikelyPlaceholderSource(trimmed)) return false;
+    if (_isLikelyLocalPath(trimmed)) return true;
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  }
+
+  bool _isValidRemoteDubbedUrl(String? value) {
+    if (value == null) return false;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return false;
+    if (_isLikelyPlaceholderSource(trimmed)) return false;
+    if (_isLikelyLocalPath(trimmed)) return false;
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  }
 
   String videoIdentityKey(VideoModel video) {
     if (video.id.isNotEmpty) return video.id;

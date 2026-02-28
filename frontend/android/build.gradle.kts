@@ -6,6 +6,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://oss.sonatype.org/content/repositories/releases") }
+        maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
     }
 }
 

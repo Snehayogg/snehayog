@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/video/video_model.dart';
-import 'package:vayu/shared/theme/app_theme.dart';
+import 'package:vayu/core/design/theme.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'dart:ui';
 
@@ -64,26 +69,26 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundPrimary,
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
         title: const Text(
           'Saved Videos',
           style: TextStyle(
-            color: AppTheme.textPrimary,
+            color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: AppTheme.backgroundPrimary,
+        backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
               ),
             )
           : _error != null
@@ -91,19 +96,17 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
+                      const Icon(Icons.error_outline, size: 48, color: AppColors.error),
                       const SizedBox(height: 16),
                       Text(
                         'Failed to load saved videos',
-                        style: TextStyle(color: AppTheme.textSecondary),
+                        style: TextStyle(color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 8),
-                      ElevatedButton(
+                      AppButton(
                         onPressed: _loadSavedVideos,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                        ),
-                        child: const Text('Retry'),
+                        label: 'Retry',
+                        variant: AppButtonVariant.primary,
                       ),
                     ],
                   ),
@@ -117,20 +120,20 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: AppTheme.surfacePrimary,
+                              color: AppColors.surfacePrimary,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Icon(
                               Icons.bookmark_outline,
                               size: 40,
-                              color: AppTheme.textSecondary,
+                              color: AppColors.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 24),
                           const Text(
                             'No saved videos',
                             style: TextStyle(
-                              color: AppTheme.textPrimary,
+                              color: AppColors.textPrimary,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -139,7 +142,7 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                           const Text(
                             'Videos you bookmark will appear here.',
                             style: TextStyle(
-                              color: AppTheme.textSecondary,
+                              color: AppColors.textSecondary,
                               fontSize: 14,
                             ),
                           ),
@@ -148,8 +151,8 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                     )
                   : RefreshIndicator(
                       onRefresh: _loadSavedVideos,
-                      color: AppTheme.primary,
-                      backgroundColor: AppTheme.surfacePrimary,
+                      color: AppColors.primary,
+                      backgroundColor: AppColors.surfacePrimary,
                       child: GridView.builder(
                         padding: const EdgeInsets.all(1),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -171,16 +174,27 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
         final sharedPool = SharedVideoControllerPool();
         sharedPool.pauseAllControllers();
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => VideoScreen(
-              initialVideos: _savedVideos,
-              initialVideoId: video.id,
-              isFullScreen: true,
+        if (video.videoType == 'vayu') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VayuLongFormPlayerScreen(
+                video: video,
+                relatedVideos: _savedVideos,
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VideoScreen(
+                initialVideos: _savedVideos,
+                initialVideoId: video.id,
+              ),
+            ),
+          );
+        }
       },
       child: Stack(
         children: [
@@ -188,17 +202,17 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
           Container(
             width: double.infinity,
             height: double.infinity,
-            color: AppTheme.surfacePrimary,
+            color: AppColors.surfacePrimary,
             child: video.thumbnailUrl.isNotEmpty
                 ? Image.network(
                     video.thumbnailUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Icon(Icons.video_library, color: AppTheme.textSecondary),
+                      child: Icon(Icons.video_library, color: AppColors.textSecondary),
                     ),
                   )
                 : const Center(
-                    child: Icon(Icons.video_library, color: AppTheme.textSecondary),
+                    child: Icon(Icons.video_library, color: AppColors.textSecondary),
                   ),
           ),
           // Views Overlay

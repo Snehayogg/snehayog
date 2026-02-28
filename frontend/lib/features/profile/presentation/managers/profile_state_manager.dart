@@ -375,9 +375,15 @@ class ProfileStateManager extends ChangeNotifier {
     
     // **SECURITY FIX: Strict ID Matching**
     // If we requested a specific user ID, the data MUST match it.
-    if (requestedUserId != null && dataId != null && 
-        requestedUserId != 'self' && dataId != requestedUserId) {
-       AppLogger.log('⚠️ ProfileStateManager: DATA INTEGRITY ERROR - Requested $requestedUserId but got data for $dataId. Rejecting data.');
+    // If we requested 'self' or null, it MUST match the currently logged-in user.
+    String? effectiveRequestedId = requestedUserId;
+    if (effectiveRequestedId == null || effectiveRequestedId == 'self') {
+      effectiveRequestedId = AuthService().currentUserId;
+    }
+
+    if (effectiveRequestedId != null && dataId != null && 
+        dataId != effectiveRequestedId) {
+       AppLogger.log('⚠️ ProfileStateManager: DATA INTEGRITY ERROR - Expected $effectiveRequestedId but got data for $dataId. Rejecting data.');
        throw Exception('Data integrity error: User ID mismatch');
     }
 
@@ -1369,7 +1375,7 @@ class ProfileStateManager extends ChangeNotifier {
       }
 
       // Reload user data and videos
-      await loadUserData(targetUserId);
+      await loadUserData(targetUserId, forceRefresh: true);
 
       _isLoading = false;
       notifyListenersSafe();
@@ -1379,7 +1385,7 @@ class ProfileStateManager extends ChangeNotifier {
       _isLoading = false;
       _error = 'Failed to refresh data: ${e.toString()}';
       notifyListenersSafe();
-      AppLogger.log('âŒ ProfileStateManager: Error refreshing data: $e');
+      AppLogger.log('ProfileStateManager: Error refreshing data: $e');
     }
   }
 

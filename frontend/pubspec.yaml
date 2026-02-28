@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.5.4+33
+version: 2.5.4+34
 
 environment:
   sdk: '>=3.4.3 <4.0.0'
@@ -35,14 +35,14 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
   file_picker: ^10.1.9
-  dio: ^5.4.0
+  dio: ^5.9.1
   http: ^1.1.0  # Kept temporarily for backward compatibility during migration
   crypto: ^3.0.3
   shared_preferences: ^2.2.2
   share_plus: ^11.0.0
   url_launcher: ^6.2.5
   app_links: ^6.3.3
-  path_provider: ^2.1.1
+  path_provider: ^2.1.5
   path: ^1.9.0
   permission_handler: ^11.0.1
   cached_network_image: ^3.3.0
@@ -54,7 +54,7 @@ dependencies:
   # **NEW: Image processing and cropping**
   image: ^4.1.7
   crop_your_image: ^1.1.0
-  wakelock_plus: ^1.3.2
+  wakelock_plus: ^1.4.0
   # Video player dependencies - keep only essential ones
   video_player: ^2.8.1
   chewie: ^1.8.1
@@ -67,7 +67,6 @@ dependencies:
   http_parser: ^4.0.2
 
   visibility_detector: ^0.4.0+2
-  applovin_max: ^4.6.0
   in_app_update: ^4.2.1
 
 
@@ -78,8 +77,8 @@ dependencies:
   jwt_decoder: ^2.0.1
   flutter_cache_manager: ^3.3.1
   connectivity_plus: ^6.0.5
-  device_info_plus: ^11.3.0  # Downgraded for Dart SDK 3.5.0 compatibility
-  package_info_plus: ^8.0.2
+  device_info_plus: ^12.3.0  # Downgraded for Dart SDK 3.5.0 compatibility
+  package_info_plus: ^9.0.0
   # **NEW: Hive for Instant Data Loading**
   hive: ^2.2.3
   hive_flutter: ^1.1.0
@@ -98,6 +97,14 @@ dependencies:
   webview_flutter: ^4.13.1
   talker: ^4.5.0
   talker_flutter: ^4.5.0
+  system_info2: ^4.1.0
+  flutter_tts: ^4.2.5
+  sherpa_onnx: ^1.12.25
+  ffmpeg_kit_flutter_new_https_gpl: ^2.1.0
+  whisper_flutter_new: ^1.0.1
+  google_mlkit_translation: ^0.13.1
+  hugeicons: ^1.1.2
+  vibration: ^3.1.7
 
 
 dev_dependencies:

@@ -8,6 +8,7 @@ import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 
 // Import AppConfig to access clearCache
+import 'package:vayu/shared/widgets/app_button.dart';
 
 /// Bottom sheet to display top earners from user's following list
 class TopEarnersBottomSheet extends StatefulWidget {
@@ -243,16 +244,11 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
+            AppButton(
               onPressed: _loadTopEarners,
               icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
+              label: 'Retry',
+              variant: AppButtonVariant.primary,
             ),
           ],
         ),

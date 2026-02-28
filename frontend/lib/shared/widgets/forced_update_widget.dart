@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/shared/services/app_remote_config_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 
 /// Forced Update Widget
 ///
@@ -151,26 +152,11 @@ class _ForcedUpdateWidgetState extends State<ForcedUpdateWidget> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                ElevatedButton(
+                AppButton(
                   onPressed: _openUpdateUrl,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.blue.shade700,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Update Now',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  label: 'Update Now',
+                  variant: AppButtonVariant.primary,
+                  size: AppButtonSize.large,
                 ),
                 if (_versionCheck?.currentVersion != null) ...[
                   const SizedBox(height: 24),
@@ -233,21 +219,11 @@ class _ForcedUpdateWidgetState extends State<ForcedUpdateWidget> {
                 ),
               ),
               const SizedBox(width: 8),
-              TextButton(
+              AppButton(
                 onPressed: _openUpdateUrl,
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-                child: const Text(
-                  'Update',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                label: 'Update',
+                variant: AppButtonVariant.text,
+                size: AppButtonSize.small,
               ),
               IconButton(
                 onPressed: () {
