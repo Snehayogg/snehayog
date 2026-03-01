@@ -3,8 +3,10 @@ package com.snehayog.app
 import android.os.Bundle
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.annotation.Keep
 import io.flutter.embedding.android.FlutterActivity
 
+@Keep
 class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

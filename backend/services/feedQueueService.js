@@ -96,11 +96,15 @@ class FeedQueueService {
     }
 
     // 3. Mark popped videos as "Seen" IMMEDIATELY to prevent refill duplication
-    if (poppedIds.length > 0 && userId !== 'anon' && userId !== 'undefined') {
+    if (poppedIds.length > 0 && userId !== 'undefined') {
        try {
           await redisService.sAdd(seenKey, poppedIds);
           await redisService.expire(seenKey, 604800);
-          FeedHistory.markAsSeen(userId, poppedIds).catch(e => {}); // Background mark in DB
+          
+          // Only sync to DB history for authenticated users (Google IDs are long strings)
+          if (userId !== 'anon' && userId.length > 15) {
+            FeedHistory.markAsSeen(userId, poppedIds).catch(e => {}); 
+          }
        } catch (e) {
           console.error('⚠️ FeedQueue: Error marking popped videos as seen:', e.message);
        }
@@ -147,9 +151,13 @@ class FeedQueueService {
        const fallbackIds = await this.getFallbackIds(userId, videoType, needed, Array.from(initialExcludes));
        if (fallbackIds.length > 0) {
           // Mark Fallback items as seen too
-          if (userId !== 'anon' && userId !== 'undefined') {
+          if (userId !== 'undefined') {
              await redisService.sAdd(seenKey, fallbackIds);
-             FeedHistory.markAsSeen(userId, fallbackIds).catch(e => {});
+             
+             // Only sync to DB history for authenticated users
+             if (userId !== 'anon' && userId.length > 15) {
+                FeedHistory.markAsSeen(userId, fallbackIds).catch(e => {});
+             }
           }
           videos.push(...fallbackIds);
        }
@@ -305,11 +313,19 @@ class FeedQueueService {
       // D. Sync from DB if Cold Start
       const seenKey = `user:seen_all:${userId}`;
       const hashKey = `user:seen_hashes:${userId}`;
-      if (FeedHistory && !(await redisService.exists(seenKey))) {
+      
+      // **FIX: Fetch Seen IDs from Redis immediately to prevent duplication in this batch**
+      const redisSeenIds = await redisService.getSetMembers(seenKey);
+      redisSeenIds.forEach(id => seenVideoIds.add(id));
+
+      if (userId !== 'anon' && userId !== 'undefined' && FeedHistory && !(await redisService.exists(seenKey))) {
           try {
              const history = await FeedHistory.find({ userId }).select('videoId videoHash').lean();
              if (history.length > 0) {
-                 await redisService.sAdd(seenKey, history.map(h => h.videoId.toString()));
+                 const historyIds = history.map(h => h.videoId.toString());
+                 await redisService.sAdd(seenKey, historyIds);
+                 historyIds.forEach(id => seenVideoIds.add(id));
+
                  const hashes = history.map(h => h.videoHash).filter(Boolean);
                  if (hashes.length > 0) await redisService.sAdd(hashKey, hashes);
                  
@@ -787,6 +803,55 @@ class FeedQueueService {
     return finalVideos;
   }
   
+  /**
+   * Merge Guest History (deviceId) into Authenticated User History (userId)
+   * Called during Google Sign-In to ensure seamless transition.
+   */
+  async mergeGuestHistory(deviceId, userId) {
+    if (!deviceId || !userId || deviceId === userId || deviceId === 'anon') return;
+
+    console.log(`🔄 FeedQueue: Merging guest history from ${deviceId} to ${userId}`);
+
+    const guestSeenKey = `user:seen_all:${deviceId}`;
+    const guestHashKey = `user:seen_hashes:${deviceId}`;
+    const userSeenKey = `user:seen_all:${userId}`;
+    const userHashKey = `user:seen_hashes:${userId}`;
+
+    try {
+      // 1. Merge Seen IDs in Redis
+      const guestIdsSet = await redisService.getSetMembers(guestSeenKey);
+      const guestIds = Array.from(guestIdsSet);
+      
+      if (guestIds.length > 0) {
+        await redisService.sAdd(userSeenKey, guestIds);
+        await redisService.expire(userSeenKey, 604800); // 7 days
+
+        // 2. Sync to MongoDB FeedHistory
+        // (markAsSeen handles duplicates internally via upsert)
+        FeedHistory.markAsSeen(userId, guestIds).catch(e => {
+          console.error('⚠️ FeedQueue: Error syncing merged seen IDs to DB:', e.message);
+        });
+      }
+
+      // 3. Merge Seen Hashes in Redis
+      const guestHashesSet = await redisService.getSetMembers(guestHashKey);
+      const guestHashes = Array.from(guestHashesSet);
+      
+      if (guestHashes.length > 0) {
+        await redisService.sAdd(userHashKey, guestHashes);
+        await redisService.expire(userHashKey, 604800);
+      }
+
+      // 4. Cleanup Guest Keys (Optional but recommended)
+      await redisService.del(guestSeenKey);
+      await redisService.del(guestHashKey);
+
+      console.log(`✅ FeedQueue: Merged ${guestIds.length} IDs and ${guestHashes.length} hashes for user ${userId}`);
+    } catch (e) {
+      console.error('❌ FeedQueue: mergeGuestHistory failed:', e.message);
+    }
+  }
+
   // Helper to populate methods for the array (VideoQueueService needs to output what VideoRoutes expects)
   // Actually, VideoRoutes does the heavy lifting of transformation. 
   // We will just return the Mongoose Documents (lean) and let VideoRoutes transform them.

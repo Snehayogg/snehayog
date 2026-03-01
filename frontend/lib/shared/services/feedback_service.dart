@@ -11,7 +11,8 @@ class FeedbackService {
   /// Submit feedback to the server
   Future<bool> submitFeedback({
     required int rating,
-    String? comments,
+    required String comments,
+    String type = 'general',
   }) async {
     try {
       // Get user data to extract email and ID
@@ -27,8 +28,9 @@ class FeedbackService {
         },
         body: jsonEncode({
           'rating': rating,
-          'comments': comments ?? '',
-          'userEmail': userData['email'] ?? 'anonymous@example.com',
+          'comments': comments,
+          'type': type,
+          'userEmail': userData['email'] ?? 'anonymous@user.com',
           'userId': userData['googleId'] ?? userData['id'],
         }),
       );

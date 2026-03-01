@@ -240,7 +240,7 @@ class ProfileHeaderWidget extends StatelessWidget {
 
     return Row(
       children: [
-        if (stateManager.isEditing || stateManager.totalVideoCount >= 2)
+        if (stateManager.isEditing || (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock))
           Expanded(
             child: stateManager.isEditing
                 ? Row(
@@ -293,7 +293,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   ),
           ),
         if (!stateManager.isEditing) ...[
-          if (stateManager.totalVideoCount >= 2) const SizedBox(width: 12),
+          if (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock) const SizedBox(width: 12),
           Expanded(
             child: OutlinedButton(
               onPressed: onReferFriends,

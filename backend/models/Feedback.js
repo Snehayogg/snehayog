@@ -12,6 +12,11 @@ const feedbackSchema = new mongoose.Schema({
     maxlength: 1000,
     trim: true
   },
+  type: {
+    type: String,
+    enum: ['general', 'bug', 'feature', 'performance', 'ui', 'other'],
+    default: 'general'
+  },
   userEmail: {
     type: String,
     required: true,

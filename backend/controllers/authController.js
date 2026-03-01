@@ -57,6 +57,16 @@ export const googleSignIn = async (req, res) => {
 
     console.log('🔐 Issued tokens for device:', deviceId.substring(0, 8) + '...');
 
+    // **NEW: Merge Guest History from Device ID to User ID**
+    if (deviceId && deviceId !== 'anon') {
+      import('../services/feedQueueService.js').then(module => {
+        const FeedQueueService = module.default;
+        FeedQueueService.mergeGuestHistory(deviceId, user.googleId).catch(err => {
+          console.error('⚠️ AuthController: mergeGuestHistory error:', err.message);
+        });
+      });
+    }
+
     res.json({
       accessToken,
       refreshToken,

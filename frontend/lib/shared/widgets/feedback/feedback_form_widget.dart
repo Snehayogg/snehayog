@@ -52,12 +52,10 @@ class _FeedbackFormWidgetState extends State<FeedbackFormWidget> {
         final iosInfo = await deviceInfo.iosInfo;
       }
 
-      // Get app version
-      final packageInfo = await PackageInfo.fromPlatform();
-
       final success = await _feedbackService.submitFeedback(
         rating: _rating,
         comments: _messageController.text,
+        type: _selectedType,
       );
 
       if (success) {

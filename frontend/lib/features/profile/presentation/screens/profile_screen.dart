@@ -904,15 +904,15 @@ class _ProfileScreenState extends State<ProfileScreen>
           referralCode.isNotEmpty ? '$base/?ref=$referralCode' : base;
       final String message =
           'I am using Vayug! Refer 2 friends and get full access. Join now: $referralLink';
+      // Optimistically increment invite counter immediately on click
+      final prefs = await SharedPreferences.getInstance();
+      _invitedCount.value = (prefs.getInt('referral_invite_count') ?? 0) + 1;
+      await prefs.setInt('referral_invite_count', _invitedCount.value);
+
       await sp.Share.share(
         message,
         subject: 'Vayug – Refer 2 friends and get full access',
       );
-
-      // Optimistically increment invite counter
-      final prefs = await SharedPreferences.getInstance();
-      _invitedCount.value = (prefs.getInt('referral_invite_count') ?? 0) + 1;
-      await prefs.setInt('referral_invite_count', _invitedCount.value);
       // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
     } catch (e) {
       if (mounted) {
