@@ -11,10 +11,15 @@
 # Keep Pigeon-generated classes (CRITICAL for Google Sign-in and others)
 -keep class dev.flutter.pigeon.** { *; }
 
+# Keep path_provider specifically
+-keep class io.flutter.plugins.pathprovider.** { *; }
+-keep class dev.flutter.pigeon.path_provider_android.** { *; }
+
 # Keep GeneratedPluginRegistrant to ensure plugins are registered
 -keep class io.flutter.plugins.GeneratedPluginRegistrant { *; }
 
 # --- Google Sign-In & Firebase ---
+-keep class com.google.android.gms.** { *; }
 -keep class com.google.android.gms.auth.api.signin.** { *; }
 -keep class com.google.android.gms.common.api.** { *; }
 -keep class com.google.firebase.** { *; }

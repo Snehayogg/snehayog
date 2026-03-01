@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Optimized app configuration for better performonce andsmaller size
 class AppConfig {
   // **NEW: API Version (Date-Based)**
-  static const String kApiVersion = '2026-03-01';
+  static const String kApiVersion = '2026-03-02';
 
   // Use build mode instead of a hardcoded flag:
   // debug/profile -> development behavior, release -> production behavior.

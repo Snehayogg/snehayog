@@ -210,10 +210,11 @@ class ProfileHeaderWidget extends StatelessWidget {
           stateManager.userData!['followers'];
 
       if (followersCount != null) {
-        final count = followersCount is int
-            ? followersCount
-            : (int.tryParse(followersCount.toString()) ?? 0);
-        if (count > 0) return count.toString();
+        if (followersCount is int) return followersCount.toString();
+        if (followersCount is List) return followersCount.length.toString();
+        
+        final count = int.tryParse(followersCount.toString());
+        if (count != null && count > 0) return count.toString();
       }
     }
 

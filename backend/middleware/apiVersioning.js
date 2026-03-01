@@ -39,10 +39,17 @@ const SUPPORTED_VERSIONS = {
   },
   '2026-03-01': {
     releaseDate: new Date('2026-03-01'),
+    deprecated: true,
+    deprecatedDate: new Date('2026-03-02'),
+    endOfLifeDate: null,
+    description: 'API Optimization & Batch Endpoints (Legacy Arrays)'
+  },
+  '2026-03-02': {
+    releaseDate: new Date('2026-03-02'),
     deprecated: false,
     deprecatedDate: null,
     endOfLifeDate: null,
-    description: 'API Optimization & Batch Endpoints (March 1, 2026)'
+    description: 'Scalability Refactor - Counts instead of Arrays (March 2, 2026)'
   }
 };
 

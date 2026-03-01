@@ -155,13 +155,7 @@ class ProfileStateManager extends ChangeNotifier {
 
       final loggedInUser = await _authService.getUserData(forceRefresh: forceRefresh);
       AppLogger.log(
-          'ðŸ”„ ProfileStateManager: Logged in user: ${loggedInUser?['id']}');
-      AppLogger.log(
-          'ðŸ”„ ProfileStateManager: Logged in user data: $loggedInUser');
-      AppLogger.log(
-          'ðŸ”„ ProfileStateManager: Logged in user keys: ${loggedInUser?.keys.toList()}');
-      AppLogger.log(
-          'ðŸ”„ ProfileStateManager: Logged in user values: ${loggedInUser?.values.toList()}');
+          '🔄 ProfileStateManager: Logged in user: ${loggedInUser?['googleId'] ?? loggedInUser?['id']}');
 
       // **PARALLEL OPTIMIZATION: Start loading videos IMMEDIATELY**
       // Now that we have the loggedInUser, we can determine the correct ID and start video loading.
@@ -395,11 +389,18 @@ class ProfileStateManager extends ChangeNotifier {
     }
 
     // 2. Normalize Follower Counts
-    final followersCount = normalized['followersCount'] ?? normalized['followers'] ?? 0;
+    int _parseCount(dynamic value) {
+      if (value == null) return 0;
+      if (value is num) return value.toInt();
+      if (value is List) return value.length;
+      return int.tryParse(value.toString()) ?? 0;
+    }
+
+    final followersCount = _parseCount(normalized['followersCount'] ?? normalized['followers']);
     normalized['followersCount'] = followersCount;
     normalized['followers'] = followersCount;
 
-    final followingCount = normalized['followingCount'] ?? normalized['following'] ?? 0;
+    final followingCount = _parseCount(normalized['followingCount'] ?? normalized['following']);
     normalized['followingCount'] = followingCount;
     normalized['following'] = followingCount;
 
@@ -1855,16 +1856,19 @@ class ProfileStateManager extends ChangeNotifier {
     }
 
     // Get current follower count
-    final currentFollowersRaw =
-        _userData!['followersCount'] ?? _userData!['followers'] ?? 0;
-    final currentFollowers = currentFollowersRaw is int
-        ? currentFollowersRaw
-        : (int.tryParse(currentFollowersRaw.toString()) ?? 0);
+    int _parseCount(dynamic value) {
+      if (value == null) return 0;
+      if (value is num) return value.toInt();
+      if (value is List) return value.length;
+      return int.tryParse(value.toString()) ?? 0;
+    }
+
+    final currentFollowers = _parseCount(_userData!['followersCount'] ?? _userData!['followers']);
 
     // Calculate new follower count
     final newFollowers = increment
         ? currentFollowers + 1
-        : (currentFollowers - 1).clamp(0, double.infinity);
+        : (currentFollowers - 1).clamp(0, double.infinity).toInt();
 
     // Update both fields to ensure consistency
     _userData!['followersCount'] = newFollowers;

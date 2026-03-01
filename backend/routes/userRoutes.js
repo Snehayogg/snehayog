@@ -1,5 +1,7 @@
 import express from 'express';
 import User from '../models/User.js';
+import Follower from '../models/Follower.js';
+import SavedVideo from '../models/SavedVideo.js';
 import { verifyToken, passiveVerifyToken } from '../utils/verifytoken.js'; // Added passiveVerifyToken
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
 import redisService from '../services/redisService.js';
@@ -175,13 +177,30 @@ router.get('/profile', verifyToken, async (req, res) => {
       email: currentUser.email,
       profilePic: currentUser.profilePic,
       videos: currentUser.videos,
-      following: currentUser.followingCount || 0,
-      followers: currentUser.followerCount || 0,
       preferredCurrency: currentUser.preferredCurrency,
       preferredPaymentMethod: currentUser.preferredPaymentMethod,
       country: currentUser.country,
       rank: ownRank,
     };
+
+    // **API VERSIONING: Backward Compatibility for Legacy Versions**
+    if (req.apiVersion < '2026-03-02') {
+      // Legacy versions expect arrays of user IDs
+      const [followingDocs, followerDocs, savedDocs] = await Promise.all([
+        Follower.find({ follower: currentUser._id }).select('following').lean(),
+        Follower.find({ following: currentUser._id }).select('follower').lean(),
+        SavedVideo.find({ user: currentUser._id }).select('video').lean()
+      ]);
+      
+      payload.following = followingDocs.map(f => f.following);
+      payload.followers = followerDocs.map(f => f.follower);
+      payload.savedVideos = savedDocs.map(s => s.video);
+    } else {
+      // Modern versions use performance counters
+      payload.following = currentUser.followingCount || 0;
+      payload.followers = currentUser.followerCount || 0;
+      payload.savedVideos = currentUser.savedVideosCount || 0;
+    }
 
     res.json(payload);
 
@@ -401,12 +420,19 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
     const { id } = req.params;
     
     // First try to find by Google ID (primary identifier)
-    let user = await User.findOne({ googleId: id });
+    let user = await User.findOne({ googleId: id })
+      .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+      .lean();
 
     // If not found, try by MongoDB ObjectId
     if (!user) {
       try {
-        user = await User.findById(id);
+        const mongoose = (await import('mongoose')).default;
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          user = await User.findById(id)
+            .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+            .lean();
+        }
       } catch (e) {
         // ignore invalid ObjectId errors
       }
@@ -420,7 +446,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
     const requesterId = req.user?.googleId || req.user?.id;
     const isOwner = requesterId && (requesterId === user.googleId || requesterId === user._id.toString());
     
-    console.log(`🔒 Profile Access Check: Requester=${requesterId}, Target=${user.googleId}, IsOwner=${isOwner}`);
+    // console.log(`🔒 Profile Access Check: Requester=${requesterId}, Target=${user.googleId}, IsOwner=${isOwner}`);
 
     // **SAFE: Wrap rank call so any failure doesn't cause a 500**
     let rank = 0;
@@ -437,8 +463,6 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
       name: user.name,
       profilePic: user.profilePic,
       videos: user.videos,
-      following: user.followingCount || 0,
-      followers: user.followerCount || 0,
       rank,
       // **SENSITIVE FIELDS**: Only include if owner
       email: isOwner ? user.email : null,
@@ -446,6 +470,20 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
       preferredPaymentMethod: isOwner ? user.preferredPaymentMethod : null,
       country: isOwner ? user.country : null,
     };
+
+    // **API VERSIONING: Backward Compatibility for Legacy Versions**
+    if (req.apiVersion < '2026-03-02') {
+      const [followingDocs, followerDocs] = await Promise.all([
+        Follower.find({ follower: user._id }).select('following').lean(),
+        Follower.find({ following: user._id }).select('follower').lean()
+      ]);
+      
+      payload.following = followingDocs.map(f => f.following);
+      payload.followers = followerDocs.map(f => f.follower);
+    } else {
+      payload.following = user.followingCount || 0;
+      payload.followers = user.followerCount || 0;
+    }
 
     res.json(payload);
 

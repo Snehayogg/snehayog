@@ -57,7 +57,7 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            // Disable shrinking and obfuscation to resolve platform channel errors
+            // Disabled shrinking and obfuscation to resolve platform channel errors
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(
