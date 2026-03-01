@@ -14,6 +14,24 @@ const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 const googleTokenCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// **HIGH-PERFORMANCE: Cache MongoDB _id mapping (10 min TTL)**
+const userObjectIdCache = new Map();
+const ID_CACHE_TTL = 10 * 60 * 1000;
+
+const getMemoizedUserObjectId = async (googleId) => {
+    if (!googleId) return null;
+    const cached = userObjectIdCache.get(googleId);
+    if (cached && (Date.now() - cached.timestamp < ID_CACHE_TTL)) {
+        return cached.id;
+    }
+    const user = await User.findOne({ googleId }).select('_id').lean();
+    if (user) {
+        userObjectIdCache.set(googleId, { id: user._id.toString(), timestamp: Date.now() });
+        return user._id.toString();
+    }
+    return null;
+};
+
 export const verifyGoogleToken = async (idToken) => {
     // 1. Check cache first
     const cached = googleTokenCache.get(idToken);
@@ -112,7 +130,8 @@ export const verifyToken = async (req, res, next) => {
             
             req.user = {
                 ...decoded,
-                googleId: decoded.id // Ensure googleId is set for JWT tokens
+                googleId: decoded.id, // Ensure googleId is set for JWT tokens
+                _id: await getMemoizedUserObjectId(decoded.id)
             };
             
             // **NEW: Track user activity**
@@ -145,6 +164,7 @@ export const verifyToken = async (req, res, next) => {
                 req.user = { 
                     id: userInfo.id, // Google user ID
                     googleId: userInfo.id, // Also store as googleId for clarity
+                    _id: await getMemoizedUserObjectId(userInfo.id),
                     email: userInfo.email,
                     name: userInfo.name
                 };
@@ -172,6 +192,7 @@ export const verifyToken = async (req, res, next) => {
             req.user = { 
                 id: payload.sub, // Google user ID
                 googleId: payload.sub, // Also store as googleId for clarity
+                _id: await getMemoizedUserObjectId(payload.sub),
                 email: payload.email,
                 name: payload.name
             };
@@ -213,7 +234,8 @@ export const passiveVerifyToken = async (req, res, next) => {
             const decoded = jwt.verify(token, JWT_SECRET);
             req.user = {
                 ...decoded,
-                googleId: decoded.id
+                googleId: decoded.id,
+                _id: await getMemoizedUserObjectId(decoded.id)
             };
             return next();
         } catch (e) { /* Fallback to Google */ }
@@ -226,6 +248,7 @@ export const passiveVerifyToken = async (req, res, next) => {
                 req.user = { 
                     id: userInfo.id,
                     googleId: userInfo.id,
+                    _id: await getMemoizedUserObjectId(userInfo.id),
                     email: userInfo.email,
                     name: userInfo.name
                 };
@@ -243,6 +266,7 @@ export const passiveVerifyToken = async (req, res, next) => {
             req.user = { 
                 id: payload.sub,
                 googleId: payload.sub,
+                _id: await getMemoizedUserObjectId(payload.sub),
                 email: payload.email,
                 name: payload.name
             };

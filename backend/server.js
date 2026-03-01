@@ -82,10 +82,10 @@ if (!mongoUri) {
 }
 
 // Port and Host configuration - PRODUCTION SAFE
-// Railway injects process.env.PORT (typically 8080)
-// Must use 0.0.0.0 to accept connections from Railway's proxy
+// Fly.io and Railway inject process.env.PORT (typically 8080)
+// Must use 0.0.0.0 to accept external requests through the proxy
 const PORT = parseInt(process.env.PORT, 10) || 5001;
-const HOST = process.env.HOST || '0.0.0.0'; // Railway requires 0.0.0.0
+const HOST = '0.0.0.0'; // Force 0.0.0.0 for reliable deployment binding
 
 // Validate port is a valid number
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {

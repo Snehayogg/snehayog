@@ -161,6 +161,13 @@ const videoWorker = new Worker('video-processing', async (job) => {
         // Implementation logic here...
         return { status: 'done' };
         
+      case 'recalculate-ranks':
+        // JOB: Recalculate global creator ranks (scheduled every 2h)
+        console.log('🏆 Worker: Recalculating global creator ranks...');
+        await RecommendationService._calculateAndCacheRanks();
+        console.log('✅ Worker: Ranks updated successfully');
+        return { status: 'completed' };
+        
       default:
         console.warn(`⚠️ Worker: Unknown job type ${job.name}`);
         return { status: 'ignored' };

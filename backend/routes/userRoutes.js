@@ -149,7 +149,9 @@ router.get('/profile', verifyToken, async (req, res) => {
     const currentUserId = req.user.id; // This is the Google user ID
     
     // Find current user with selective fields and lean query for performance
-    const currentUser = await User.findOne({ googleId: currentUserId })
+    // **IDENTITY OPTIMIZATION: Use req.user._id if available**
+    const query = req.user?._id ? { _id: req.user._id } : { googleId: currentUserId };
+    const currentUser = await User.findOne(query)
       .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
       .lean();
     
@@ -428,6 +430,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
     if (!user) {
       try {
         const mongoose = (await import('mongoose')).default;
+        // **IDENTITY OPTIMIZATION: Support pre-resolved ObjectIds**
         if (mongoose.Types.ObjectId.isValid(id)) {
           user = await User.findById(id)
             .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
@@ -546,11 +549,23 @@ router.post('/follow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Cannot follow yourself' });
     }
 
-    // Find current user (Google IDs are used in routes, but internally we use MongoDB IDs for relations)
-    const [currentUser, userToFollow] = await Promise.all([
-      User.findOne({ googleId: currentUserId }),
-      User.findOne({ googleId: userIdToFollow })
-    ]);
+    // Find current user
+    const currentUser = req.user?._id && req.user?.googleId === currentUserId
+      ? { _id: req.user._id } 
+      : await User.findOne({ googleId: currentUserId }).select('_id').lean();
+    
+    // Find target user - support both googleId and MongoDB _id
+    let userToFollow = await User.findOne({ googleId: userIdToFollow });
+    if (!userToFollow) {
+      try {
+        const mongoose = (await import('mongoose')).default;
+        if (mongoose.Types.ObjectId.isValid(userIdToFollow)) {
+          userToFollow = await User.findById(userIdToFollow);
+        }
+      } catch (e) {
+        // Ignore invalid ObjectId errors
+      }
+    }
 
     if (!currentUser) return res.status(404).json({ error: 'Current user not found' });
     if (!userToFollow) return res.status(404).json({ error: 'User to follow not found' });
@@ -591,10 +606,22 @@ router.post('/unfollow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'User ID to unfollow is required' });
     }
 
-    const [currentUser, userToUnfollow] = await Promise.all([
-      User.findOne({ googleId: currentUserId }),
-      User.findOne({ googleId: userIdToUnfollow })
-    ]);
+    const currentUser = req.user?._id && req.user?.googleId === currentUserId
+      ? { _id: req.user._id }
+      : await User.findOne({ googleId: currentUserId }).select('_id').lean();
+    
+    // Find target user - support both googleId and MongoDB _id
+    let userToUnfollow = await User.findOne({ googleId: userIdToUnfollow });
+    if (!userToUnfollow) {
+      try {
+        const mongoose = (await import('mongoose')).default;
+        if (mongoose.Types.ObjectId.isValid(userIdToUnfollow)) {
+          userToUnfollow = await User.findById(userIdToUnfollow);
+        }
+      } catch (e) {
+        // Ignore invalid ObjectId errors
+      }
+    }
 
     if (!currentUser || !userToUnfollow) {
       return res.status(404).json({ error: 'User not found' });
@@ -655,7 +682,19 @@ router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
       return res.json(response);
     }
 
-    const userToCheck = await User.findOne({ googleId: userId });
+    // Find target user - support both googleId and MongoDB _id
+    let userToCheck = await User.findOne({ googleId: userId });
+    if (!userToCheck) {
+      try {
+        const mongoose = (await import('mongoose')).default;
+        if (mongoose.Types.ObjectId.isValid(userId)) {
+          userToCheck = await User.findById(userId);
+        }
+      } catch (e) {
+        // Ignore invalid ObjectId errors
+      }
+    }
+
     if (!userToCheck) {
       const response = { isFollowing: false };
       await cacheResponse(cacheKey, response, IS_FOLLOWING_CACHE_TTL);

@@ -48,6 +48,27 @@ const videoQueue = new Queue('video-processing', {
 class FeedQueueService {
     constructor() {
         console.log('🔄 FeedQueueService: Initialized (with actual Queue support)');
+        this.addRankCalculationJob(); // Schedule initial job
+    }
+
+    /**
+     * **NEW: Add rank calculation job to the queue**
+     * This is a repeatable job that runs every 2 hours to prevent
+     * API thundering herd on cache misses.
+     */
+    async addRankCalculationJob() {
+        try {
+            console.log('⏰ QueueService: Scheduling periodic rank calculation (repeatable every 2h)...');
+            await videoQueue.add('recalculate-ranks', {}, {
+                repeat: {
+                    every: 2 * 60 * 60 * 1000 // Every 2 hours
+                },
+                removeOnComplete: true
+            });
+            console.log('✅ QueueService: Rank calculation scheduled');
+        } catch (error) {
+            console.error('❌ QueueService: Failed to schedule rank calculation:', error);
+        }
     }
 
     /**

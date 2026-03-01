@@ -508,16 +508,21 @@ export const getUserVideos = async (req, res) => {
     const userProfileCacheKey = `user:profile:${googleId}`;
     let user = null;
 
-    if (redisService.getConnectionStatus()) {
+    // **IDENTITY OPTIMIZATION: Check req.user first**
+    if (req.user && (req.user.googleId === googleId || req.user.id === googleId) && req.user._id) {
+       user = { _id: req.user._id, googleId: googleId };
+    }
+
+    if (!user && redisService.getConnectionStatus()) {
       const cached = await redisService.get(userProfileCacheKey);
-      // **FIX: Only use cache if _id is a valid 24-char hex ObjectId (not a googleId string)**
+      // **FIX: Only use cache if _id is a valid 24-char hex ObjectId**
       if (cached && cached._id && /^[a-f0-9]{24}$/i.test(cached._id.toString())) {
         user = cached;
       }
     }
 
     if (!user) {
-      user = await User.findOne({ googleId: googleId }).lean();
+      user = await User.findOne({ googleId: googleId }).select('_id googleId').lean();
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       if (redisService.getConnectionStatus()) {
@@ -733,18 +738,12 @@ export const getFeed = async (req, res) => {
       total = 9999;
     }
     
-    let rqUserObjectIdStr = null;
-    if (userId) {
-      console.log('🔍 getFeed Debug: userId from token:', userId);
+    let rqUserObjectIdStr = req.user?._id;
+    if (!rqUserObjectIdStr && userId) {
       const rqUser = await User.findOne({ googleId: userId }).select('_id').lean();
       if (rqUser) {
         rqUserObjectIdStr = rqUser._id.toString();
-        console.log('🔍 getFeed Debug: Found user, ObjectId:', rqUserObjectIdStr);
-      } else {
-        console.log('⚠️ getFeed Debug: User NOT FOUND in DB for googleId:', userId);
       }
-    } else {
-      console.log('🔍 getFeed Debug: No userId extracted from token');
     }
 
     const serializedVideos = serializeVideos(finalVideos, req.apiVersion, rqUserObjectIdStr);
@@ -780,25 +779,23 @@ export const getVideoById = async (req, res) => {
     const normalizeUrl = (url) => url ? url.replace(/\\/g, '/') : url;
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
 
-    let episodes = [];
-    if (videoObj.seriesId) {
-      try {
-        episodes = await Video.find({ seriesId: videoObj.seriesId, processingStatus: 'completed' })
+    const requestingGoogleId = req.user?.googleId || req.user?.id;
+    const rqUserObjectIdStr = req.user?._id;
+    
+    // **PARALLEL OPTIMIZATION: Fetch series, uploader rank, and liked status in parallel**
+    const [episodes, rank, isLiked] = await Promise.all([
+      videoObj.seriesId ? 
+        Video.find({ seriesId: videoObj.seriesId, processingStatus: 'completed' })
           .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
-          .sort({ episodeNumber: 1 }).lean();
-        episodes = episodes.map(ep => ({ ...ep, _id: ep._id.toString() }));
-      } catch (err) { console.error('⚠️ Error fetching series episodes:', err); }
-    }
-
-    const requestingGoogleId = req.user?.googleId;
-    let isLiked = false;
-    if (requestingGoogleId) {
-      const rqUser = await User.findOne({ googleId: requestingGoogleId }).select('_id').lean();
-      if (rqUser) {
-        const rqUserObjectIdStr = rqUser._id.toString();
-        isLiked = (videoObj.likedBy || []).some(id => id.toString() === rqUserObjectIdStr);
-      }
-    }
+          .sort({ episodeNumber: 1 }).lean().then(eps => eps.map(ep => ({ ...ep, _id: ep._id.toString() })))
+        : Promise.resolve([]),
+      (requestingGoogleId !== videoObj.uploader?.googleId?.toString())
+        ? RecommendationService.getGlobalCreatorRank(videoObj.uploader?._id)
+        : Promise.resolve(0),
+      (rqUserObjectIdStr)
+        ? Promise.resolve((videoObj.likedBy || []).some(id => id.toString() === rqUserObjectIdStr))
+        : Promise.resolve(false)
+    ]);
 
     const transformedVideo = {
       _id: videoObj._id?.toString(),
@@ -826,9 +823,7 @@ export const getVideoById = async (req, res) => {
         earnings: (req.user?.googleId === videoObj.uploader?.googleId?.toString()) 
           ? (parseFloat(videoObj.uploader?.earnings) || 0.0)
           : 0.0,
-        rank: (req.user?.googleId !== videoObj.uploader?.googleId?.toString())
-          ? await RecommendationService.getGlobalCreatorRank(videoObj.uploader?._id)
-          : 0
+        rank: rank
       },
       hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
       hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
@@ -859,52 +854,70 @@ export const syncWatchHistory = async (req, res) => {
     const googleId = req.user.googleId;
     const { deviceId } = req.body;
 
-    if (redisService.getConnectionStatus() && deviceId) {
-      const deviceHistory = await redisService.getLongTermWatchHistory(deviceId);
-      if (deviceHistory.size > 0) {
-        await redisService.addToLongTermWatchHistory(googleId, Array.from(deviceHistory));
-      }
-    }
-
     if (!deviceId) return res.status(400).json({ error: 'deviceId is required' });
 
-    const watchedByUserId = await WatchHistory.getUserWatchedVideoIds(googleId, null);
-    const watchedByDeviceId = await WatchHistory.getUserWatchedVideoIds(deviceId, null);
-
-    let syncedCount = 0;
-    for (const videoId of watchedByDeviceId) {
-      try {
-        const exists = await WatchHistory.findOne({ userId: googleId, videoId: videoId });
-        if (!exists) {
-          const deviceEntry = await WatchHistory.findOne({ userId: deviceId, videoId: videoId });
-          if (deviceEntry) {
-            await WatchHistory.create({
-              userId: googleId, videoId: videoId, watchedAt: deviceEntry.watchedAt,
-              lastWatchedAt: deviceEntry.lastWatchedAt, watchDuration: deviceEntry.watchDuration,
-              completed: deviceEntry.completed, watchCount: deviceEntry.watchCount, isAuthenticated: true
-            });
-            syncedCount++;
-          }
-        }
-      } catch (error) { console.error(`⚠️ Error syncing video ${videoId}:`, error.message); }
+    // **IDENTITY OPTIMIZATION: Use pre-resolved req.user._id**
+    let userObjectId = req.user._id;
+    if (!userObjectId) {
+      const user = await User.findOne({ googleId }).select('_id').lean();
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      userObjectId = user._id;
     }
 
-    let reverseSyncedCount = 0;
-    for (const videoId of watchedByUserId) {
-      try {
-        const exists = await WatchHistory.findOne({ userId: deviceId, videoId: videoId });
-        if (!exists) {
-          const userEntry = await WatchHistory.findOne({ userId: googleId, videoId: videoId });
-          if (userEntry) {
-            await WatchHistory.create({
-              userId: deviceId, videoId: videoId, watchedAt: userEntry.watchedAt,
-              lastWatchedAt: userEntry.lastWatchedAt, watchDuration: userEntry.watchDuration,
-              completed: userEntry.completed, watchCount: userEntry.watchCount, isAuthenticated: false
-            });
-            reverseSyncedCount++;
+    // 1. Fetch all watch history for both identities in parallel
+    const [userHistory, deviceHistory] = await Promise.all([
+      WatchHistory.find({ userId: googleId }).lean(),
+      WatchHistory.find({ userId: deviceId }).lean()
+    ]);
+
+    const userVideoIds = new Set(userHistory.map(h => h.videoId.toString()));
+    const deviceVideoIds = new Set(deviceHistory.map(h => h.videoId.toString()));
+
+    // 2. Prepare Bulk Operations
+    const bulkOps = [];
+
+    // Sync Device -> User
+    deviceHistory.forEach(entry => {
+      if (!userVideoIds.has(entry.videoId.toString())) {
+        bulkOps.push({
+          insertOne: {
+            document: {
+              userId: googleId,
+              videoId: entry.videoId,
+              watchedAt: entry.watchedAt,
+              lastWatchedAt: entry.lastWatchedAt,
+              watchDuration: entry.watchDuration,
+              completed: entry.completed,
+              watchCount: entry.watchCount,
+              isAuthenticated: true
+            }
           }
-        }
-      } catch (error) { console.error(`⚠️ Error reverse syncing video ${videoId}:`, error.message); }
+        });
+      }
+    });
+
+    // Sync User -> Device
+    userHistory.forEach(entry => {
+      if (!deviceVideoIds.has(entry.videoId.toString())) {
+        bulkOps.push({
+          insertOne: {
+            document: {
+              userId: deviceId,
+              videoId: entry.videoId,
+              watchedAt: entry.watchedAt,
+              lastWatchedAt: entry.lastWatchedAt,
+              watchDuration: entry.watchDuration,
+              completed: entry.completed,
+              watchCount: entry.watchCount,
+              isAuthenticated: false
+            }
+          }
+        });
+      }
+    });
+
+    if (bulkOps.length > 0) {
+      await WatchHistory.bulkWrite(bulkOps, { ordered: false });
     }
 
     if (redisService.getConnectionStatus()) {
@@ -915,12 +928,7 @@ export const syncWatchHistory = async (req, res) => {
     res.json({
       success: true,
       message: 'Watch history synced successfully',
-      syncedCount,
-      reverseSyncedCount,
-      finalCounts: {
-        userId: (await WatchHistory.getUserWatchedVideoIds(googleId, null)).length,
-        deviceId: (await WatchHistory.getUserWatchedVideoIds(deviceId, null)).length
-      }
+      syncedCount: bulkOps.length,
     });
   } catch (error) {
     console.error('❌ Error syncing watch history:', error);

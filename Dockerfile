@@ -18,6 +18,7 @@ COPY backend/ .
 RUN mkdir -p logs temp uploads
 
 # Expose port
+ENV PORT=8080
 EXPOSE 8080
 
 # Start the application
