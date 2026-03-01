@@ -22,20 +22,33 @@ const UserSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Video'
   }],
-  // **NEW: Follow/Unfollow functionality**
-  following: [{
+  // **NEW: Performance Counters for relationships**
+  followingCount: {
+    type: Number,
+    default: 0
+  },
+  followerCount: {
+    type: Number,
+    default: 0
+  },
+  savedVideosCount: {
+    type: Number,
+    default: 0
+  },
+  // **DEPRECATED: Following arrays moved to 'Follower' collection**
+  /* following: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
   followers: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }],
-  // **NEW: Saved/Bookmarked Videos**
-  savedVideos: [{
+  }], */
+  // **DEPRECATED: Saved/Bookmarked Videos moved to 'SavedVideo' collection**
+  /* savedVideos: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Video'
-  }],
+  }], */
   // **NEW: Payment and Payout Preferences**
   preferredCurrency: {
     type: String,
@@ -154,48 +167,73 @@ UserSchema.methods.getVideos = async function() {
   return this.videos;
 };
 
-// Add method to check if following a user
-UserSchema.methods.isFollowing = function(userId) {
-  return this.following.includes(userId);
+// **REFACTORED: Follow/Unfollow Methods (Now use Follower collection)**
+UserSchema.methods.isFollowing = async function(userId) {
+  const Follower = mongoose.model('Follower');
+  const follow = await Follower.findOne({ follower: this._id, following: userId }).lean();
+  return !!follow;
 };
 
-// Add method to follow a user
-UserSchema.methods.follow = function(userId) {
-  if (!this.isFollowing(userId)) {
-    this.following.push(userId);
+UserSchema.methods.follow = async function(targetUserId) {
+  const Follower = mongoose.model('Follower');
+  try {
+    const follow = new Follower({ follower: this._id, following: targetUserId });
+    await follow.save();
+    
+    // Increment counters atomically
+    await Promise.all([
+      this.constructor.updateOne({ _id: this._id }, { $inc: { followingCount: 1 } }),
+      this.constructor.updateOne({ _id: targetUserId }, { $inc: { followerCount: 1 } })
+    ]);
+    return true;
+  } catch (err) {
+    if (err.code === 11000) return false; // Already following
+    throw err;
+  }
+};
+
+UserSchema.methods.unfollow = async function(targetUserId) {
+  const Follower = mongoose.model('Follower');
+  const result = await Follower.deleteOne({ follower: this._id, following: targetUserId });
+  
+  if (result.deletedCount > 0) {
+    // Decrement counters atomically
+    await Promise.all([
+      this.constructor.updateOne({ _id: this._id }, { $inc: { followingCount: -1 } }),
+      this.constructor.updateOne({ _id: targetUserId }, { $inc: { followerCount: -1 } })
+    ]);
     return true;
   }
   return false;
 };
 
-// Add method to unfollow a user
-UserSchema.methods.unfollow = function(userId) {
-  const index = this.following.indexOf(userId);
-  if (index > -1) {
-    this.following.splice(index, 1);
+// **REFACTORED: Saved Video Methods (Now use SavedVideo collection)**
+UserSchema.methods.isSaved = async function(videoId) {
+  const SavedVideo = mongoose.model('SavedVideo');
+  const save = await SavedVideo.findOne({ user: this._id, video: videoId }).lean();
+  return !!save;
+};
+
+UserSchema.methods.saveVideo = async function(videoId) {
+  const SavedVideo = mongoose.model('SavedVideo');
+  try {
+    const save = new SavedVideo({ user: this._id, video: videoId });
+    await save.save();
+    
+    await this.constructor.updateOne({ _id: this._id }, { $inc: { savedVideosCount: 1 } });
     return true;
+  } catch (err) {
+    if (err.code === 11000) return false; // Already saved
+    throw err;
   }
-  return false;
 };
 
-// **NEW: Saved Video Methods**
-UserSchema.methods.isSaved = function(videoId) {
-  return this.savedVideos.some(id => id.toString() === videoId.toString());
-};
-
-UserSchema.methods.saveVideo = function(videoId) {
-  if (!this.isSaved(videoId)) {
-    this.savedVideos.push(videoId);
-    return true;
-  }
-  return false;
-};
-
-UserSchema.methods.unsaveVideo = function(videoId) {
-  const videoIdStr = videoId.toString();
-  const index = this.savedVideos.findIndex(id => id.toString() === videoIdStr);
-  if (index > -1) {
-    this.savedVideos.splice(index, 1);
+UserSchema.methods.unsaveVideo = async function(videoId) {
+  const SavedVideo = mongoose.model('SavedVideo');
+  const result = await SavedVideo.deleteOne({ user: this._id, video: videoId });
+  
+  if (result.deletedCount > 0) {
+    await this.constructor.updateOne({ _id: this._id }, { $inc: { savedVideosCount: -1 } });
     return true;
   }
   return false;

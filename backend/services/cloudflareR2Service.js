@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -12,7 +13,7 @@ class CloudflareR2Service {
     this.publicDomain = process.env.CLOUDFLARE_R2_PUBLIC_DOMAIN;
     
     // **NEW: Presigned URL support**
-    this.getSignedUrl = null; // Lazy load to avoid circular dependencies if any
+    this.getSignedUrl = getSignedUrl;
     
     console.log('🔧 Cloudflare R2 Service Configuration:');
     console.log('   Account ID:', this.accountId ? '✓ Set' : '✗ Missing');
@@ -86,8 +87,11 @@ class CloudflareR2Service {
    * Uses custom domain (cdn.snehayog.site) if configured, otherwise direct R2 URL
    */
   getPublicUrl(key) {
+    if (!key) return '';
+    if (key.startsWith('http')) return key;
+
     // **FIX: Normalize key path to use forward slashes**
-    const normalizedKey = key.replace(/\\/g, '/');
+    const normalizedKey = key.startsWith('/') ? key.substring(1).replace(/\\/g, '/') : key.replace(/\\/g, '/');
     
     if (this.publicDomain) {
       // Use custom domain with HTTPS

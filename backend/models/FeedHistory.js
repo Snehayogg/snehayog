@@ -25,7 +25,8 @@ const FeedHistorySchema = new mongoose.Schema({
     seenAt: {
         type: Date,
         default: Date.now,
-        index: true
+        index: true,
+        expires: 30 * 24 * 60 * 60 // 30 days TTL (Auto-delete old seen history)
     }
 }, {
     timestamps: true

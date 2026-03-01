@@ -521,9 +521,22 @@ class AdImpressionService {
       
       if (queued.isEmpty) return;
 
-      AppLogger.log('🔄 AdImpressionService: Syncing ${queued.length} offline impressions...');
+      AppLogger.log('🔄 AdImpressionService: Syncing ${queued.length} offline impressions via BATCH...');
       
-      final List<String> remaining = [];
+      final List<Map<String, dynamic>> impressions = [];
+      for (final jsonStr in queued) {
+        try {
+          impressions.add(json.decode(jsonStr) as Map<String, dynamic>);
+        } catch (e) {
+          AppLogger.log('⚠️ AdImpressionService: Error decoding queued impression: $e');
+        }
+      }
+
+      if (impressions.isEmpty) {
+        await prefs.setStringList(_kOfflineImpressionsKey, []);
+        return;
+      }
+
       final userData = await _authService.getUserData();
       final token = userData?['token'];
       
@@ -532,47 +545,30 @@ class AdImpressionService {
          return;
       }
 
-      for (final jsonStr in queued) {
-        try {
-          final impression = json.decode(jsonStr);
-          final adType = impression['adType'];
-          final isBanner = adType == 'banner';
-          
-          final url = isBanner 
-            ? '${NetworkHelper.adsEndpoint}/impressions/banner'
-            : '${NetworkHelper.adsEndpoint}/impressions/carousel';
-            
-          final response = await httpClientService.post(
-            Uri.parse(url),
-             headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: json.encode(impression),
-          );
+      final url = '${NetworkHelper.adsEndpoint}/impressions/batch';
+      final response = await httpClientService.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'impressions': impressions}),
+      );
 
-          if (response.statusCode != 200 && response.statusCode != 201) {
-            // Keep in queue if failed (unless it's a 4xx error which might be permanent)
-             if (response.statusCode >= 500 || response.statusCode == 429) {
-                 remaining.add(jsonStr);
-             }
-             AppLogger.log('⚠️ AdImpressionService: Sync failed for impression (${response.statusCode})');
-          }
-        } catch (e) {
-          // Keep in queue on exception
-          remaining.add(jsonStr);
-          AppLogger.log('❌ AdImpressionService: Error syncing impression: $e');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        AppLogger.log('✅ AdImpressionService: All ${impressions.length} offline impressions synced successfully');
+        await prefs.setStringList(_kOfflineImpressionsKey, []);
+      } else {
+        AppLogger.log('❌ AdImpressionService: Batch sync failed (${response.statusCode}): ${response.body}');
+        // Optional: Implement retry logic or partial failure handling here
+        // For now, we keep them in the queue if it's a server error
+        if (response.statusCode >= 500 || response.statusCode == 429) {
+          // Keep in queue
+        } else {
+          // Clear if it's a permanent error (4xx) to avoid poison messages
+          await prefs.setStringList(_kOfflineImpressionsKey, []);
         }
       }
-
-      await prefs.setStringList(_kOfflineImpressionsKey, remaining);
-      
-      if (remaining.isEmpty) {
-         AppLogger.log('✅ AdImpressionService: All offline impressions synced successfully');
-      } else {
-         AppLogger.log('⚠️ AdImpressionService: Sync complete, ${remaining.length} impressions remaining in queue');
-      }
-
     } catch (e) {
       AppLogger.log('❌ AdImpressionService: Error during offline sync: $e');
     }

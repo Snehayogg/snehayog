@@ -15,6 +15,7 @@ import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.j
 import { AD_CONFIG } from '../constants/index.js';
 import { calculateVideoHash, convertLikedByToGoogleIds } from '../utils/videoUtils.js';
 import { serializeVideo, serializeVideos } from '../utils/serializers/videoSerializer.js';
+import cloudflareR2Service from '../services/cloudflareR2Service.js';
 
 let hybridVideoService;
 
@@ -996,6 +997,89 @@ export const trackWatch = async (req, res) => {
 };
 
 /**
+ * **NEW: Batch sync watch events**
+ * Critical for reducing network overhead for 1M+ users.
+ */
+export const syncWatchEvents = async (req, res) => {
+  try {
+    const { events } = req.body;
+    const deviceId = req.headers['x-device-id'];
+    const userId = req.user?.googleId || req.user?.id;
+    const isAuthenticated = !!req.user;
+    
+    if (!events || !Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: 'Missing or invalid events array' });
+    }
+
+    const identityId = userId || deviceId;
+    if (!identityId) return res.status(400).json({ error: 'User identifier required' });
+
+    const ops = [];
+    const videoViewIncrements = {};
+
+    for (const event of events) {
+      const { videoId, duration = 0, completed = false, timestamp } = event;
+      if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) continue;
+
+      const eventDate = timestamp ? new Date(timestamp) : new Date();
+      
+      // Track views atomically
+      videoViewIncrements[videoId] = (videoViewIncrements[videoId] || 0) + 1;
+
+      // Track in WatchHistory
+      ops.push({
+        updateOne: {
+          filter: { userId: identityId, videoId: videoId },
+          update: {
+            $set: {
+              lastWatchedAt: eventDate,
+              watchDuration: duration,
+              completed: completed,
+              isAuthenticated: isAuthenticated
+            },
+            $inc: { watchCount: 1 },
+            $setOnInsert: { watchedAt: eventDate }
+          },
+          upsert: true
+        }
+      });
+    }
+
+    if (ops.length > 0) {
+      // 1. Bulk update WatchHistory
+      await WatchHistory.bulkWrite(ops, { ordered: false });
+
+      // 2. Atomic view increments for Videos
+      const videoOps = Object.entries(videoViewIncrements).map(([vId, inc]) => ({
+        updateOne: {
+          filter: { _id: vId },
+          update: { $inc: { views: inc } }
+        }
+      }));
+      await Video.bulkWrite(videoOps, { ordered: false });
+
+      // 3. Update Redis Long-Term Watch History (Background)
+      if (redisService.getConnectionStatus()) {
+        const videoIdsStrings = events.map(e => e.videoId.toString());
+        redisService.addToLongTermWatchHistory(identityId, videoIdsStrings).catch(e => 
+          console.warn('⚠️ Redis: Batch watch sync failed (background):', e.message)
+        );
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      processed: ops.length,
+      message: `Successfully synced ${ops.length} watch events` 
+    });
+
+  } catch (error) {
+    console.error('❌ Error syncing batch watch events:', error);
+    res.status(500).json({ error: 'Failed to sync batch watch events', message: error.message });
+  }
+};
+
+/**
  * Like Controllers
  */
 export const toggleLike = async (req, res) => {
@@ -1092,18 +1176,19 @@ export const toggleSave = async (req, res) => {
     const video = await Video.findById(videoId);
     if (!video) return res.status(404).json({ error: 'Video not found' });
 
-    const isSaved = user.isSaved(videoId);
+    // **REFACTORED: Use NEW async methods**
+    const isSaved = await user.isSaved(videoId);
     let saved;
 
     if (isSaved) {
-      user.unsaveVideo(videoId);
+      await user.unsaveVideo(videoId);
       saved = false;
     } else {
-      user.saveVideo(videoId);
+      await user.saveVideo(videoId);
       saved = true;
     }
 
-    await user.save();
+    // No need for user.save() since methods use updateOne and separate collection
 
     res.json({
       success: true,
@@ -1121,20 +1206,26 @@ export const getSavedVideos = async (req, res) => {
     const googleId = req.user.googleId;
     if (!googleId) return res.status(401).json({ error: 'Authentication required' });
 
-    const user = await User.findOne({ googleId })
+    const user = await User.findOne({ googleId }).select('_id googleId').lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // **REFACTORED: Query SavedVideo collection directly**
+    const SavedVideo = mongoose.model('SavedVideo');
+    const savedEntries = await SavedVideo.find({ user: user._id })
       .populate({
-        path: 'savedVideos',
+        path: 'video',
         populate: {
           path: 'uploader',
           select: 'name profilePic googleId'
         }
-      });
+      })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    // Filter out any null videos (in case some were deleted but still in savedVideos array)
-    // Also ensuring they are sorted by recent first if possible, though savedVideos order might be push order
-    const validSavedVideos = (user.savedVideos || []).filter(v => v != null).reverse(); // Reverse to get most recent first
+    // Filter out any entries where video might have been deleted
+    const validSavedVideos = savedEntries
+      .map(entry => entry.video)
+      .filter(v => v != null);
 
     const requestingUserObjectIdStr = user._id.toString();
     const serializedVideos = serializeVideos(validSavedVideos, req.apiVersion, requestingUserObjectIdStr);
@@ -1390,6 +1481,38 @@ export const cleanupTempHLS = async (req, res) => {
   } catch (error) {
     console.error('❌ Cleanup error:', error);
     res.status(500).json({ error: 'Failed to cleanup temp HLS' });
+  }
+};
+
+/**
+ * Generate a presigned URL for direct R2 upload
+ */
+export const generateR2PresignedUrl = async (req, res) => {
+  try {
+    const { fileName, contentType, type = 'video' } = req.body;
+    const userId = req.user.googleId;
+
+    if (!fileName || !contentType) {
+      return res.status(400).json({ error: 'fileName and contentType are required' });
+    }
+
+    // Generate a unique path for the raw upload
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 10000);
+    const extension = path.extname(fileName) || (type === 'video' ? '.mp4' : '.jpg');
+    const key = `uploads/raw/${userId}/${timestamp}_${random}${extension}`;
+
+    const signedUrl = await cloudflareR2Service.getPresignedUploadUrl(key, contentType);
+
+    res.json({
+      success: true,
+      uploadUrl: signedUrl,
+      key: key,
+      publicUrl: cloudflareR2Service.getPublicUrl(key)
+    });
+  } catch (error) {
+    console.error('❌ Error generating R2 presigned URL:', error);
+    res.status(500).json({ error: 'Failed to generate upload URL' });
   }
 };
 

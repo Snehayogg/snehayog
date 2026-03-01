@@ -23,6 +23,12 @@ class VideoViewTracker {
   static const Duration _minViewInterval =
       Duration(seconds: 10); // Minimum 10 seconds between views
 
+  // **NEW: Batching for watch events**
+  final List<Map<String, dynamic>> _pendingWatchEvents = [];
+  Timer? _batchSyncTimer;
+  static const Duration _batchSyncInterval = Duration(seconds: 5);
+  static const int _maxBatchSize = 10;
+
   /// Increment view count for a video after 2 seconds of playback
   /// Returns true if view was counted, false if already at max or error
   Future<bool> incrementView(
@@ -58,69 +64,8 @@ class VideoViewTracker {
         headers['Authorization'] = 'Bearer $token';
       }
 
-      // **BACKEND-FIRST: Track watch history FIRST (before userData check)**
-      // This ensures watch tracking works for anonymous users too
-      try {
-        final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
-        final watchBody = <String, dynamic>{
-          'duration': effectiveDuration,
-          'completed':
-              false, // Initial watch tracking - will be marked completed in increment-view
-        };
-        
-        // **NEW: Send videoHash**
-        if (videoHash != null) {
-          watchBody['videoHash'] = videoHash;
-        }
-
-        // **BACKEND-FIRST: Always send platformId as fallback (even if token exists, it might be invalid)**
-        // This ensures watch tracking works even if token verification fails
-        if (platformId.isNotEmpty) {
-          watchBody['platformId'] = platformId;
-          AppLogger.log(
-              '📱 VideoViewTracker: Sending platformId for watch tracking (platformId: ${platformId.substring(0, 8)}...)');
-        } else {
-          AppLogger.log(
-              '⚠️ VideoViewTracker: No platformId available for watch tracking fallback');
-        }
-
-        AppLogger.log(
-            '📡 VideoViewTracker: Calling watch tracking API: $watchUrl');
-        AppLogger.log(
-            '📡 VideoViewTracker: Request body: ${json.encode(watchBody)}');
-        AppLogger.log(
-            '📡 VideoViewTracker: Request headers: ${headers.keys.join(", ")}');
-        AppLogger.log('📡 VideoViewTracker: Base URL: $_baseUrl');
-        final watchResponse = await httpClientService.post(
-          watchUrl,
-          headers: headers,
-          body: json.encode(watchBody),
-        );
-
-        AppLogger.log(
-            '📡 VideoViewTracker: Watch tracking response status: ${watchResponse.statusCode}');
-        AppLogger.log(
-            '📡 VideoViewTracker: Watch tracking response body: ${watchResponse.body}');
-
-        if (watchResponse.statusCode == 200) {
-          AppLogger.log(
-              '✅ VideoViewTracker: Watch history tracked successfully');
-          final watchData = json.decode(watchResponse.body);
-          AppLogger.log(
-              '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}');
-        } else {
-          AppLogger.log(
-              '⚠️ VideoViewTracker: Watch tracking failed (non-critical): ${watchResponse.statusCode}');
-          AppLogger.log(
-              '⚠️ VideoViewTracker: Response body: ${watchResponse.body}');
-        }
-      } catch (watchError) {
-        AppLogger.log(
-            '❌ VideoViewTracker: Error tracking watch (non-critical): $watchError');
-        AppLogger.log(
-            '❌ VideoViewTracker: Error stack: ${watchError is Error ? watchError.stackTrace : 'N/A'}');
-        // Don't fail view tracking if watch tracking fails
-      }
+      // **NEW: BATCHED WATCH TRACKING**
+      _queueWatchEvent(videoId, effectiveDuration, false, platformId, videoHash);
 
       // **FIXED: View increment requires authenticated user, but watch tracking already happened above**
       // Get current user data for view increment (only authenticated users can increment views)
@@ -317,88 +262,90 @@ class VideoViewTracker {
   }
 
   /// **NEW: Track video completion for watch history**
-  /// This should work for BOTH authenticated and anonymous users,
-  /// matching the logic used in [incrementView] for /watch tracking.
+  /// This should work for BOTH authenticated and anonymous users.
   Future<void> trackVideoCompletion(String videoId, {int? duration, String? videoHash}) async {
     try {
-      AppLogger.log(
-          '📊 VideoViewTracker: Tracking video completion for $videoId (hash: $videoHash)');
+      AppLogger.log('📊 VideoViewTracker: Tracking video completion for $videoId');
 
-      // Get platformId (works for anonymous + authenticated users)
       final platformIdService = PlatformIdService();
       final platformId = await platformIdService.getPlatformId();
 
-      // Get auth token if available (optional)
-      final token = await AuthService.getToken();
+      // **NEW: BATCHED COMPLETION TRACKING**
+      _queueWatchEvent(videoId, duration ?? 0, true, platformId, videoHash);
+    } catch (e) {
+      AppLogger.log('❌ VideoViewTracker: Error tracking video completion: $e');
+    }
+  }
 
+  /// **NEW: Queue watch event for batching**
+  void _queueWatchEvent(String videoId, int duration, bool completed, String platformId, String? videoHash) {
+    _pendingWatchEvents.add({
+      'videoId': videoId,
+      'duration': duration,
+      'completed': completed,
+      'platformId': platformId,
+      'videoHash': videoHash,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+
+    AppLogger.log('📊 VideoViewTracker: Queued watch event for $videoId (Total queued: ${_pendingWatchEvents.length})');
+
+    if (_pendingWatchEvents.length >= _maxBatchSize) {
+      syncWatchEvents();
+    } else {
+      _startBatchTimer();
+    }
+  }
+
+  /// **NEW: Start timer for periodic batch sync**
+  void _startBatchTimer() {
+    _batchSyncTimer?.cancel();
+    _batchSyncTimer = Timer(_batchSyncInterval, () {
+      syncWatchEvents();
+    });
+  }
+
+  /// **NEW: Sync queued watch events in a single batch**
+  Future<void> syncWatchEvents() async {
+    if (_pendingWatchEvents.isEmpty) return;
+
+    _batchSyncTimer?.cancel();
+    final eventsToSync = List<Map<String, dynamic>>.from(_pendingWatchEvents);
+    _pendingWatchEvents.clear();
+
+    try {
+      AppLogger.log('🔄 VideoViewTracker: Syncing ${eventsToSync.length} watch events via BATCH...');
+
+      final token = await AuthService.getToken();
       final headers = <String, String>{
         'Content-Type': 'application/json',
       };
-      
-      if (platformId.isNotEmpty) {
-        headers['x-device-id'] = platformId;
-      }
       
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
 
-      final body = <String, dynamic>{
-        'duration': duration ?? 0,
-        'completed': true, // Mark as completed
-      };
-      
-      // **NEW: Send videoHash**
-      if (videoHash != null) {
-        body['videoHash'] = videoHash;
-      }
-
-      // Always include platformId as fallback identity (same as incrementView)
-      if (platformId.isNotEmpty) {
-        body['platformId'] = platformId;
-        AppLogger.log(
-          '📱 VideoViewTracker: Sending platformId for completion tracking (platformId: ${platformId.substring(0, 8)}...)',
-        );
-      } else {
-        AppLogger.log(
-            '⚠️ VideoViewTracker: No platformId available for completion tracking');
-      }
-
-      final watchUrl = Uri.parse('$_baseUrl/api/videos/$videoId/watch');
-      AppLogger.log(
-          '📡 VideoViewTracker: Calling completion tracking API: $watchUrl');
-      AppLogger.log('📡 VideoViewTracker: Request body: ${json.encode(body)}');
-
-      final watchResponse = await httpClientService.post(
-        watchUrl,
+      // **BACKEND: POST /api/videos/watch/batch**
+      final url = Uri.parse('$_baseUrl/api/videos/watch/batch');
+      final response = await httpClientService.post(
+        url,
         headers: headers,
-        body: json.encode(body),
+        body: json.encode({'events': eventsToSync}),
       );
 
-      AppLogger.log(
-        '📡 VideoViewTracker: Completion tracking response status: ${watchResponse.statusCode}',
-      );
-      AppLogger.log(
-        '📡 VideoViewTracker: Completion tracking response body: ${watchResponse.body}',
-      );
-
-      if (watchResponse.statusCode == 200) {
-        AppLogger.log(
-            '✅ VideoViewTracker: Video completion tracked successfully');
-        final watchData = json.decode(watchResponse.body);
-        AppLogger.log(
-          '   Watch count: ${watchData['watchEntry']?['watchCount'] ?? 1}',
-        );
-        AppLogger.log(
-          '   Completed: ${watchData['watchEntry']?['completed'] ?? false}',
-        );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        AppLogger.log('✅ VideoViewTracker: Batch sync of watch events successful');
       } else {
-        AppLogger.log(
-          '⚠️ VideoViewTracker: Completion tracking failed: ${watchResponse.statusCode}',
-        );
+        AppLogger.log('❌ VideoViewTracker: Batch sync failed (${response.statusCode}): ${response.body}');
+        // Re-queue if server error
+        if (response.statusCode >= 500 || response.statusCode == 429) {
+          _pendingWatchEvents.insertAll(0, eventsToSync);
+        }
       }
     } catch (e) {
-      AppLogger.log('❌ VideoViewTracker: Error tracking video completion: $e');
+      AppLogger.log('❌ VideoViewTracker: Error syncing watch events batch: $e');
+      // Re-queue on network error
+      _pendingWatchEvents.insertAll(0, eventsToSync);
     }
   }
 

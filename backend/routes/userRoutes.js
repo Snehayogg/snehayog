@@ -148,7 +148,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     
     // Find current user with selective fields and lean query for performance
     const currentUser = await User.findOne({ googleId: currentUserId })
-      .select('_id googleId name email profilePic videos following followers preferredCurrency preferredPaymentMethod country')
+      .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
       .lean();
     
     if (!currentUser) {
@@ -175,8 +175,8 @@ router.get('/profile', verifyToken, async (req, res) => {
       email: currentUser.email,
       profilePic: currentUser.profilePic,
       videos: currentUser.videos,
-      following: currentUser.following?.length || 0,
-      followers: currentUser.followers?.length || 0,
+      following: currentUser.followingCount || 0,
+      followers: currentUser.followerCount || 0,
       preferredCurrency: currentUser.preferredCurrency,
       preferredPaymentMethod: currentUser.preferredPaymentMethod,
       country: currentUser.country,
@@ -437,8 +437,8 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
       name: user.name,
       profilePic: user.profilePic,
       videos: user.videos,
-      following: user.following?.length || 0,
-      followers: user.followers?.length || 0,
+      following: user.followingCount || 0,
+      followers: user.followerCount || 0,
       rank,
       // **SENSITIVE FIELDS**: Only include if owner
       email: isOwner ? user.email : null,
@@ -497,15 +497,8 @@ router.post('/update-profile', async (req, res) => {
 // ✅ Route to follow a user
 router.post('/follow', verifyToken, async (req, res) => {
   try {
-    console.log('🔍 Follow API: Request received');
-    console.log('🔍 Follow API: Request body:', req.body);
-    console.log('🔍 Follow API: Current user from token:', req.user);
-    
     const { userIdToFollow } = req.body;
-    const currentUserId = req.user.id; // This is now the Google user ID
-
-    console.log('🔍 Follow API: userIdToFollow:', userIdToFollow);
-    console.log('🔍 Follow API: currentUserId:', currentUserId);
+    const currentUserId = req.user.id;
 
     if (!userIdToFollow) {
       return res.status(400).json({ error: 'User ID to follow is required' });
@@ -515,56 +508,34 @@ router.post('/follow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Cannot follow yourself' });
     }
 
-    // Find or create current user
-    let currentUser = await User.findOne({ googleId: currentUserId });
-    if (!currentUser) {
-      // Create user if they don't exist
-      currentUser = new User({
-        googleId: currentUserId,
-        name: req.user.name || 'Unknown User',
-        email: req.user.email || '',
-        following: [],
-        followers: []
-      });
-      await currentUser.save();
-    }
+    // Find current user (Google IDs are used in routes, but internally we use MongoDB IDs for relations)
+    const [currentUser, userToFollow] = await Promise.all([
+      User.findOne({ googleId: currentUserId }),
+      User.findOne({ googleId: userIdToFollow })
+    ]);
 
-    // Find or create user to follow
-    let userToFollow = await User.findOne({ googleId: userIdToFollow });
-    if (!userToFollow) {
-      // Create user if they don't exist
-      userToFollow = new User({
-        googleId: userIdToFollow,
-        name: 'Unknown User',
-        email: '',
-        following: [],
-        followers: []
-      });
-      await userToFollow.save();
-    }
+    if (!currentUser) return res.status(404).json({ error: 'Current user not found' });
+    if (!userToFollow) return res.status(404).json({ error: 'User to follow not found' });
 
-    // Check if already following
-    if (currentUser.following.includes(userToFollow._id)) {
+    // Use the NEW async follow method
+    const success = await currentUser.follow(userToFollow._id);
+    
+    if (!success) {
       return res.status(400).json({ error: 'Already following this user' });
     }
 
-    // Add to following list (store MongoDB ObjectId reference)
-    currentUser.following.push(userToFollow._id);
-    await currentUser.save();
-
-    // Add to followers list (store MongoDB ObjectId reference)
-    userToFollow.followers.push(currentUser._id);
-    await userToFollow.save();
-
-    await invalidateProfileCache([
-      currentUser.googleId || currentUserId,
-      userToFollow.googleId || userIdToFollow,
+    // Re-fetch counts for accurate response (or use incremented values)
+    const [updatedCurrentUser, updatedUserToFollow] = await Promise.all([
+      User.findById(currentUser._id).select('followingCount').lean(),
+      User.findById(userToFollow._id).select('followerCount').lean()
     ]);
+
+    await invalidateProfileCache([currentUser.googleId, userToFollow.googleId]);
 
     res.json({ 
       message: 'Successfully followed user',
-      following: currentUser.following.length,
-      followers: userToFollow.followers.length
+      following: updatedCurrentUser.followingCount,
+      followers: updatedUserToFollow.followerCount
     });
   } catch (err) {
     console.error('Follow user error:', err);
@@ -575,62 +546,40 @@ router.post('/follow', verifyToken, async (req, res) => {
 // ✅ Route to unfollow a user
 router.post('/unfollow', verifyToken, async (req, res) => {
   try {
-    console.log('🔍 Unfollow API: Request received');
-    console.log('🔍 Unfollow API: Request body:', req.body);
-    console.log('🔍 Unfollow API: Current user from token:', req.user);
-    
     const { userIdToUnfollow } = req.body;
-    const currentUserId = req.user.id; // This is now the Google user ID
-
-    console.log('🔍 Unfollow API: userIdToUnfollow:', userIdToUnfollow);
-    console.log('🔍 Unfollow API: currentUserId:', currentUserId);
+    const currentUserId = req.user.id;
 
     if (!userIdToUnfollow) {
       return res.status(400).json({ error: 'User ID to unfollow is required' });
     }
 
-    if (currentUserId === userIdToUnfollow) {
-      return res.status(400).json({ error: 'Cannot unfollow yourself' });
+    const [currentUser, userToUnfollow] = await Promise.all([
+      User.findOne({ googleId: currentUserId }),
+      User.findOne({ googleId: userIdToUnfollow })
+    ]);
+
+    if (!currentUser || !userToUnfollow) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Find current user
-    let currentUser = await User.findOne({ googleId: currentUserId });
-    if (!currentUser) {
-      return res.status(404).json({ error: 'Current user not found' });
-    }
-
-    // Find user to unfollow
-    let userToUnfollow = await User.findOne({ googleId: userIdToUnfollow });
-    if (!userToUnfollow) {
-      return res.status(404).json({ error: 'User to unfollow not found' });
-    }
-
-    // Check if not following
-    if (!currentUser.following.includes(userToUnfollow._id)) {
+    // Use the NEW async unfollow method
+    const success = await currentUser.unfollow(userToUnfollow._id);
+    
+    if (!success) {
       return res.status(400).json({ error: 'Not following this user' });
     }
 
-    // Remove from following list (remove MongoDB ObjectId reference)
-    currentUser.following = currentUser.following.filter(
-      id => id.toString() !== userToUnfollow._id.toString()
-    );
-    await currentUser.save();
-
-    // Remove from followers list (remove MongoDB ObjectId reference)
-    userToUnfollow.followers = userToUnfollow.followers.filter(
-      id => id.toString() !== currentUser._id.toString()
-    );
-    await userToUnfollow.save();
-
-    await invalidateProfileCache([
-      currentUser.googleId || currentUserId,
-      userToUnfollow.googleId || userIdToUnfollow,
+    const [updatedCurrentUser, updatedUserToUnfollow] = await Promise.all([
+      User.findById(currentUser._id).select('followingCount').lean(),
+      User.findById(userToUnfollow._id).select('followerCount').lean()
     ]);
+
+    await invalidateProfileCache([currentUser.googleId, userToUnfollow.googleId]);
 
     res.json({ 
       message: 'Successfully unfollowed user',
-      following: currentUser.following.length,
-      followers: userToUnfollow.followers.length
+      following: updatedCurrentUser.followingCount,
+      followers: updatedUserToUnfollow.followerCount
     });
   } catch (err) {
     console.error('Unfollow user error:', err);
@@ -675,10 +624,8 @@ router.get('/isfollowing/:userId', verifyToken, async (req, res) => {
       return res.json(response);
     }
 
-    // Check if following by comparing MongoDB ObjectId references
-    const isFollowing = currentUser.following.some(
-      followingId => followingId.toString() === userToCheck._id.toString()
-    );
+    // Check if following via the NEW async method
+    const isFollowing = await currentUser.isFollowing(userToCheck._id);
     
     const response = { isFollowing };
     await cacheResponse(cacheKey, response, IS_FOLLOWING_CACHE_TTL);
@@ -699,31 +646,32 @@ router.post('/isfollowing/batch', verifyToken, async (req, res) => {
       return res.json({ statuses: {} });
     }
 
-    // Cap at 50 to prevent abuse
     const limitedIds = userIds.slice(0, 50);
 
-    const currentUser = await User.findOne({ googleId: currentUserId }).select('following').lean();
-    if (!currentUser || !currentUser.following || currentUser.following.length === 0) {
-      // Not following anyone — all false
-      const statuses = {};
-      for (const id of limitedIds) { statuses[id] = false; }
-      return res.json({ statuses });
-    }
+    const currentUser = await User.findOne({ googleId: currentUserId }).select('_id').lean();
+    if (!currentUser) return res.json({ statuses: {} });
 
     // Find all target users by googleId in one query
     const targetUsers = await User.find({ googleId: { $in: limitedIds } })
       .select('_id googleId')
       .lean();
 
-    // Build a set of followed ObjectIds for O(1) lookup
-    const followingSet = new Set(currentUser.following.map(id => id.toString()));
+    const targetMap = new Map(targetUsers.map(u => [u.googleId, u._id.toString()]));
+    const targetMongoIds = Array.from(targetMap.values());
+
+    // Query Follower collection for all relationships at once
+    const Follower = mongoose.model('Follower');
+    const existingFollows = await Follower.find({
+      follower: currentUser._id,
+      following: { $in: targetMongoIds }
+    }).select('following').lean();
+
+    const followedSet = new Set(existingFollows.map(f => f.following.toString()));
 
     const statuses = {};
-    const targetMap = new Map(targetUsers.map(u => [u.googleId, u._id.toString()]));
-
     for (const id of limitedIds) {
       const mongoId = targetMap.get(id);
-      statuses[id] = mongoId ? followingSet.has(mongoId) : false;
+      statuses[id] = mongoId ? followedSet.has(mongoId) : false;
     }
 
     res.json({ statuses });

@@ -25,7 +25,8 @@ const WatchHistorySchema = new mongoose.Schema({
   watchedAt: {
     type: Date,
     default: Date.now,
-    index: true
+    index: true,
+    expires: 90 * 24 * 60 * 60 // 90 days TTL (Auto-delete old watch history)
   },
   watchDuration: {
     type: Number,
@@ -242,6 +243,19 @@ WatchHistorySchema.methods.isRecent = function(days = 30) {
   cutoffDate.setDate(cutoffDate.getDate() - days);
   return this.lastWatchedAt >= cutoffDate;
 };
+
+// **NEW: Atomic scaling hook**
+// Updates Video.cachedWatchTime atomically to avoid heavy aggregations
+WatchHistorySchema.post('save', async function(doc) {
+  try {
+    const Video = mongoose.model('Video');
+    await Video.findByIdAndUpdate(doc.videoId, { 
+      $inc: { cachedWatchTime: doc.watchDuration || 0 } 
+    });
+  } catch (error) {
+    console.warn('⚠️ WatchHistory Hook: Failed to update Video cachedWatchTime:', error.message);
+  }
+});
 
 const WatchHistory = mongoose.model('WatchHistory', WatchHistorySchema);
 

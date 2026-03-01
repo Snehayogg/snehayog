@@ -5,6 +5,8 @@
  * requested API version (X-API-Version header).
  */
 
+import cloudflareR2Service from '../../services/cloudflareR2Service.js';
+
 export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   if (!video) return null;
 
@@ -25,8 +27,8 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   const base = {
     _id: videoObj._id?.toString(),
     videoName: videoObj.videoName || 'Untitled Video',
-    videoUrl: (videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '').replace(/\\/g, '/'),
-    thumbnailUrl: (videoObj.thumbnailUrl || '').replace(/\\/g, '/'),
+    videoUrl: cloudflareR2Service.getPublicUrl(videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || ''),
+    thumbnailUrl: cloudflareR2Service.getPublicUrl(videoObj.thumbnailUrl || ''),
     description: videoObj.description || '',
     likes: parseInt(videoObj.likes) || 0,
     views: parseInt(videoObj.views) || 0,
@@ -39,8 +41,8 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     uploadedAt: videoObj.uploadedAt?.toISOString ? videoObj.uploadedAt.toISOString() : videoObj.uploadedAt,
     isLiked: isLiked,
     earnings: parseFloat(videoObj.earnings) || 0.0,
-    hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
-    lowQualityUrl: videoObj.lowQualityUrl || null,
+    hlsPlaylistUrl: cloudflareR2Service.getPublicUrl(videoObj.hlsPlaylistUrl || ''),
+    lowQualityUrl: cloudflareR2Service.getPublicUrl(videoObj.lowQualityUrl || ''),
     seriesId: videoObj.seriesId || null,
     episodeNumber: videoObj.episodeNumber || 0,
     episodes: videoObj.episodes || [],
@@ -63,7 +65,7 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
       earnings: parseFloat(videoObj.uploader?.earnings) || 0.0
     };
     
-    base.hlsMasterPlaylistUrl = videoObj.hlsMasterPlaylistUrl || null;
+    base.hlsMasterPlaylistUrl = cloudflareR2Service.getPublicUrl(videoObj.hlsMasterPlaylistUrl || '');
     
     // **ROBUST HLS CHECK**: If either URL contains .m3u8, it is HLS encoded
     base.isHLSEncoded = videoObj.isHLSEncoded === true || 

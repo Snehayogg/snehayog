@@ -23,6 +23,7 @@ router.post('/cache/clear', videoController.clearCache);
  * Video Upload & Processing Routes
  */
 router.post('/check-duplicate', verifyToken, videoController.checkDuplicate);
+router.post('/upload/presigned', verifyToken, uploadLimiter, videoController.generateR2PresignedUrl); // **NEW: Direct-to-R2 upload**
 router.post('/upload', verifyToken, uploadLimiter, validateVideoData, upload.single('video'), videoController.uploadVideo);
 router.post('/image', verifyToken, videoController.createImageFeedEntry);
 
@@ -39,6 +40,7 @@ router.get('/:id', videoController.getVideoById);
  */
 router.post('/:id/save', verifyToken, videoController.toggleSave);
 router.post('/sync-watch-history', verifyToken, videoController.syncWatchHistory);
+router.post('/watch/batch', passiveVerifyToken, videoController.syncWatchEvents);
 router.post('/:id/watch', passiveVerifyToken, videoController.trackWatch);
 router.post('/:id/like', verifyToken, videoController.toggleLike);
 router.delete('/:id/like', verifyToken, videoController.deleteLike);

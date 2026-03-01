@@ -178,6 +178,12 @@ const videoSchema = new mongoose.Schema({
     default: 0, // Total watch time in seconds (aggregated from WatchHistory)
     description: 'Total watch time across all users for recommendation scoring'
   },
+  cachedWatchTime: {
+    type: Number,
+    default: 0,
+    index: true, // Indexed for faster ranking
+    description: 'Atomic counter for total watch time (performance optimization)'
+  },
   // **NEW: Series/Episode Metadata**
   seriesId: {
     type: String,
