@@ -77,7 +77,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.camera_alt, color: AppColors.textPrimary),
+                  leading: Icon(Icons.camera_alt, color: AppColors.textPrimary),
                   title: Text(
                       AppText.get('profile_take_photo', fallback: 'Take Photo'),
                       style: AppTypography.bodyMedium),
@@ -88,7 +88,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.photo_library, color: AppColors.textPrimary),
+                  leading: Icon(Icons.photo_library, color: AppColors.textPrimary),
                   title: Text(AppText.get('profile_choose_gallery',
                       fallback: 'Choose from Gallery'),
                       style: AppTypography.bodyMedium),
@@ -130,7 +130,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           surfaceTintColor: Colors.transparent,
           centerTitle: true,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+            icon: Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
             onPressed: () {
               widget.stateManager.cancelEditing();
               Navigator.pop(context);
@@ -147,7 +147,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             Consumer<ProfileStateManager>(
               builder: (context, manager, child) {
                 if (manager.isLoading) {
-                  return const Center(
+                  return Center(
                     child: Padding(
                       padding: EdgeInsets.only(right: 16.0),
                       child: SizedBox(
@@ -162,7 +162,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   );
                 }
                 return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
+                  padding: EdgeInsets.only(right: 8.0),
                   child: AppButton(
                     onPressed: _handleSave,
                     label: 'Save',
@@ -183,7 +183,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             if (context.mounted) Navigator.pop(context);
           },
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: EdgeInsets.all(24.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -224,7 +224,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                               width: 140,
                                               height: 140,
                                               errorBuilder: (context, error, stackTrace) =>
-                                                  const Icon(Icons.person, size: 70, color: AppColors.textSecondary),
+                                                  Icon(Icons.person, size: 70, color: AppColors.textSecondary),
                                             ),
                                           )
                                         : null,
@@ -237,7 +237,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                         color: AppColors.overlayDark,
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Center(
+                                      child: Center(
                                         child: CircularProgressIndicator(
                                           valueColor: AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
                                           strokeWidth: 3,
@@ -255,14 +255,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: GestureDetector(
                             onTap: _pickImage,
                             child: Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
                                 shape: BoxShape.circle,
                                 border: Border.all(color: AppColors.backgroundPrimary, width: 3),
                                 boxShadow: AppElevation.shadowSm,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.camera_alt_rounded,
                                 color: AppColors.textPrimary,
                                 size: 22,
@@ -273,14 +273,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 48),
+                  SizedBox(height: 48),
                   Consumer<ProfileStateManager>(
                     builder: (context, manager, _) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.only(left: 4.0, bottom: 8.0),
+                            padding: EdgeInsets.only(left: 4.0, bottom: 8.0),
                             child: Text(
                               'Display Name',
                               style: AppTypography.labelSmall.copyWith(
@@ -298,10 +298,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             decoration: InputDecoration(
                               hintText: 'Enter your name',
                               hintStyle: TextStyle(color: AppColors.textTertiary),
-                              prefixIcon: Icon(Icons.person_rounded, color: AppColors.primary.withOpacity(0.7)),
+                              prefixIcon: Icon(Icons.person_rounded, color: AppColors.primary.withValues(alpha: 0.7)),
                               filled: true,
                               fillColor: AppColors.backgroundSecondary,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(AppRadius.xl),
                                 borderSide: const BorderSide(color: AppColors.borderPrimary),

@@ -59,13 +59,13 @@ class VideoProgressBarWidget extends StatelessWidget {
             onTapDown: (details) => onSeek(controller, details),
             child: Container(
               height: 4,
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               child: Stack(
                 children: [
                   Container(
                     height: 2,
                     margin: const EdgeInsets.only(top: 1),
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                   ),
                   Positioned(
                     top: 1,
@@ -117,10 +117,10 @@ class EarningsLabelWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Colors.green.withOpacity(0.6),
+          color: Colors.green.withValues(alpha: 0.6),
           width: 1,
         ),
       ),
@@ -224,7 +224,7 @@ class ProcessingIndicatorWidget extends StatelessWidget {
                       child: CircularProgressIndicator(
                         strokeWidth: 3,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.green.withOpacity(0.3),
+                          Colors.green.withValues(alpha: 0.3),
                         ),
                       ),
                     ),

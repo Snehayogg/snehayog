@@ -738,6 +738,9 @@ export const getFeed = async (req, res) => {
       total = 9999;
     }
     
+    // **NEW: Enforce max 2 consecutive videos per creator across all feed types**
+    finalVideos = RecommendationService.enforceMaxConsecutive(finalVideos, 2);
+
     let rqUserObjectIdStr = req.user?._id;
     if (!rqUserObjectIdStr && userId) {
       const rqUser = await User.findOne({ googleId: userId }).select('_id').lean();

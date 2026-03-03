@@ -91,7 +91,7 @@ class VideoActionButton extends StatelessWidget {
     return LoadingButton(
       onPressed: onPressed,
       isLoading: isLoading,
-      backgroundColor: backgroundColor ?? Colors.black.withOpacity(0.6),
+      backgroundColor: backgroundColor ?? Colors.black.withValues(alpha: 0.6),
       foregroundColor: iconColor ?? Colors.white,
       borderRadius: 25,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -135,7 +135,7 @@ class CompactLoadingButton extends StatelessWidget {
       child: LoadingButton(
         onPressed: onPressed,
         isLoading: isLoading,
-        backgroundColor: Colors.black.withOpacity(0.6),
+        backgroundColor: Colors.black.withValues(alpha: 0.6),
         foregroundColor: Colors.white,
         borderRadius: 20,
         padding: const EdgeInsets.all(12),

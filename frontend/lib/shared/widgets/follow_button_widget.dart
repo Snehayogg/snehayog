@@ -31,6 +31,7 @@ class FollowButtonWidget extends StatefulWidget {
 class _FollowButtonWidgetState extends State<FollowButtonWidget> {
   late final ValueNotifier<bool> _isOwnVideoNotifier;
   late final ValueNotifier<bool> _isInitializedNotifier;
+  late final ValueNotifier<bool> _isLoadingNotifier; // **NEW: Debounce state**
   bool _hasCheckedOwnVideo =
       false; // **FIX: Prevent re-checking on every build**
   bool _isInitializing = false; // **FIX: Prevent duplicate initialization**
@@ -40,6 +41,7 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
     super.initState();
     _isOwnVideoNotifier = ValueNotifier<bool>(false);
     _isInitializedNotifier = ValueNotifier<bool>(false);
+    _isLoadingNotifier = ValueNotifier<bool>(false); // Initialize debounce state
 
     // **FIX: Only initialize once, not on every build**
     _checkIfOwnVideo();
@@ -140,9 +142,10 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
 
   /// Handle follow/unfollow button tap
   Future<void> _handleFollowTap() async {
-    if (_isOwnVideoNotifier.value) return;
+    if (_isOwnVideoNotifier.value || _isLoadingNotifier.value) return; // Prevent double taps
 
     try {
+      _isLoadingNotifier.value = true;
       final trimmedUploaderId = widget.uploaderId.trim();
       print(
           '🎯 FollowButtonWidget: Attempting to toggle follow for ${widget.uploaderName} (ID: $trimmedUploaderId)');
@@ -246,6 +249,10 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
     } catch (e) {
       _showSnackBar('Error: $e');
       print('❌ FollowButtonWidget: Exception during follow toggle: $e');
+    } finally {
+      if (mounted) {
+        _isLoadingNotifier.value = false; // Reset debounce state
+      }
     }
   }
 
@@ -264,6 +271,7 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
   void dispose() {
     _isOwnVideoNotifier.dispose();
     _isInitializedNotifier.dispose();
+    _isLoadingNotifier.dispose();
     super.dispose();
   }
 
@@ -284,7 +292,7 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
           builder: (context, isOwnVideo, child) {
             // Don't show follow button for own videos
             if (isOwnVideo) {
-              return const SizedBox.shrink();
+              return SizedBox.shrink();
             }
 
             return ValueListenableBuilder<bool>(
@@ -296,10 +304,10 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                     width: 60,
                     height: 24,
                     decoration: BoxDecoration(
-                      color: AppColors.backgroundSecondary.withOpacity(0.45),
+                      color: AppColors.backgroundSecondary.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: SizedBox(
                         width: 12,
                         height: 12,
@@ -315,33 +323,46 @@ class _FollowButtonWidgetState extends State<FollowButtonWidget> {
                 }
 
                 // Match Yug-tab subscribe button style for cross-screen consistency.
-                return GestureDetector(
-                  onTap: _handleFollowTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                      color: isFollowing
-                          ? AppColors.backgroundTertiary
-                          : AppColors.backgroundSecondary.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                    child: Text(
-                      isFollowing
-                          ? (widget.followingText ?? 'Subscribed')
-                          : (widget.followText ?? 'Subscribe'),
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.white,
-                        fontSize: AppTypography.fontSizeSM,
-                        fontWeight: AppTypography.weightBold,
+                return ValueListenableBuilder<bool>(
+                  valueListenable: _isLoadingNotifier,
+                  builder: (context, isLoading, _) {
+                    return GestureDetector(
+                      onTap: isLoading ? null : _handleFollowTap,
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isFollowing
+                              ? AppColors.backgroundTertiary
+                              : AppColors.backgroundSecondary.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Text(
+                                isFollowing
+                                    ? (widget.followingText ?? 'Subscribed')
+                                    : (widget.followText ?? 'Subscribe'),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: AppColors.white,
+                                  fontSize: AppTypography.fontSizeSM,
+                                  fontWeight: AppTypography.weightBold,
+                                ),
+                              ),
                       ),
-                    ),
-                  ),
+                    );
+                  }
                 );
               },
             );

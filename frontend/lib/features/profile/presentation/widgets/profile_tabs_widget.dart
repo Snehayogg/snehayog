@@ -28,15 +28,21 @@ class ProfileTabsWidget extends StatelessWidget {
         children: [
           Expanded(
             child: _buildTabItem(
-              label: 'Videos',
+              label: 'Yug',
               index: 0,
+            ),
+          ),
+          Expanded(
+            child: _buildTabItem(
+              label: 'Vayu',
+              index: 1,
             ),
           ),
           if (showTopCreators)
             Expanded(
               child: _buildTabItem(
                 label: 'Top Creators',
-                index: 1,
+                index: 2,
               ),
             ),
         ],

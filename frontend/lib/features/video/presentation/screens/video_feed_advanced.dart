@@ -1296,37 +1296,7 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
   }
 
   /// **BUILD CAROUSEL AD PAGE: Full-screen carousel ad within horizontal PageView**
-  void _attachEndListenerIfNeeded(VideoPlayerController controller, int index) {
-    final videoId = _videos[index].id;
-    controller.removeListener(_videoEndListeners[videoId] ?? () {});
-    void listener() {
-      if (!_autoScrollEnabled) return;
-      final position = controller.value.position;
-      final duration = controller.value.duration;
-      if (duration.inMilliseconds > 0 &&
-          (duration - position).inMilliseconds <= 600) {
-        // Near end: advance to next page
-        if (_isAnimatingPage) return;
-        if (_autoAdvancedForIndex.contains(index)) return;
-        final int next = (_currentIndex + 1).clamp(0, _videos.length);
-        if (next != _currentIndex && next < _videos.length) {
-          _isAnimatingPage = true;
-          _isProgrammaticScroll = true; // **NEW: Signal to bypass debounce**
-          _autoAdvancedForIndex.add(index);
-          _pageController
-              .animateToPage(
-                next,
-                duration: const Duration(milliseconds: 250), // **FIXED: Snappier transition**
-                curve: Curves.easeInOut,
-              )
-              .whenComplete(() => _isAnimatingPage = false);
-        }
-      }
-    }
-
-    controller.addListener(listener);
-    _videoEndListeners[videoId] = listener;
-  }
+  // Method removed to use optimized implementation in video_feed_advanced_preload.dart extension
 
   void _attachBufferingListenerIfNeeded(
     VideoPlayerController controller,

@@ -38,7 +38,7 @@ class _BannerAdSectionState extends State<BannerAdSection> {
             height: 30, // Smaller height for loading
             margin: const EdgeInsets.only(top: 20, left: 16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Center(

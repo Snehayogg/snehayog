@@ -52,9 +52,9 @@ class _VideoProgressBarState extends State<VideoProgressBar> {
             ),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
             activeTrackColor: Colors.lightGreen[400], // Light green color
-            inactiveTrackColor: Colors.white.withOpacity(0.3),
+            inactiveTrackColor: Colors.white.withValues(alpha: 0.3),
             thumbColor: Colors.lightGreen[300],
-            overlayColor: Colors.lightGreen.withOpacity(0.2),
+            overlayColor: Colors.lightGreen.withValues(alpha: 0.2),
           ),
           child: Slider(
             value: progress.clamp(0.0, 1.0),

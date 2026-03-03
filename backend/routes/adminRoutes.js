@@ -1100,4 +1100,76 @@ router.post('/videos/:videoId/unflag', requireAdminDashboardKey, async (req, res
   }
 });
 
+// **NEW: Admin endpoint to get video reports**
+router.get('/reports', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { status = 'open', limit = 100 } = req.query;
+    
+    // We only care about video reports for this dashboard
+    const query = { targetType: 'video' };
+    if (status !== 'all') {
+      query.status = status;
+    }
+
+    const Report = mongoose.model('Report');
+    const reports = await Report.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    // Populate video details manually since targetId is a string and potentially not a valid ObjectId if corrupted
+    // but usually it is. We can't use .populate() directly on targetId easily without refactoring models.
+    const reportsWithDetails = await Promise.all(reports.map(async (report) => {
+      let videoDetails = null;
+      try {
+        if (mongoose.Types.ObjectId.isValid(report.targetId)) {
+          videoDetails = await Video.findById(report.targetId)
+            .populate('uploader', 'name email googleId')
+            .select('videoName uploader videoUrl thumbnailUrl')
+            .lean();
+        }
+      } catch (e) {
+        console.error(`Error fetching video for report ${report._id}:`, e);
+      }
+      
+      return {
+        ...report,
+        video: videoDetails
+      };
+    }));
+
+    res.json({
+      success: true,
+      count: reportsWithDetails.length,
+      reports: reportsWithDetails
+    });
+  } catch (error) {
+    console.error('❌ Error loading reports:', error);
+    res.status(500).json({ success: false, error: 'Failed to load reports' });
+  }
+});
+
+// **NEW: Admin endpoint to get stats including report counts**
+router.get('/report-stats', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const Report = mongoose.model('Report');
+    const openReportsCount = await Report.countDocuments({ targetType: 'video', status: 'open' });
+    
+    // For "Deleted Videos", we can maybe count videos with a specific flag or just placeholder
+    // If there's no "isDeleted" flag in Video model (usually they are removed), 
+    // we might need a separate log or just return 0 for now.
+    // Let's check if there's any 'deleted' status or similar.
+    const deletedCount = 0; // Placeholder until we have a way to track deleted videos
+
+    res.json({
+      success: true,
+      openReportsCount,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('❌ Error loading report stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to load report stats' });
+  }
+});
+
 export default router;

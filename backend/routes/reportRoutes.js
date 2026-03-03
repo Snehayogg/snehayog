@@ -151,6 +151,33 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Update report status (admin)
+router.patch('/:reportId/status', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { status } = req.body;
+
+    if (!['open', 'reviewing', 'resolved', 'dismissed'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status' });
+    }
+
+    const report = await Report.findByIdAndUpdate(
+      reportId,
+      { status },
+      { new: true }
+    );
+
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Report not found' });
+    }
+
+    res.json({ success: true, message: 'Report status updated', report });
+  } catch (error) {
+    console.error('❌ Error updating report status:', error);
+    res.status(500).json({ success: false, error: 'Failed to update report status' });
+  }
+});
+
 export default router;
 
 

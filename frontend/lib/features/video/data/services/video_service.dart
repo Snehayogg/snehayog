@@ -44,7 +44,6 @@ class VideoService {
       NetworkHelper.getBaseUrlWithFallback();
   static const int maxRetries = 2;
   static const int retryDelay = 1;
-  static const int maxShortVideoDuration = 120;
   static const int maxFileSize = 100 * 1024 * 1024; // 100MB
 
   // **GETTERS: Video tracking state**
@@ -704,7 +703,7 @@ class VideoService {
         throw Exception('File too large. Maximum size is 100MB');
       }
 
-      final isLong = await isLongVideo(videoFile.path);
+      // **REMOVED: duration-based categorization logic**
 
       final userData = await _authService.getUserData();
       if (userData == null) {
@@ -983,19 +982,6 @@ class VideoService {
     }
   }
 
-  /// **Check if video is too long**
-  Future<bool> isLongVideo(String videoPath) async {
-    try {
-      final controller = VideoPlayerController.file(File(videoPath));
-      await controller.initialize();
-      final duration = controller.value.duration;
-      await controller.dispose();
-      return duration.inSeconds > maxShortVideoDuration;
-    } catch (e) {
-      AppLogger.log('❌ VideoService: Error checking video duration: $e');
-      return false;
-    }
-  }
 
   /// **Compress video while preserving display (resolution/aspect) as much as possible**
   /// Uses DefaultQuality so encoder mainly reduces bitrate, not dimensions.

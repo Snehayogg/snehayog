@@ -26,21 +26,50 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
-    return UserModel(
-      id: json['_id'] ?? json['id'] ?? json['googleId'] ?? '',
-      name: json['name'] ?? '',
-      email: json['email'] ?? '',
-      profilePic: json['profilePic'] ?? '',
-      videos: List<String>.from(json['videos'] ?? []),
-      followersCount: json['followersCount'] ?? json['followers'] ?? 0,
-      followingCount: json['followingCount'] ?? json['following'] ?? 0,
-      isFollowing: json['isFollowing'] ?? false,
-      createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt']) 
-          : null,
-      bio: json['bio'],
-      location: json['location'],
-    );
+    try {
+      return UserModel(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? json['googleId']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        email: json['email']?.toString() ?? '',
+        profilePic: json['profilePic']?.toString() ?? '',
+        videos: (json['videos'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+        
+        // Defensive parsing for numbers
+        followersCount: (json['followersCount'] is int) 
+            ? json['followersCount'] 
+            : int.tryParse(json['followersCount']?.toString() ?? json['followers']?.toString() ?? '0') ?? 0,
+            
+        followingCount: (json['followingCount'] is int)
+            ? json['followingCount']
+            : int.tryParse(json['followingCount']?.toString() ?? json['following']?.toString() ?? '0') ?? 0,
+            
+        isFollowing: json['isFollowing'] == true,
+        
+        // Defensive parsing for dates
+        createdAt: () {
+          try {
+            if (json['createdAt'] != null) {
+              return DateTime.parse(json['createdAt'].toString());
+            }
+          } catch (e) {
+            // Ignore parse errors and return null
+          }
+          return null;
+        }(),
+        
+        bio: json['bio']?.toString(),
+        location: json['location']?.toString(),
+      );
+    } catch (e) {
+      // Return a safe minimal fallback if parsing utterly fails
+      return UserModel(
+        id: json['_id']?.toString() ?? 'unknown',
+        name: 'Unknown User',
+        email: '',
+        profilePic: '',
+        videos: [],
+      );
+    }
   }
 
   Map<String, dynamic> toJson() {

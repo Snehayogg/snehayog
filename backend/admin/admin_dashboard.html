@@ -375,16 +375,16 @@
                 <div class="stat-label">Flagged (NSFW)</div>
             </div>
 
-            <div class="stat-card success">
-                <div class="stat-icon">✅</div>
-                <div class="stat-number" id="successfulPayouts">-</div>
-                <div class="stat-label">Successful</div>
+            <div class="stat-card warning" onclick="document.getElementById('reportedVideosSection').scrollIntoView({behavior: 'smooth'})" style="cursor: pointer;">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-number" id="openReportsCount">-</div>
+                <div class="stat-label">Reported Videos</div>
             </div>
 
             <div class="stat-card danger">
-                <div class="stat-icon">❌</div>
-                <div class="stat-number" id="failedPayouts">-</div>
-                <div class="stat-label">Failed</div>
+                <div class="stat-icon">🗑️</div>
+                <div class="stat-number" id="deletedVideosCount">0</div>
+                <div class="stat-label">Deleted Videos</div>
             </div>
 
             <div class="stat-card primary" onclick="loadDailyUploads()" style="cursor: pointer;">
@@ -510,10 +510,10 @@
             </div>
         </div>
 
-        <div class="dashboard-section">
-            <h2 class="section-title">📋 Recent Payouts</h2>
-            <div id="recentPayouts">
-                <p>Loading recent payouts...</p>
+        <div class="dashboard-section" id="reportedVideosSection">
+            <h2 class="section-title">⚠️ Reported Videos (User Flags)</h2>
+            <div id="reportedVideosList">
+                <p>Loading reported videos...</p>
             </div>
         </div>
 
@@ -1748,7 +1748,10 @@
                 await loadCreators();
 
                 // Load recent payouts
-                await loadRecentPayouts();
+                // await loadRecentPayouts(); // REPLACED BY REPORTED VIDEOS
+
+                // Load reported videos
+                await loadReportedVideos();
 
                 // Load feedback automatically
                 await loadFeedback();
@@ -1764,18 +1767,18 @@
 
         async function loadPayoutStats() {
             try {
-                const [payoutResponse, platformStatsResponse, monthlyEarningsResponse] = await Promise.all([
+                const [payoutResponse, platformStatsResponse, monthlyEarningsResponse, reportStatsResponse] = await Promise.all([
                     authorizedFetch(`${API_BASE}/creator-payouts/stats`),
                     authorizedFetch(`${API_BASE}/admin/stats`),
-                    authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`)
+                    authorizedFetch(`${API_BASE}/admin/creators/monthly-earnings`),
+                    authorizedFetch(`${API_BASE}/admin/report-stats`)
                 ]);
 
-                // Payout status cards
-                if (payoutResponse && payoutResponse.ok) {
-                    const stats = await payoutResponse.json();
-                    // document.getElementById('totalPayouts').textContent = stats.total || 0; // REPLACED BY TOTAL USERS
-                    document.getElementById('successfulPayouts').textContent = stats.successful || 0;
-                    document.getElementById('failedPayouts').textContent = stats.failed || 0;
+                // Report stats cards
+                if (reportStatsResponse && reportStatsResponse.ok) {
+                    const rStats = await reportStatsResponse.json();
+                    document.getElementById('openReportsCount').textContent = rStats.openReportsCount || 0;
+                    document.getElementById('deletedVideosCount').textContent = rStats.deletedCount || 0;
                 }
 
                 // Platform-level stats (videos + daily uploads)
@@ -1860,55 +1863,121 @@
             }
         }
 
-        async function loadRecentPayouts() {
+        async function loadReportedVideos() {
+            const container = document.getElementById('reportedVideosList');
             try {
-                const response = await authorizedFetch(`${API_BASE}/creator-payouts/recent`);
+                container.innerHTML = '<p>Loading reported videos...</p>';
+                const response = await authorizedFetch(`${API_BASE}/admin/reports?status=open`);
+                if (!response || !response.ok) {
+                    container.innerHTML = '<p class="error-message">Failed to load reported videos</p>';
+                    return;
+                }
+                const data = await response.json();
+                renderReportedVideos(data.reports || []);
+            } catch (error) {
+                console.error('Error loading reported videos:', error);
+                container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+            }
+        }
+
+        function renderReportedVideos(reports) {
+            const container = document.getElementById('reportedVideosList');
+
+            if (!reports || reports.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 20px; color: #28a745;"><h3>✅ No open reports</h3></div>';
+                return;
+            }
+
+            const tableRows = reports.map(report => {
+                const video = report.video || {};
+                const videoName = escapeHtml(video.videoName || 'Deleted/Unknown Video');
+                const uploader = video.uploader ? escapeHtml(video.uploader.name || 'Unknown') : 'Unknown';
+                const reason = escapeHtml(report.reason || 'other');
+                const details = escapeHtml(report.details || '');
+                const createdAt = formatDate(report.createdAt);
+                
+                return `
+                    <tr>
+                        <td>
+                            <strong>${videoName}</strong><br>
+                            <small>ID: ${report.targetId}</small>
+                        </td>
+                        <td>${uploader}</td>
+                        <td>
+                            <span class="status-badge status-failed">${reason}</span><br>
+                            <small>${details}</small>
+                        </td>
+                        <td>${createdAt}</td>
+                        <td>
+                            <div style="display: flex; gap: 5px;">
+                                <button class="btn btn-danger btn-sm" onclick="removeReportedVideo('${report.targetId}', '${videoName.replace(/'/g, "\\'")}', '${report._id}')">
+                                    🗑️ Remove Video
+                                </button>
+                                <button class="btn btn-success btn-sm" onclick="dismissReport('${report._id}')">
+                                    ✅ Dismiss
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="payout-table">
+                    <thead>
+                        <tr>
+                            <th>Video</th>
+                            <th>Creator</th>
+                            <th>Reason</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        async function removeReportedVideo(videoId, videoName, reportId) {
+            // First try to delete the video
+            const deleted = await deleteVideo(videoId, videoName);
+            
+            // If delete was successful OR it was already deleted (404), dismiss the report
+            if (deleted) {
+                await dismissReport(reportId, false);
+                loadReportedVideos(); // Refresh reports list
+                loadPayoutStats(); // Refresh stats (deleted count might increase, though we don't track it yet)
+            }
+        }
+
+        async function dismissReport(reportId, refresh = true) {
+            try {
+                // We'll use the existing reportRoutes or just a simple fetch
+                const response = await authorizedFetch(`${API_BASE}/report/${reportId}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'resolved' })
+                });
+
                 if (response.ok) {
-                    const data = await response.json();
-                    const payouts = data.payouts || [];
-
-                    if (payouts.length === 0) {
-                        document.getElementById('recentPayouts').innerHTML = '<p>No recent payouts found</p>';
-                        return;
+                    if (refresh) {
+                        showSuccess('Report dismissed');
+                        loadReportedVideos();
+                        loadPayoutStats(); // Refresh count
                     }
-
-                    const tableHtml = `
-                        <table class="payout-table">
-                            <thead>
-                                <tr>
-                                    <th>Creator</th>
-                                    <th>Month</th>
-                                    <th>Amount</th>
-                                    <th>Status</th>
-                                    <th>Payment Method</th>
-                                    <th>Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${payouts.map(payout => `
-                                    <tr>
-                                        <td>${payout.creatorName || 'Unknown'}</td>
-                                        <td>${payout.month || 'N/A'}</td>
-                                        <td>${payout.formattedPayableAmount || '₹0'}</td>
-                                        <td>
-                                            <span class="status-badge status-${payout.status || 'pending'}">
-                                                ${payout.status || 'pending'}
-                                            </span>
-                                        </td>
-                                        <td>${payout.paymentMethodDisplay || 'N/A'}</td>
-                                        <td>${new Date(payout.createdAt).toLocaleDateString()}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    `;
-
-                    document.getElementById('recentPayouts').innerHTML = tableHtml;
+                    return true;
                 }
             } catch (error) {
-                console.error('Error loading recent payouts:', error);
-                document.getElementById('recentPayouts').innerHTML = '<p>Failed to load recent payouts</p>';
+                console.error('Error dismissing report:', error);
             }
+            return false;
+        }
+
+        async function loadRecentPayouts() {
+            // Keep the function but it's no longer used in UI
+            console.log('loadRecentPayouts called but UI section removed');
         }
 
         async function startScheduler() {
@@ -2078,7 +2147,7 @@
 
         async function deleteVideo(videoId, videoName) {
             if (!confirm(`Are you sure you want to delete this video?\n\nVideo: ${videoName}\n\nThis action cannot be undone!`)) {
-                return;
+                return false;
             }
 
             try {
@@ -2086,16 +2155,22 @@
                     method: 'DELETE'
                 });
 
-                if (response && response.ok) {
-                    showSuccess(`Video "${videoName}" deleted successfully`);
-                    loadVideos(); // Refresh the list
+                if (response && (response.ok || response.status === 404)) {
+                    if (response.status === 404) {
+                        console.warn(`Video ${videoId} already deleted or not found.`);
+                    }
+                    showSuccess(`Video "${videoName}" removed successfully`);
+                    if (typeof loadVideos === 'function') loadVideos(); // Refresh the list if it exists
+                    return true;
                 } else {
-                    const error = await response.json();
+                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
                     showError(`Failed to delete video: ${error.error || 'Unknown error'}`);
+                    return false;
                 }
             } catch (error) {
                 console.error('Error deleting video:', error);
                 showError(`Error deleting video: ${error.message}`);
+                return false;
             }
         }
 

@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:vayu/features/profile/data/services/payment_setup_service.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 /// Widget to display payment setup status
 class PaymentStatusIndicator extends StatefulWidget {
@@ -101,13 +98,13 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: _hasPaymentSetup
-              ? AppColors.success.withOpacity(0.1)
-              : AppColors.warning.withOpacity(0.1),
+              ? AppColors.success.withValues(alpha: 0.1)
+              : AppColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(
             color: _hasPaymentSetup
-                ? AppColors.success.withOpacity(0.2)
-                : AppColors.warning.withOpacity(0.2),
+                ? AppColors.success.withValues(alpha: 0.2)
+                : AppColors.warning.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -117,8 +114,8 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: _hasPaymentSetup
-                    ? AppColors.success.withOpacity(0.1)
-                    : AppColors.warning.withOpacity(0.1),
+                    ? AppColors.success.withValues(alpha: 0.1)
+                    : AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Icon(
@@ -174,13 +171,13 @@ class _PaymentStatusIndicatorState extends State<PaymentStatusIndicator> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: _hasPaymentSetup
-              ? AppColors.success.withOpacity(0.1)
-              : AppColors.warning.withOpacity(0.1),
+              ? AppColors.success.withValues(alpha: 0.1)
+              : AppColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.pill),
           border: Border.all(
             color: _hasPaymentSetup
-                ? AppColors.success.withOpacity(0.2)
-                : AppColors.warning.withOpacity(0.2),
+                ? AppColors.success.withValues(alpha: 0.2)
+                : AppColors.warning.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -227,8 +224,8 @@ class PaymentStatusBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: hasPaymentSetup
-              ? AppColors.success.withOpacity(0.1)
-              : AppColors.warning.withOpacity(0.1),
+              ? AppColors.success.withValues(alpha: 0.1)
+              : AppColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
         child: Row(

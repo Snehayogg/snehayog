@@ -127,6 +127,6 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     SharedVideoControllerPool().pauseAllControllers();
 
     _isScreenVisible = false;
-    _disableWakelock();
+    _ensureWakelockForVisibility();
   }
 }

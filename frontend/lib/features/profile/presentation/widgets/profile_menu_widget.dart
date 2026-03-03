@@ -53,7 +53,7 @@ class ProfileMenuWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.backgroundPrimary,
           border: Border(
-            left: BorderSide(color: AppColors.borderPrimary.withOpacity(0.5), width: 1),
+            left: BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5), width: 1),
           ),
         ),
         child: SafeArea(
@@ -61,17 +61,17 @@ class ProfileMenuWidget extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.all(AppSpacing.spacing5),
+                padding: EdgeInsets.all(AppSpacing.spacing5),
                 decoration: BoxDecoration(
-                  color: AppColors.backgroundSecondary.withOpacity(0.5),
-                  border: const Border(
+                  color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+                  border: Border(
                     bottom: BorderSide(color: AppColors.borderPrimary, width: 1),
                   ),
                 ),
                 child: Row(
                   children: [
                     const HugeIcon(icon: HugeIcons.strokeRoundedMenu01, color: AppColors.primary, size: 24),
-                    const SizedBox(width: AppSpacing.spacing3),
+                    SizedBox(width: AppSpacing.spacing3),
                     Text(
                       'Account Menu',
                       style: AppTypography.headlineSmall.copyWith(
@@ -241,11 +241,11 @@ class ProfileMenuWidget extends StatelessWidget {
                     });
 
                     return GridView.builder(
-                      padding: const EdgeInsets.symmetric(
+                      padding: EdgeInsets.symmetric(
                         horizontal: AppSpacing.spacing4,
                         vertical: AppSpacing.spacing2,
                       ),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: AppSpacing.spacing3,
                         mainAxisSpacing: AppSpacing.spacing3,
@@ -266,7 +266,7 @@ class ProfileMenuWidget extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.spacing5),
+                padding: EdgeInsets.all(AppSpacing.spacing5),
                 child: Text(
                   'Vayu v1.1.0',
                   style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
@@ -293,10 +293,10 @@ class ProfileMenuWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.backgroundSecondary.withOpacity(0.3),
+            color: AppColors.backgroundSecondary.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(
-              color: AppColors.borderPrimary.withOpacity(0.5),
+              color: AppColors.borderPrimary.withValues(alpha: 0.5),
               width: 1,
             ),
           ),
@@ -304,9 +304,9 @@ class ProfileMenuWidget extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(AppSpacing.spacing2),
+                padding: EdgeInsets.all(AppSpacing.spacing2),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: HugeIcon(
@@ -315,7 +315,7 @@ class ProfileMenuWidget extends StatelessWidget {
                   size: 22,
                 ),
               ),
-              const SizedBox(height: AppSpacing.spacing2),
+              SizedBox(height: AppSpacing.spacing2),
               Text(
                 title,
                 style: AppTypography.labelMedium.copyWith(

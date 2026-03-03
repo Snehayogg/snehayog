@@ -81,11 +81,16 @@ if (!mongoUri) {
   process.env.MONGO_URI = mongoUri;
 }
 
+const PORT = parseInt(process.env.PORT, 10) || 5001;
+const HOST = '0.0.0.0'; // Force 0.0.0.0 for reliable deployment binding
+
 // Port and Host configuration - PRODUCTION SAFE
 // Fly.io and Railway inject process.env.PORT (typically 8080)
 // Must use 0.0.0.0 to accept external requests through the proxy
-const PORT = parseInt(process.env.PORT, 10) || 5001;
-const HOST = '0.0.0.0'; // Force 0.0.0.0 for reliable deployment binding
+console.log('📡 Starting server with configuration:');
+console.log(`   - Requested Port: ${PORT}`);
+console.log(`   - Bind Address: ${HOST}`);
+console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
 // Validate port is a valid number
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {

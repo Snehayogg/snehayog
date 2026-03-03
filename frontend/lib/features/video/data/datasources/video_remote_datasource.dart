@@ -193,7 +193,7 @@ class VideoRemoteDataSource {
   }) async {
     try {
       // final videoFile = File(videoPath); // Unused variable
-      final isLong = await _isLongVideo(videoPath);
+      // **REMOVED: duration-based categorization logic**
 
       // Create a multipart request
       var request = http.MultipartRequest(
@@ -242,7 +242,7 @@ class VideoRemoteDataSource {
           'views': 0,
           'uploader': 'Current User', // This will be set by the use case
           'uploadTime': 'Just now',
-          'isLongVideo': isLong,
+          'isLongVideo': false, // DEPRECATED
           'link': videoData['link'],
         };
       } else {
@@ -308,18 +308,6 @@ class VideoRemoteDataSource {
     }
   }
 
-  /// Checks if a video is considered long (more than 2 minutes)
-  Future<bool> _isLongVideo(String videoPath) async {
-    try {
-      final controller = VideoPlayerController.file(File(videoPath));
-      await controller.initialize();
-      final duration = controller.value.duration;
-      await controller.dispose();
-      return duration.inSeconds > 120; // 2 minutes
-    } catch (e) {
-      return false;
-    }
-  }
 
   // _makeRequest method removed - using httpClientService which handles retries automatically
 

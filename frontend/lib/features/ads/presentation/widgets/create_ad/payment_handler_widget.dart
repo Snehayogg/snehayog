@@ -37,8 +37,8 @@ class PaymentHandlerWidget {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.payment, color: AppColors.primary, size: 24),
-            const SizedBox(width: 8),
+            Icon(Icons.payment, color: AppColors.primary, size: 24),
+            SizedBox(width: 8),
             Text(
               'Payment Required',
               style: AppTypography.headlineSmall.copyWith(fontSize: 18, color: AppColors.white),
@@ -52,20 +52,20 @@ class PaymentHandlerWidget {
             Text('Ad: ${ad.title}'),
             Text('Order ID: ${invoice['orderId']}'),
             Text('Amount: ₹${invoice['amount']}'),
-            const SizedBox(height: 16),
-            const Text(
+            SizedBox(height: 16),
+            Text(
               'Your ad has been created in draft status. Please complete the payment to activate it.',
               style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -174,7 +174,7 @@ class PaymentHandlerWidget {
         title: Row(
           children: [
             Icon(Icons.star, color: AppColors.warning, size: 24),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               'Why Advertise on Vayug?',
               style: AppTypography.headlineSmall.copyWith(
@@ -196,42 +196,42 @@ class PaymentHandlerWidget {
                 Icons.visibility,
                 AppColors.primary,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildBenefitItem(
                 'Creator-First Reward Model',
                 'Creators receive rewards based on engagement, leading to higher motivation and engagement. This results in more authentic content, ensuring advertisers\' ads are placed in highly engaging and trusted environments.',
                 Icons.people,
                 AppColors.success,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildBenefitItem(
                 'High Engagement & Brand Recall',
                 'Since creators are directly incentivized, they actively promote and integrate brand ads, leading to better click-through and conversion rates.',
                 Icons.trending_up,
                 AppColors.warning,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildBenefitItem(
                 'Less Competition, More Attention',
                 'Unlike crowded platforms (YouTube, Instagram, etc.), Vayug offers advertisers a space with lower competition for user attention, increasing ad visibility and impact.',
                 Icons.psychology,
                 AppColors.primaryDark,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildBenefitItem(
                 'Safe & Relevant Ad Placements',
                 'Ads are displayed only on clean and safe content, ensuring brand safety and alignment with advertiser values.',
                 Icons.security,
                 AppColors.primaryLight,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildBenefitItem(
                 'Focused User Experience',
                 'With a clutter-free interface and fewer distractions, ads receive greater user focus compared to traditional platforms overloaded with content.',
                 Icons.center_focus_strong,
                 AppColors.info,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildBenefitItem(
                 'Emerging Market Advantage',
                 'Early advertisers on Vayug benefit from first-mover advantage, capturing audience attention before the platform scales massively.',
@@ -255,24 +255,24 @@ class PaymentHandlerWidget {
   static Widget _buildBenefitItem(
       String title, String description, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +285,7 @@ class PaymentHandlerWidget {
                     color: color,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   description,
                   style: AppTypography.bodySmall.copyWith(

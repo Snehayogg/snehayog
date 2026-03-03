@@ -1,38 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class AppRadius {
   AppRadius._();
 
-  // Numerical Radii
-  static const double none = 0.0;
-  static const double xs = 4.0;
-  static const double sm = 8.0;
-  static const double md = 12.0;
-  static const double lg = 16.0;
-  static const double xl = 24.0;
-  static const double pill = 999.0;
+  // Numerical Radii - Responsive via .r
+  static double get none => 0.0;
+  static double get xs => 4.0.r;
+  static double get sm => 8.0.r;
+  static double get md => 12.0.r;
+  static double get lg => 16.0.r;
+  static double get xl => 24.0.r;
+  static double get pill => 999.0.r;
 
-  // Legacy variables for mapping to AppTheme/AppLayout exactly
-  static const double radiusNone = 0.0;
-  static const double radiusSmall = 4.0;
-  static const double radiusMedium = 8.0;
-  static const double radiusLarge = 12.0;
-  static const double radiusXLarge = 16.0;
-  static const double radiusXXLarge = 24.0;
-  static const double radiusFull = 9999.0;
+  // Legacy variables for mapping to AppTheme/AppLayout exactly - Responsive via .r
+  static double get radiusNone => 0.0;
+  static double get radiusSmall => 4.0.r;
+  static double get radiusMedium => 8.0.r;
+  static double get radiusLarge => 12.0.r;
+  static double get radiusXLarge => 16.0.r;
+  static double get radiusXXLarge => 24.0.r;
+  static double get radiusFull => 9999.0.r;
 
-  static const double radiusXS = 4.0;
-  static const double radiusSM = 8.0;
-  static const double radiusMD = 12.0;
-  static const double radiusLG = 16.0;
-  static const double radiusXL = 24.0;
-  static const double radiusPill = 999.0;
+  static double get radiusXS => 4.0.r;
+  static double get radiusSM => 8.0.r;
+  static double get radiusMD => 12.0.r;
+  static double get radiusLG => 16.0.r;
+  static double get radiusXL => 24.0.r;
+  static double get radiusPill => 999.0.r;
 
-  // Pre-defined BorderRadius objects for instant usage
-  static final BorderRadius borderRadiusXS = BorderRadius.circular(xs);
-  static final BorderRadius borderRadiusSM = BorderRadius.circular(sm);
-  static final BorderRadius borderRadiusMD = BorderRadius.circular(md);
-  static final BorderRadius borderRadiusLG = BorderRadius.circular(lg);
-  static final BorderRadius borderRadiusXL = BorderRadius.circular(xl);
-  static final BorderRadius borderRadiusPill = BorderRadius.circular(pill);
+  // Pre-defined BorderRadius objects for instant usage - Dynamic getters
+  static BorderRadius get borderRadiusXS => BorderRadius.circular(xs);
+  static BorderRadius get borderRadiusSM => BorderRadius.circular(sm);
+  static BorderRadius get borderRadiusMD => BorderRadius.circular(md);
+  static BorderRadius get borderRadiusLG => BorderRadius.circular(lg);
+  static BorderRadius get borderRadiusXL => BorderRadius.circular(xl);
+  static BorderRadius get borderRadiusPill => BorderRadius.circular(pill);
 }

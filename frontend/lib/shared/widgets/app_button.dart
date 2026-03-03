@@ -59,19 +59,19 @@ class AppButton extends StatelessWidget {
         height = 36.0;
         fontSize = AppTypography.fontSizeSM;
         iconSize = 16.0;
-        padding = const EdgeInsets.symmetric(horizontal: AppSpacing.spacing3);
+        padding = EdgeInsets.all(AppSpacing.spacing3);
         break;
       case AppButtonSize.medium:
         height = 48.0;
         fontSize = AppTypography.fontSizeBase;
         iconSize = 20.0;
-        padding = const EdgeInsets.symmetric(horizontal: AppSpacing.spacing4);
+        padding = EdgeInsets.all(AppSpacing.spacing4);
         break;
       case AppButtonSize.large:
         height = 56.0;
         fontSize = AppTypography.fontSizeLG;
         iconSize = 24.0;
-        padding = const EdgeInsets.symmetric(horizontal: AppSpacing.spacing5);
+        padding = EdgeInsets.all(AppSpacing.spacing5);
         break;
     }
 
@@ -111,11 +111,11 @@ class AppButton extends StatelessWidget {
     }
 
     if (effectiveDisabled) {
-      backgroundColor = backgroundColor.withOpacity(
-          backgroundColor == Colors.transparent ? 1.0 : disabledOpacity);
-      foregroundColor = foregroundColor.withOpacity(disabledOpacity);
+      backgroundColor = backgroundColor.withValues(
+          alpha: backgroundColor == Colors.transparent ? 1.0 : disabledOpacity);
+      foregroundColor = foregroundColor.withValues(alpha: disabledOpacity);
       if (borderColor != Colors.transparent) {
-        borderColor = borderColor.withOpacity(disabledOpacity);
+        borderColor = borderColor.withValues(alpha: disabledOpacity);
       }
       elevation = 0;
     }
@@ -134,10 +134,9 @@ class AppButton extends StatelessWidget {
               valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
             ),
           ),
-          const SizedBox(width: AppSpacing.spacing2),
+          SizedBox(width: AppSpacing.spacing2),
         ] else if (icon != null) ...[
-          icon!,
-          const SizedBox(width: AppSpacing.spacing2),
+          SizedBox(width: AppSpacing.spacing2),
         ],
         Text(
           label,

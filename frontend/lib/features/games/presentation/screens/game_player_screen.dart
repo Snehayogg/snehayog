@@ -230,7 +230,7 @@ class _GamePlayerScreenState extends State<GamePlayerScreen> {
               left: 16,
               child: SafeArea(
                 child: CircleAvatar(
-                  backgroundColor: Colors.black.withOpacity(0.5),
+                  backgroundColor: Colors.black.withValues(alpha: 0.5),
                   child: IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),

@@ -1,19 +1,20 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// Optimized app configuration for better performonce andsmaller size
+/// Optimized app configuration for better performance and smaller size
 class AppConfig {
   // **NEW: API Version (Date-Based)**
   static const String kApiVersion = '2026-03-02';
 
-  // Use build mode instead of a hardcoded flag:
-  // debug/profile -> development behavior, release -> production behavior.
-  static bool get _isDevelopment => !kReleaseMode;
+  // Set to true to force local development server, false for remote server (Fly/custom domain)
+  static const bool isDevelopment = false;
 
-  // **NEW: Smart URL selection with fallback**
+  // Use the explicit flag instead of kReleaseMode
+  static bool get _isDevelopment => isDevelopment;
+
+  // Cache for the discovered base URL
   static String? _cachedBaseUrl;
 
   // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
@@ -27,45 +28,47 @@ class AppConfig {
   static const String _customDomainUrl = 'https://api.snehayog.site';
   static const String _flyUrl = 'https://vayug.fly.dev';
 
-  // Backend API configuration with smart fallback
+  // Backend API configuration - Strict Mode
   static String get baseUrl {
-    // **FIX: For web, always use localhost, not IP address**
-    if (kIsWeb) {
-      // Web ke liye localhost use karein (development me)
-      if (_isDevelopment) {
-        _cachedBaseUrl = _localWebBaseUrl;
-        return _localWebBaseUrl;
-      }
-      // Production web ke liye
-      if (_cachedBaseUrl != null) {
-        return _cachedBaseUrl!;
-      }
-      // Prefer Fly.io for production
-      return _flyUrl;
-    }
-
-    // In development mode, prioritize local server but allow cached fallback
     if (_isDevelopment) {
-      if (_cachedBaseUrl != null) {
-        return _cachedBaseUrl!;
-      }
-      return _localIpBaseUrl;
+      return kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
+    } else {
+      // Production mode: Prioritize Custom Domain
+      return _cachedBaseUrl ?? _customDomainUrl; 
     }
-
-    // Production mode: use cache if available
-    if (_cachedBaseUrl != null) {
-      // **FIX: Ensure cached URL doesn't have redundant /api suffix**
-      if (_cachedBaseUrl!.endsWith('/api')) {
-        _cachedBaseUrl = _cachedBaseUrl!.substring(0, _cachedBaseUrl!.length - 4);
-      }
-      return _cachedBaseUrl!;
-    }
-
-    _cachedBaseUrl = _flyUrl; // TEMPORARY: Using Fly.io until custom domain SSL is configured
-    return _cachedBaseUrl!;
   }
 
-  /// **OPTIMIZED: Check server connectivity (helper method for parallel checks)**
+  // **Helper Methods for Production Priority & Fallback**
+  
+  /// Asynchronous check that prioritizes Custom Domain -> Fly.io
+  static Future<String> getBaseUrlWithFallback() async {
+    if (_isDevelopment) return baseUrl;
+    
+    // Check if Custom Domain is healthy
+    final String? healthyCustom = await _checkServer(_customDomainUrl);
+    if (healthyCustom != null) {
+      _cachedBaseUrl = _customDomainUrl;
+      return _customDomainUrl;
+    }
+    
+    // Otherwise fallback to Fly.io
+    print('⚠️ AppConfig: Custom domain unreachable, falling back to Fly.io');
+    _cachedBaseUrl = _flyUrl;
+    return _flyUrl;
+  }
+
+  /// Simplified version of refresh check
+  static Future<String> checkAndUpdateServerUrl() async {
+    return await getBaseUrlWithFallback();
+  }
+
+  /// Reset cached URL - no-op in simplified version as there's no cache
+  static void resetCachedUrl() {
+    _cachedBaseUrl = null;
+    print('🔄 AppConfig: Cached URL reset.');
+  }
+
+  /// **OPTIMIZED: Check server connectivity**
   static Future<String?> _checkServer(String url) async {
     try {
       final response = await httpClientService.get(
@@ -84,105 +87,6 @@ class AppConfig {
     return null;
   }
 
-  // **OPTIMIZED: Try all servers in parallel and return the FIRST successful one (Race Condition)**
-  static Future<String> getBaseUrlWithFallback() async {
-    return _findBestServerUrl(source: 'getBaseUrlWithFallback');
-  }
-
-  // **OPTIMIZED: Check server connectivity - parallel checks for faster response**
-  static Future<String> checkAndUpdateServerUrl() async {
-     return _findBestServerUrl(source: 'checkAndUpdateServerUrl');
-  }
-
-  // **NEW: Private helper to implement "Race to Success" pattern**
-  static Future<String> _findBestServerUrl({required String source}) async {
-    // **FIX: For web, always use localhost**
-    if (kIsWeb) {
-      if (_isDevelopment) {
-        print('🌐 AppConfig.$source: WEB DEVELOPMENT MODE');
-        print('🌐 Using: $_localWebBaseUrl');
-        _cachedBaseUrl = _localWebBaseUrl;
-        return _localWebBaseUrl;
-      }
-      if (_cachedBaseUrl != null) return _cachedBaseUrl!;
-      return _flyUrl;
-    }
-
-    // Use cache if available (Even in Dev mode, once discovered, we use it)
-    if (_cachedBaseUrl != null) {
-      return _cachedBaseUrl!;
-    }
-
-    // **NEW: Try to load from SharedPreferences before race**
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final persistedUrl = prefs.getString('discovered_base_url');
-      if (persistedUrl != null && persistedUrl.isNotEmpty) {
-        print('✅ AppConfig: Using persisted URL from SharedPreferences: $persistedUrl');
-        _cachedBaseUrl = persistedUrl;
-        return persistedUrl;
-      }
-    } catch (e) {
-      print('⚠️ AppConfig: Error loading persisted URL: $e');
-    }
-
-    print('🔍 AppConfig: Starting parallel "Race to Success" check...');
-    
-    const localServerUrl = kIsWeb ? _localWebBaseUrl : _localIpBaseUrl;
-    
-    // Create a completer to handle the "first success" logic
-    final completer = Completer<String>();
-    
-    // Define the candidate servers
-    final candidates = [
-      if (_isDevelopment) localServerUrl,
-      _flyUrl,
-      _customDomainUrl,
-      if (!_isDevelopment) localServerUrl, // Last resort if not in dev
-    ];
-    
-    int completedCount = 0;
-    
-    // Launch all checks simultaneously
-    for (final url in candidates) {
-      _checkServer(url).then((verifiedUrl) {
-        // If we found a valid URL and haven't finished yet, declare victory!
-        if (verifiedUrl != null && !completer.isCompleted) {
-          print('✅ AppConfig: FAST WINNER found: $verifiedUrl');
-          completer.complete(verifiedUrl);
-        }
-      }).whenComplete(() {
-        completedCount++;
-        // If all checks finished and none succeeded, use fallback
-        if (completedCount == candidates.length && !completer.isCompleted) {
-          print('⚠️ AppConfig: All servers unreachable, using default fallback');
-          completer.complete(_flyUrl);
-        }
-      });
-    }
-
-    // Wait for the winner (or default fallback)
-    final winner = await completer.future;
-    _cachedBaseUrl = winner;
-
-    // **NEW: Persist the discovered URL for next boot**
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('discovered_base_url', winner);
-      print('💾 AppConfig: Persisted discovered URL for next boot');
-    } catch (e) {
-      print('⚠️ AppConfig: Error persisting URL: $e');
-    }
-
-    return winner;
-  }
-
-  // **NEW: Reset cached URL (useful for retry scenarios)**
-  static void resetCachedUrl() {
-    _cachedBaseUrl = null;
-    print('🔄 AppConfig: Cached URL reset, will recheck on next request');
-  }
-
   // **NEW: Fallback URLs - custom domain first for production**
   static const List<String> fallbackUrls = [
     _flyUrl,
@@ -191,8 +95,8 @@ class AppConfig {
 
   // **NEW: Network timeout configurations**
   static const Duration authTimeout = Duration(seconds: 30);
-  static const Duration apiTimeout = Duration(seconds: 30);
-  static const Duration uploadTimeout = Duration(minutes: 10);
+  static const Duration apiTimeout = Duration(seconds: 20);
+  static const Duration uploadTimeout = Duration(minutes: 30);
 
   static const int maxRetries = 3;
   static const Duration retryDelay = Duration(seconds: 2);
@@ -576,7 +480,7 @@ class NetworkHelper {
     try {
       print('🔍 NetworkHelper: Checking custom domain accessibility...');
       final response = await http.get(
-        Uri.parse('${AppConfig._customDomainUrl}/api/health'),
+        Uri.parse('${AppConfig._flyUrl}/api/health'), // Using Fly.io as it is more stable
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 30));
 
@@ -591,7 +495,7 @@ class NetworkHelper {
 
   /// **UPDATED: Get best available server URL - Custom Domain → Railway → Local Server**
   static Future<String> getBestServerUrl() async {
-    // Use AppConfig's getBaseUrlWithFallback which prioritizes: Custom Domain → Railway → Local Server
-    return await AppConfig.getBaseUrlWithFallback();
+    // Now strictly based on AppConfig.baseUrl logic
+    return AppConfig.baseUrl;
   }
 }

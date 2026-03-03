@@ -49,7 +49,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -60,7 +60,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                 color: AppColors.white,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -79,30 +79,30 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                 ),
                 if (widget.isMediaValid == false && widget.mediaError != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.only(top: 4),
                     child: Text(
                       widget.mediaError!,
-                      style: const TextStyle(color: AppColors.error, fontSize: 12),
+                      style: TextStyle(color: AppColors.error, fontSize: 12),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: AppButton(
                     onPressed: _pickImage,
-                    icon: const Icon(Icons.image),
+                    icon: Icon(Icons.image),
                     label: _getImageButtonLabel(),
                     variant: AppButtonVariant.primary,
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: AppButton(
                     onPressed: _isVideoAllowed() ? _pickVideo : null,
-                    icon: const Icon(Icons.video_library),
+                    icon: Icon(Icons.video_library),
                     label: _getVideoButtonLabel(),
                     variant: AppButtonVariant.secondary,
                     isDisabled: !_isVideoAllowed(),
@@ -110,10 +110,10 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               _getMediaHelpText(),
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
@@ -137,7 +137,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         itemBuilder: (context, index) {
           return Container(
             width: 150,
-            margin: const EdgeInsets.all(8),
+            margin: EdgeInsets.all(8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.borderPrimary),
@@ -159,12 +159,12 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                   child: GestureDetector(
                     onTap: () => _removeImageFromCarousel(index),
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.8),
+                        color: AppColors.error.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.close,
                         color: AppColors.white,
                         size: 16,
@@ -177,14 +177,14 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                   left: 4,
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
+                      color: Colors.black.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       '${index + 1}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -222,15 +222,15 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
-                child: const Text(
+                child: Text(
                   'Banner Preview (320x100)',
                   style: TextStyle(
                     fontSize: 12,
@@ -258,7 +258,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           color: AppColors.backgroundPrimary,
-          child: const Center(
+          child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -285,15 +285,15 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
           ),
           Text(
             _getPlaceholderText(),
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textTertiary,
               fontSize: 16,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             _getPlaceholderSubtext(),
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.error,
               fontSize: 12,
             ),
@@ -305,14 +305,14 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
   Widget _buildVideoTip() {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(8),
+      margin: EdgeInsets.only(top: 8),
+      padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.success.withOpacity(0.05),
+        color: AppColors.success.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.success.withOpacity(0.2)),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.video_library, size: 16, color: AppColors.success),
            SizedBox(width: 8),
@@ -333,14 +333,14 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
   Widget _buildCarouselTip() {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(8),
+      margin: EdgeInsets.only(top: 8),
+      padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.warning.withOpacity(0.05),
+        color: AppColors.warning.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.warning.withOpacity(0.2)),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.view_carousel, size: 16, color: AppColors.warning),
            SizedBox(width: 8),
@@ -570,8 +570,8 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     choice = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Media Type'),
-        content: const Text(
+        title: Text('Select Media Type'),
+        content: Text(
             'Carousel ads support either multiple images (up to 3) OR a single video. Choose one:'),
         actions: [
           AppButton(

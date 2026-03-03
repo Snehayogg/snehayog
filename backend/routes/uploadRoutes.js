@@ -396,7 +396,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       videoUrl: tempVideoUrl, // Proper URL format, will be updated after processing
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id, // Use user's ObjectId, not Google ID
-      videoType: (videoInfo.duration && videoInfo.duration > 60) ? 'vayu' : 'yog',
+      videoType: aspectRatio < 0.8 ? 'yog' : 'vayu',
       aspectRatio: aspectRatio,
       duration: videoInfo.duration || 0,
       originalSize: videoValidation.size,
@@ -751,7 +751,7 @@ async function createVideoFromUploadedFile({ userId, filePath, originalName, met
     videoUrl: tempVideoUrl,
     thumbnailUrl: '',
     uploader: user._id,
-    videoType: (videoInfo.duration && videoInfo.duration > 60) ? 'vayu' : 'yog',
+    videoType: aspectRatio < 0.8 ? 'yog' : 'vayu',
     aspectRatio,
     duration: videoInfo.duration || 0,
     originalSize: videoValidation.size,

@@ -123,7 +123,7 @@ class ProfileDialogsWidget {
                     showFeedbackDialog(context);
                   },
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
               ],
             );
           } else {
@@ -149,7 +149,7 @@ class ProfileDialogsWidget {
                     showHelpDialog(context);
                   },
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
               ],
             );
           }
@@ -168,9 +168,9 @@ class ProfileDialogsWidget {
   }) {
     return ListTile(
       leading: Container(
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (iconColor ?? AppColors.textTertiary).withOpacity(0.1),
+          color: (iconColor ?? AppColors.textTertiary).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         child: Icon(icon, color: iconColor ?? AppColors.textTertiary, size: 20),
@@ -189,7 +189,7 @@ class ProfileDialogsWidget {
             ),
       ),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
     );
   }
 
@@ -200,8 +200,8 @@ class ProfileDialogsWidget {
         backgroundColor: AppColors.surfacePrimary,
         title: Row(
           children: [
-            const Icon(Icons.help_outline, color: AppColors.textPrimary),
-            const SizedBox(width: 12),
+            Icon(Icons.help_outline, color: AppColors.textPrimary),
+            SizedBox(width: 12),
             Text('Help & Support', style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),
@@ -213,7 +213,7 @@ class ProfileDialogsWidget {
               'Need help? Here are some common solutions:',
               style: AppTypography.bodyMedium,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text(
               '• Profile Issues: Try refreshing your profile',
               style: AppTypography.bodySmall,
@@ -283,11 +283,11 @@ class ProfileDialogsWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Everything you need to know about Vayug',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Expanded(
             child: ListView(
               children: [
@@ -329,11 +329,11 @@ class ProfileDialogsWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           AppButton(
             isFullWidth: true,
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.check_circle_outline),
+            icon: Icon(Icons.check_circle_outline),
             label: 'Got it, thanks!',
             variant: AppButtonVariant.primary,
           ),
@@ -349,8 +349,8 @@ class ProfileDialogsWidget {
     required Color color,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(20),
+      margin: EdgeInsets.only(bottom: 20),
+      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.backgroundSecondary,
         borderRadius: BorderRadius.circular(16),
@@ -359,7 +359,7 @@ class ProfileDialogsWidget {
           BoxShadow(
             color: Colors.black.withValues(alpha:0.1),
             blurRadius: 8,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -371,14 +371,14 @@ class ProfileDialogsWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Text(
                   question,
@@ -390,11 +390,11 @@ class ProfileDialogsWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // Answer
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.backgroundPrimary,
               borderRadius: BorderRadius.circular(12),
@@ -418,16 +418,16 @@ class ProfileDialogsWidget {
     VayuBottomSheet.show(
       context: context,
       title: 'Legal & About',
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Policies and contact information',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildLegalItem(
             context: context,
             title: 'Privacy Policy',
@@ -458,7 +458,7 @@ class ProfileDialogsWidget {
             icon: Icons.info_outline_rounded,
             onTap: () => _launchURL('https://snehayog.site/about.html'),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Center(
             child: Text(
               'Version 1.0.0',
@@ -486,9 +486,9 @@ class ProfileDialogsWidget {
           color: AppColors.textPrimary,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary),
+      trailing: Icon(Icons.chevron_right, color: AppColors.textTertiary),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
     );
   }
 
@@ -553,10 +553,10 @@ class ProfileDialogsWidget {
                           'To maintain a fair and secure platform, we use a Billing Alias (UPI ID) for identity verification. This prevents duplicate accounts and ensures that rewards are distributed correctly to verified, unique creators.',
                     ),
                     if (!showUpiField && currentUpi.isNotEmpty) ...[
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(12),
+                        padding: EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: AppColors.backgroundSecondary,
                           borderRadius: BorderRadius.circular(12),
@@ -565,17 +565,17 @@ class ProfileDialogsWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                             const Text(
+                             Text(
                                 'Saved UPI ID',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.textPrimary,
                                 ),
                               ),
-                            const SizedBox(height: 6),
+                            SizedBox(height: 6),
                             Text(
                               currentUpi,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 color: AppColors.textSecondary,
                               ),
@@ -599,10 +599,10 @@ class ProfileDialogsWidget {
                       ),
                     ],
                     if (showUpiField) ...[
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       TextField(
                         controller: upiController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Enter your UPI ID',
                           hintText: 'example@bank',
                           border: OutlineInputBorder(),
@@ -610,7 +610,7 @@ class ProfileDialogsWidget {
                         textInputAction: TextInputAction.done,
                       ),
                       if (validationMessage != null) ...[
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Text(
                           validationMessage!,
                           style: TextStyle(
@@ -621,7 +621,7 @@ class ProfileDialogsWidget {
                         ),
                       ],
                     ],
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     AppButton(
                       isFullWidth: true,
                       isDisabled: isSaving,
@@ -707,19 +707,19 @@ class ProfileDialogsWidget {
     required String body,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             body,
             style: TextStyle(

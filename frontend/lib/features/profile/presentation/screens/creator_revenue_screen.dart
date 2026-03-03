@@ -364,7 +364,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         actions: [
           IconButton(
             onPressed: () => _loadRevenueData(forceRefresh: true),
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh),
           ),
         ],
       ),
@@ -388,7 +388,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-         const Icon(
+         Icon(
             Icons.lock_outline,
             size: 64,
             color: AppColors.textSecondary,
@@ -396,7 +396,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           AppSpacing.vSpace16,
           Text(
             AppText.get('revenue_sign_in_to_view'),
-            style: const TextStyle(fontSize: 18, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           AppSpacing.vSpace24,
@@ -425,7 +425,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildRevenueContent() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null) {
@@ -433,11 +433,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: AppColors.error),
+            Icon(Icons.error_outline, size: 64, color: AppColors.error),
             AppSpacing.vSpace16,
             Text(
               _errorMessage!,
-              style: const TextStyle(color: AppColors.error),
+              style: TextStyle(color: AppColors.error),
               textAlign: TextAlign.center,
             ),
             AppSpacing.vSpace16,
@@ -460,7 +460,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return RefreshIndicator(
       onRefresh: () async => await _loadRevenueData(forceRefresh: true),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.spacing4),
+        padding: EdgeInsets.all(AppSpacing.spacing4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -504,12 +504,12 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       ),
       color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.spacing5),
+        padding: EdgeInsets.all(AppSpacing.spacing5),
         child: Column(
           children: [
             Text(
               AppText.get('revenue_creator_earnings'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 color: AppColors.textSecondary,
               ),
@@ -553,7 +553,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return Column(
       children: [
         Icon(icon, color: color, size: 24),
-        const SizedBox(height: AppSpacing.spacing1),
+        SizedBox(height: AppSpacing.spacing1),
         Text(
           value,
           style: AppTypography.titleLarge.copyWith(
@@ -584,7 +584,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       ),
       color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.spacing5),
+        padding: EdgeInsets.all(AppSpacing.spacing5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -597,7 +597,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     fontWeight: AppTypography.weightBold,
                   ),
                 ),
-               const Icon(
+               Icon(
                   Icons.visibility,
                   color: AppColors.textSecondary,
                 ),
@@ -605,11 +605,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             AppSpacing.vSpace16,
             if (_isMonthlyViewsLoading)
-              const Center(child: CircularProgressIndicator())
+              Center(child: CircularProgressIndicator())
             else ...[
               Text(
                 AppText.get('revenue_current_cycle_views'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                 ),
@@ -643,7 +643,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildAnalyticsRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.spacing2),
+      padding: EdgeInsets.all(AppSpacing.spacing2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -720,7 +720,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       ),
       color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.spacing5),
+        padding: EdgeInsets.all(AppSpacing.spacing5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -735,9 +735,9 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 SizedBox(width: 8),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -750,7 +750,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.spacing4),
+            SizedBox(height: AppSpacing.spacing4),
             _buildAnalyticsRow(AppText.get('revenue_creator_earnings'),
                 thisMonth.toStringAsFixed(2)),
             _buildAnalyticsRow(AppText.get('revenue_gross_revenue'),
@@ -806,7 +806,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       ),
       color: AppColors.backgroundPrimary,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.spacing4),
+        padding: EdgeInsets.all(AppSpacing.spacing4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -848,7 +848,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
             _buildBreakdownRow(AppText.get('revenue_gross_revenue'),
                 grossRevenue.toStringAsFixed(2), AppColors.success),
-            const Divider(),
+            Divider(),
             _buildBreakdownRow(
                 AppText.get('revenue_creator_earnings',
                         fallback: 'Creator Earnings ({percent}%)')
@@ -865,7 +865,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   Widget _buildBreakdownRow(String label, String value, Color color,
       {bool isTotal = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.spacing2),
+      padding: EdgeInsets.all(AppSpacing.spacing2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

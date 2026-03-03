@@ -549,10 +549,8 @@ router.post('/follow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Cannot follow yourself' });
     }
 
-    // Find current user
-    const currentUser = req.user?._id && req.user?.googleId === currentUserId
-      ? { _id: req.user._id } 
-      : await User.findOne({ googleId: currentUserId }).select('_id').lean();
+    // Find current user - MUST fetch full Mongoose document to use .follow() method
+    const currentUser = await User.findOne({ googleId: currentUserId });
     
     // Find target user - support both googleId and MongoDB _id
     let userToFollow = await User.findOne({ googleId: userIdToFollow });
@@ -606,9 +604,8 @@ router.post('/unfollow', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'User ID to unfollow is required' });
     }
 
-    const currentUser = req.user?._id && req.user?.googleId === currentUserId
-      ? { _id: req.user._id }
-      : await User.findOne({ googleId: currentUserId }).select('_id').lean();
+    // Find current user - MUST fetch full Mongoose document to use .unfollow() method
+    const currentUser = await User.findOne({ googleId: currentUserId });
     
     // Find target user - support both googleId and MongoDB _id
     let userToUnfollow = await User.findOne({ googleId: userIdToUnfollow });

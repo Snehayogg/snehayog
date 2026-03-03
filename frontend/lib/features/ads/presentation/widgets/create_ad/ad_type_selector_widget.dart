@@ -24,7 +24,7 @@ class AdTypeSelectorWidget extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -35,32 +35,32 @@ class AdTypeSelectorWidget extends StatelessWidget {
                 color: AppColors.white,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               _getAdTypeDescription(selectedAdType),
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.05),
+                color: AppColors.primary.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline,
+                  Icon(Icons.info_outline,
                       size: 16, color: AppColors.primary),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _getAdTypeInfo(selectedAdType),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.primary,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -70,10 +70,10 @@ class AdTypeSelectorWidget extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: selectedAdType,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Select Ad Type',
                 border: OutlineInputBorder(),
               ),
@@ -85,11 +85,11 @@ class AdTypeSelectorWidget extends StatelessWidget {
               }).toList(),
               onChanged: (value) => onAdTypeChanged(value!),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             // Benefits Button
             AppButton(
                 onPressed: onShowBenefits,
-                icon: const Icon(Icons.info_outline, size: 20),
+                icon: Icon(Icons.info_outline, size: 20),
                 label: 'Why Advertise on Vayug?',
                 variant: AppButtonVariant.outline,
                 isFullWidth: true,

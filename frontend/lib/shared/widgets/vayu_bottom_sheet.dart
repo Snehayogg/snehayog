@@ -44,7 +44,7 @@ class VayuBottomSheet extends StatelessWidget {
       context: context,
       isScrollControlled: isScrollControlled,
       backgroundColor: Colors.transparent,
-      barrierColor: AppColors.overlayDark.withOpacity(0.5),
+      barrierColor: AppColors.overlayDark.withValues(alpha: 0.5),
       builder: (context) {
         if (useDraggable) {
           return DraggableScrollableSheet(
@@ -78,11 +78,11 @@ class VayuBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(
+      borderRadius: BorderRadius.vertical(
         top: Radius.circular(AppRadius.xl),
       ),
       child: BackdropFilter(
-        filter: ColorFilter.mode(
+        filter: const ColorFilter.mode(
           Colors.transparent,
           BlendMode.srcOver,
         ), // Necessary for some platforms
@@ -91,21 +91,21 @@ class VayuBottomSheet extends StatelessWidget {
           child: Container(
             height: height,
             decoration: BoxDecoration(
-              color: AppColors.surfacePrimary.withOpacity(0.7),
-              borderRadius: const BorderRadius.vertical(
+              color: AppColors.surfacePrimary.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.vertical(
                 top: Radius.circular(AppRadius.xl),
               ),
               border: Border(
                 top: BorderSide(
-                  color: AppColors.white.withOpacity(0.12),
+                  color: AppColors.white.withValues(alpha: 0.12),
                   width: 1,
                 ),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 10,
-                  offset: const Offset(0, -2),
+                  offset: Offset(0, -2),
                 ),
               ],
             ),
@@ -116,15 +116,15 @@ class VayuBottomSheet extends StatelessWidget {
                   Container(
                     width: 40,
                     height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: AppSpacing.spacing3),
+                    margin: EdgeInsets.symmetric(vertical: AppSpacing.spacing3),
                     decoration: BoxDecoration(
-                      color: AppColors.textTertiary.withOpacity(0.3),
+                      color: AppColors.textTertiary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                   ),
                 if (title != null || actions != null)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding: EdgeInsets.fromLTRB(
                       AppSpacing.spacing5,
                       AppSpacing.spacing2,
                       AppSpacing.spacing3,
@@ -136,7 +136,7 @@ class VayuBottomSheet extends StatelessWidget {
                           Expanded(
                             child: Text(
                               title!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: AppTypography.fontSizeXL,
                                 fontWeight: AppTypography.weightBold,
                                 color: AppColors.textPrimary,
@@ -151,10 +151,10 @@ class VayuBottomSheet extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (title != null) Divider(height: 1, color: AppColors.white.withOpacity(0.05)),
+                if (title != null) Divider(height: 1, color: AppColors.white.withValues(alpha: 0.05)),
                 Flexible(
                   child: Padding(
-                    padding: padding ?? const EdgeInsets.all(AppSpacing.spacing5),
+                    padding: padding ?? EdgeInsets.all(AppSpacing.spacing5),
                     child: child,
                   ),
                 ),

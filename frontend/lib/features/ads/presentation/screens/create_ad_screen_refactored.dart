@@ -536,7 +536,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             // **ENHANCED: Ad Details Form with helpful tips**
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -557,8 +557,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     ),
                     // **NEW: Helpful tip for beginners**
                     Container(
-                      margin: const EdgeInsets.only(top: 12, bottom: 8),
-                      padding: const EdgeInsets.all(10),
+                      margin: EdgeInsets.only(top: 12, bottom: 8),
+                      padding: EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: AppColors.backgroundSecondary,
                         borderRadius: BorderRadius.circular(8),
@@ -612,7 +612,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             // **NEW: Simple Budget & Duration Section (Beginner-friendly)**
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -654,8 +654,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                               helperText: AppText.get('ad_budget_minimum'),
                               suffixIcon: _budgetController.text == '300.00'
                                   ? Container(
-                                      margin: const EdgeInsets.all(8),
-                                      padding: const EdgeInsets.symmetric(
+                                      margin: EdgeInsets.all(8),
+                                      padding: EdgeInsets.symmetric(
                                         horizontal: 8,
                                       ),
                                       decoration: BoxDecoration(
@@ -705,7 +705,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     // **NEW: Show budget error if any**
                     if (!_isBudgetValid && _budgetError != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 4),
+                        padding: EdgeInsets.only(top: 4),
                         child: Row(
                           children: [
                             Icon(
@@ -831,7 +831,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       });
                     },
                   ),
-                  if (_showAdvancedSettings) const Divider(height: 1),
+                  if (_showAdvancedSettings) Divider(height: 1),
                   if (_showAdvancedSettings)
                     Container(
                       constraints: BoxConstraints(
@@ -839,17 +839,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                         maxHeight: double.infinity,
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.05),
+                                color: AppColors.primary.withValues(alpha: 0.05),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                               ),
                               child: Row(
                                 children: [
@@ -1082,7 +1082,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   /// **NEW: Build Legal Agreement Checkbox**
   Widget _buildLegalAgreement() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1160,17 +1160,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
   Widget _buildSuccessMessage() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppColors.success.withOpacity(0.05),
+        color: AppColors.success.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.success.withOpacity(0.3), width: 2),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.3), width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.success.withOpacity(0.1),
+            color: AppColors.success.withValues(alpha: 0.1),
             blurRadius: 8,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -1206,17 +1206,17 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
   Widget _buildErrorMessage() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.05),
+        color: AppColors.error.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.error.withOpacity(0.3), width: 2),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3), width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.error.withOpacity(0.1),
+            color: AppColors.error.withValues(alpha: 0.1),
             blurRadius: 8,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -1258,7 +1258,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               _errorMessage!.contains('media') ||
               _errorMessage!.contains('network'))
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: EdgeInsets.only(top: 12),
               child: Row(
                 children: [
                   AppButton(
@@ -1545,7 +1545,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1556,7 +1556,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             AppSpacing.vSpace12,
             ...validationItems.map(
               (item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
                     Icon(

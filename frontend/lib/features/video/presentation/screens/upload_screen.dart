@@ -193,13 +193,13 @@ class _UploadScreenState extends State<UploadScreen> {
   // Professional helper to render a notice bullet point
   Widget _buildNoticePoint({required String title, required String body}) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: AppTypography.weightBold,
             ),
@@ -220,7 +220,7 @@ class _UploadScreenState extends State<UploadScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.backgroundPrimary,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
@@ -239,25 +239,25 @@ class _UploadScreenState extends State<UploadScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: AppColors.error.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.gavel, color: AppColors.error),
+                        child: Icon(Icons.gavel, color: AppColors.error),
                       ),
                       AppSpacing.hSpace12,
                       Expanded(
                         child: Text(
                           AppText.get('upload_terms_title'),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: AppTypography.weightBold,
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                        icon: Icon(Icons.close, color: AppColors.textSecondary),
                         onPressed: () => Navigator.pop(context),
                       )
                     ],
@@ -687,6 +687,16 @@ class _UploadScreenState extends State<UploadScreen> {
         // Stop unified progress tracking
         _stopUnifiedProgress();
 
+        // **FIX: Skip success dialog if user chose to run in background**
+        if (_isMinimizing.value) {
+          AppLogger.log('🏃 UploadScreen: Skipping success dialog as user is in background');
+          // Reset for next time
+          _isMinimizing.value = false;
+          _selectedVideo.value = null;
+          _showUploadForm.value = false;
+          return;
+        }
+
         // Show beautiful success dialog
         await _showSuccessDialog();
 
@@ -868,7 +878,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.1),
+                    color: AppColors.success.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -907,7 +917,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                   child: Row(
-                    children: [
+                    children:  [
                       const Icon(Icons.check_circle_outline,
                           color: AppColors.success, size: 20),
                       AppSpacing.hSpace12,
@@ -1201,7 +1211,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.campaign),
+                  icon: Icon(Icons.campaign),
                   tooltip: AppText.get('btn_manage_ads'),
                 ),
             ],
@@ -1232,23 +1242,23 @@ class _UploadScreenState extends State<UploadScreen> {
     if (!isSignedIn) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(32.0),
+          padding: EdgeInsets.all(32.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lock_outline, size: 64, color: AppColors.textTertiary),
-              const SizedBox(height: 24),
+              Icon(Icons.lock_outline, size: 64, color: AppColors.textTertiary),
+              SizedBox(height: 24),
               Text(
                 AppText.get('upload_login_required_title', fallback: 'Login Required'),
                 style: AppTypography.headlineSmall,
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 AppText.get('upload_login_required_desc', fallback: 'Please login to share your creativity with the world.'),
                 textAlign: TextAlign.center,
                 style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
               AppButton(
                 onPressed: () async {
                   final user = await authController.signIn();
@@ -1268,7 +1278,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
     return SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 40),
         child: Column(
           children: [
             Text(
@@ -1276,7 +1286,7 @@ class _UploadScreenState extends State<UploadScreen> {
               style: AppTypography.headlineLarge.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 48),
+            SizedBox(height: 48),
             
             // Visual Choice: Video
             _buildChoiceCard(
@@ -1288,7 +1298,7 @@ class _UploadScreenState extends State<UploadScreen> {
               onTap: _pickVideo,
             ),
             
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             
             // Visual Choice: Ad
             _buildChoiceCard(
@@ -1305,12 +1315,12 @@ class _UploadScreenState extends State<UploadScreen> {
               },
             ),
             
-            const SizedBox(height: 40),
+            SizedBox(height: 40),
             
             // Policy Note
             TextButton.icon(
               onPressed: _showWhatToUploadDialog,
-              icon: const Icon(Icons.help_outline, size: 16),
+              icon: Icon(Icons.help_outline, size: 16),
               label: Text(
                 AppText.get('upload_what_to_upload'),
                 style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary, decoration: TextDecoration.underline),
@@ -1335,7 +1345,7 @@ class _UploadScreenState extends State<UploadScreen> {
       borderRadius: BorderRadius.circular(20),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
@@ -1344,14 +1354,14 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: 32, color: color),
             ),
-            const SizedBox(width: 20),
+            SizedBox(width: 20),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1360,7 +1370,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     title,
                     style: AppTypography.headlineSmall.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(
                     desc,
                     style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
@@ -1377,7 +1387,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Widget _buildUploadProgressDashboard(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(24),
       child: Column(
         children: [
           // Visual Video Preview / Progress Ring
@@ -1403,17 +1413,17 @@ class _UploadScreenState extends State<UploadScreen> {
                 Container(
                   width: 156,
                   height: 156,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.backgroundSecondary,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.movie_outlined, size: 72, color: AppColors.primary),
+                  child: Icon(Icons.movie_outlined, size: 72, color: AppColors.primary),
                 ),
                 // Done indicator
                 ValueListenableBuilder<String>(
                   valueListenable: _currentPhase,
                   builder: (context, phase, _) {
-                    if (phase != 'completed') return const SizedBox.shrink();
+                    if (phase != 'completed') return SizedBox.shrink();
                     return Container(
                       width: 180,
                       height: 180,
@@ -1421,7 +1431,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         color: AppColors.success.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.check_circle, size: 80, color: AppColors.success),
+                      child: Icon(Icons.check_circle, size: 80, color: AppColors.success),
                     );
                   },
                 ),
@@ -1429,7 +1439,7 @@ class _UploadScreenState extends State<UploadScreen> {
             ),
           ),
           
-          const SizedBox(height: 32),
+          SizedBox(height: 32),
           
           // Current Status
           ValueListenableBuilder<String>(
@@ -1446,7 +1456,7 @@ class _UploadScreenState extends State<UploadScreen> {
             valueListenable: _phaseDescription,
             builder: (context, desc, _) {
               return Padding(
-                padding: const EdgeInsets.only(top: 8.0),
+                padding: EdgeInsets.only(top: 8.0),
                 child: Text(
                   desc,
                   textAlign: TextAlign.center,
@@ -1456,7 +1466,7 @@ class _UploadScreenState extends State<UploadScreen> {
             },
           ),
 
-          const SizedBox(height: 48),
+          SizedBox(height: 48),
 
           // Advanced Settings Section (Integrated)
           UploadAdvancedSettingsSection(
@@ -1474,16 +1484,16 @@ class _UploadScreenState extends State<UploadScreen> {
             onMakeEpisode: _handleMakeEpisode,
           ),
           
-          const SizedBox(height: 48),
+          SizedBox(height: 48),
 
           // Error Message Display
           ValueListenableBuilder<String?>(
             valueListenable: _errorMessage,
             builder: (context, error, _) {
-              if (error == null) return const SizedBox.shrink();
+              if (error == null) return SizedBox.shrink();
               return Container(
-                margin: const EdgeInsets.only(bottom: 24),
-                padding: const EdgeInsets.all(16),
+                margin: EdgeInsets.only(bottom: 24),
+                padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(24),
@@ -1491,9 +1501,9 @@ class _UploadScreenState extends State<UploadScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: AppColors.error),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(error, style: const TextStyle(color: AppColors.error))),
+                    Icon(Icons.error_outline, color: AppColors.error),
+                    SizedBox(width: 12),
+                    Expanded(child: Text(error, style: TextStyle(color: AppColors.error))),
                   ],
                 ),
               );
@@ -1528,7 +1538,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   label: 'Start Upload',
                   variant: AppButtonVariant.primary,
                   isFullWidth: true,
-                  icon: const Icon(Icons.cloud_upload_outlined),
+                  icon: Icon(Icons.cloud_upload_outlined),
                 );
               }
 
@@ -1544,10 +1554,14 @@ class _UploadScreenState extends State<UploadScreen> {
                             variant: AppButtonVariant.outline,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        SizedBox(width: 16),
                         Expanded(
                           child: AppButton(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: () {
+                              _isMinimizing.value = true;
+                              // Switch to Home/Yug tab (index 0)
+                              Provider.of<MainController>(context, listen: false).changeIndex(0);
+                            },
                             label: 'Run in BG',
                             variant: AppButtonVariant.primary,
                           ),

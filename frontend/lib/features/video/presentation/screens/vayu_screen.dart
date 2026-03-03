@@ -98,9 +98,11 @@ class VayuScreenState extends State<VayuScreen> {
       final List<VideoModel> newVideos = result['videos'];
       final bool hasMore = result['hasMore'] ?? false;
 
-      // **BACKEND TRUSTED: Trust vayu category from backend**
-      // Previously had a strict >120s filter which might drop valid vayu videos
-      final List<VideoModel> longFormVideos = newVideos;
+      // **BACKEND TRUSTED: API already filters for 'vayu'**
+      // We still apply a local filter just to be 100% sure only long form appears
+      final List<VideoModel> longFormVideos = newVideos.where((v) => 
+        (v.videoType == 'vayu' || v.duration.inSeconds > 60) && v.aspectRatio > 0.9
+      ).toList();
 
       AppLogger.log(
           '🎬 VayuScreen: Fetched ${newVideos.length} videos from backend');
@@ -262,16 +264,16 @@ class VayuScreenState extends State<VayuScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.2),
+                      color: Colors.orange.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.cloud_off,
                             size: 12, color: Colors.orange),
-                        const SizedBox(width: 4),
+                       const SizedBox(width: 4),
                         Text(
                           'OFFLINE',
                           style: AppTypography.labelSmall.copyWith(
@@ -311,7 +313,7 @@ class VayuScreenState extends State<VayuScreen> {
                   },
                   tooltip: 'Agent',
                 ),
-              const SizedBox(width: AppSpacing.spacing2),
+              SizedBox(width: AppSpacing.spacing2),
             ],
           ),
           body: _buildBody(),
@@ -331,15 +333,15 @@ class VayuScreenState extends State<VayuScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.wifi_off,
-                color: AppColors.textSecondary.withOpacity(0.7), size: 60),
-            const SizedBox(height: AppSpacing.spacing4),
+                color: AppColors.textSecondary.withValues(alpha: 0.7), size: 60),
+            SizedBox(height: AppSpacing.spacing4),
             Text(
               _errorMessage!,
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary.withOpacity(0.9),
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
               ),
             ),
-            const SizedBox(height: AppSpacing.spacing6),
+            SizedBox(height: AppSpacing.spacing6),
             AppButton(
               onPressed: () => _loadVideos(refresh: true),
               label: 'Try Again',
@@ -356,22 +358,22 @@ class VayuScreenState extends State<VayuScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.video_library_outlined,
-                color: AppColors.textSecondary.withOpacity(0.4), size: 80),
-            const SizedBox(height: AppSpacing.spacing6),
+                color: AppColors.textSecondary.withValues(alpha: 0.4), size: 80),
+            SizedBox(height: AppSpacing.spacing6),
             Text(
               'No long-form videos yet',
               style: AppTypography.headlineLarge.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: AppTypography.weightBold),
             ),
-            const SizedBox(height: AppSpacing.spacing2),
+            SizedBox(height: AppSpacing.spacing2),
             Text(
               'Browse through your personal video collection',
               style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary.withOpacity(0.9),
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
               ),
             ),
-            const SizedBox(height: AppSpacing.spacing6),
+            SizedBox(height: AppSpacing.spacing6),
             AppButton(
               onPressed: () => _loadVideos(refresh: true),
               isLoading: _isLoading,
@@ -400,9 +402,9 @@ class VayuScreenState extends State<VayuScreen> {
         itemCount: totalItems,
         itemBuilder: (context, index) {
           if (index >= _videos.length) {
-            return const Padding(
+            return Padding(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing8),
-              child: Center(
+              child: const Center(
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: AppColors.primary,
@@ -411,7 +413,7 @@ class VayuScreenState extends State<VayuScreen> {
             );
           }
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.spacing4),
+            padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
             child: _buildVideoCard(index),
           );
         },
@@ -440,16 +442,16 @@ class VayuScreenState extends State<VayuScreen> {
                     fit: BoxFit.cover,
                     placeholder: (context, url) => Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.03),
+                        color: Colors.white.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(AppRadius.lg),
                       ),
                     ),
                     errorWidget: (context, url, error) => Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.03),
+                        color: Colors.white.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(AppRadius.lg),
                       ),
-                      child: const Icon(Icons.broken_image_outlined,
+                      child: Icon(Icons.broken_image_outlined,
                           color: Colors.white10, size: 32),
                     ),
                   ),
@@ -462,9 +464,9 @@ class VayuScreenState extends State<VayuScreen> {
                   right: AppSpacing.spacing2,
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
+                      color: Colors.black.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -483,7 +485,7 @@ class VayuScreenState extends State<VayuScreen> {
 
           // 2. Info Section (Below Thumbnail)
           Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.spacing1,
+            padding: EdgeInsets.fromLTRB(AppSpacing.spacing1,
                 AppSpacing.spacing3, AppSpacing.spacing1, AppSpacing.spacing2),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -494,25 +496,25 @@ class VayuScreenState extends State<VayuScreen> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 4,
-                        offset: const Offset(0, 2),
+                        offset: Offset(0, 2),
                       ),
                     ],
                   ),
                   child: CircleAvatar(
                     radius: 20,
-                    backgroundColor: Colors.white.withOpacity(0.05),
+                    backgroundColor: Colors.white.withValues(alpha: 0.05),
                     backgroundImage: video.uploader.profilePic.isNotEmpty
                         ? CachedNetworkImageProvider(video.uploader.profilePic)
                         : null,
                     child: video.uploader.profilePic.isEmpty
-                        ? const Icon(Icons.person_outline,
+                        ? Icon(Icons.person_outline,
                             size: 20, color: Colors.white30)
                         : null,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.spacing3),
+                SizedBox(width: AppSpacing.spacing3),
                 // Text Info
                 Expanded(
                   child: Column(
@@ -531,22 +533,22 @@ class VayuScreenState extends State<VayuScreen> {
                           fontSize: 15,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       // Channel Name
                       Text(
                         video.uploader.name,
                         style: AppTypography.bodySmall.copyWith(
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                           fontWeight: AppTypography.weightMedium,
                           fontSize: 13,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       // Meta: Views • Time
                       Text(
                         '${_formatViews(video.views)} • ${_formatTimeAgo(video.uploadedAt)}',
                         style: AppTypography.bodySmall.copyWith(
-                          color: Colors.white.withOpacity(0.4),
+                          color: Colors.white.withValues(alpha: 0.4),
                           fontSize: 12,
                         ),
                       ),
@@ -564,9 +566,9 @@ class VayuScreenState extends State<VayuScreen> {
   Widget _buildShimmerList() {
     return ListView.builder(
       itemCount: 4,
-      padding: const EdgeInsets.only(bottom: AppSpacing.spacing4),
+      padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
       itemBuilder: (context, index) => Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.spacing4),
+        padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
         child: _buildShimmerItem(),
       ),
     );
@@ -580,13 +582,13 @@ class VayuScreenState extends State<VayuScreen> {
           aspectRatio: 16 / 9,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.spacing1,
+          padding: EdgeInsets.fromLTRB(AppSpacing.spacing1,
               AppSpacing.spacing3, AppSpacing.spacing1, AppSpacing.spacing2),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,10 +598,10 @@ class VayuScreenState extends State<VayuScreen> {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.03),
+                  color: Colors.white.withValues(alpha: 0.03),
                 ),
               ),
-              const SizedBox(width: AppSpacing.spacing3),
+              SizedBox(width: AppSpacing.spacing3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,16 +610,16 @@ class VayuScreenState extends State<VayuScreen> {
                       height: 16,
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.03),
+                        color: Colors.white.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Container(
                       height: 14,
                       width: 150,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.02),
+                        color: Colors.white.withValues(alpha: 0.02),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),

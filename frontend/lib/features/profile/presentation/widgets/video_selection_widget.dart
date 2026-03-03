@@ -28,11 +28,11 @@ class VideoSelectionWidget extends StatelessWidget {
         padding: const EdgeInsets.all(ProfileConstants.mediumSpacing),
         decoration: BoxDecoration(
           color: const Color(ProfileConstants.blueColor)
-              .withOpacity(ProfileConstants.lightOpacity),
+              .withValues(alpha: ProfileConstants.lightOpacity),
           borderRadius: BorderRadius.circular(ProfileConstants.mediumBorderRadius),
           border: Border.all(
             color: const Color(ProfileConstants.blueColor)
-                .withOpacity(ProfileConstants.mediumOpacity),
+                .withValues(alpha: ProfileConstants.mediumOpacity),
             width: ProfileConstants.thinBorder,
           ),
         ),

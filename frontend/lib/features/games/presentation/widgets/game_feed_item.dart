@@ -47,7 +47,7 @@ class _GameFeedItemState extends State<GameFeedItem> with AutomaticKeepAliveClie
             
           // 2. Play Button Overlay
           Container(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             child: Center(
               child: GestureDetector(
                 onTap: () {
@@ -68,7 +68,7 @@ class _GameFeedItemState extends State<GameFeedItem> with AutomaticKeepAliveClie
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -128,7 +128,7 @@ class _GameFeedItemState extends State<GameFeedItem> with AutomaticKeepAliveClie
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 14,
                     shadows: const [
                        Shadow(

@@ -44,7 +44,7 @@ class VayuLogo extends StatelessWidget {
             borderRadius ?? AppRadius.md,
           ),
           border: Border.all(
-            color: AppColors.borderPrimary.withOpacity(0.5),
+            color: AppColors.borderPrimary.withValues(alpha: 0.5),
             width: 1,
           ),
         ),

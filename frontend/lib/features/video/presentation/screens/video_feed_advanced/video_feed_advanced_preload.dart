@@ -627,47 +627,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       final position = value.position;
       final remaining = duration - position;
 
-      // **FIX: Robust completion check with Debounce**
-      // Sometimes videos stall near the end or duration updates (HLS).
-      // We check if it "looks" done, but wait to verify it stays done.
-      final bool looksComplete = !value.isPlaying &&
-          !value.isBuffering &&
-          remaining <= const Duration(milliseconds: 250);
-
-      if (looksComplete) {
-        // **DEBOUNCE: Wait 250ms to ensure it's truly the end**
-        // This prevents triggering if:
-        // 1. Duration updates (HLS)
-        // 2. Playback resumes (buffering glitch)
-        // 3. User seeks back
-        Future.delayed(const Duration(milliseconds: 250), () {
-          if (!mounted) return;
-          
-          // Check controller again
-          final newValue = controller.value;
-          if (!newValue.isInitialized) return;
-          
-          // If status changed, abort
-          if (newValue.isPlaying) return;
-          if (newValue.isBuffering) return;
-          
-          // Check user intent
-          if (_userPaused[videoId] == true) return;
-          if (_autoAdvancedForIndex.contains(index)) return;
-
-          // Re-calculate remaining time (crucial for HLS duration updates)
-          final newDuration = newValue.duration;
-          final newPosition = newValue.position;
-          final newRemaining = newDuration - newPosition;
-
-          // Only trigger if STILL close to end
-          if (newRemaining <= const Duration(milliseconds: 300)) {
-            AppLogger.log('✅ Video $index confirmed complete (Debounced). Auto-advancing...');
-            _handleVideoCompleted(index);
-          } else {
-             AppLogger.log('⚠️ Video $index false completion detected (Duration grew?). Remaining: ${newRemaining.inMilliseconds}ms');
-          }
-        });
+      // **TRIGGER: 600ms before end for "Instant" feel**
+      if (remaining <= const Duration(milliseconds: 600)) {
+        if (_userPaused[videoId] == true) return;
+        if (_autoAdvancedForIndex.contains(index)) return;
+        
+        AppLogger.log('✅ Video $index near completion. Auto-advancing...');
+        _handleVideoCompleted(index);
       }
     }
  
@@ -915,8 +881,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _pageController
           .animateToPage(
         nextIndex,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
       )
           .whenComplete(() {
         _isAnimatingPage = false;

@@ -265,22 +265,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.4"
-  ffmpeg_kit_flutter_new_https_gpl:
-    dependency: "direct main"
-    description:
-      name: ffmpeg_kit_flutter_new_https_gpl
-      sha256: ba92292a416cc4352108d980674808f47e2ad5549b9ce182b68937e92ea8cd52
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.0"
-  ffmpeg_kit_flutter_platform_interface:
-    dependency: transitive
-    description:
-      name: ffmpeg_kit_flutter_platform_interface
-      sha256: addf046ae44e190ad0101b2fde2ad909a3cd08a2a109f6106d2f7048b7abedee
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.1"
   file:
     dependency: transitive
     description:
@@ -353,6 +337,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.24.1"
+  firebase_crashlytics:
+    dependency: "direct main"
+    description:
+      name: firebase_crashlytics
+      sha256: "662ae6443da91bca1fb0be8aeeac026fa2975e8b7ddfca36e4d90ebafa35dde1"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.3.10"
+  firebase_crashlytics_platform_interface:
+    dependency: transitive
+    description:
+      name: firebase_crashlytics_platform_interface
+      sha256: "7222a8a40077c79f6b8b3f3439241c9f2b34e9ddfde8381ffc512f7b2e61f7eb"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.8.10"
   firebase_messaging:
     dependency: "direct main"
     description:
@@ -560,14 +560,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  freezed_annotation:
-    dependency: transitive
-    description:
-      name: freezed_annotation
-      sha256: "7294967ff0a6d98638e7acb774aac3af2550777accd8149c90af5b014e6d44d8"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.1.0"
   geocoding:
     dependency: "direct main"
     description:
@@ -672,22 +664,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.3+1"
-  google_mlkit_commons:
-    dependency: transitive
-    description:
-      name: google_mlkit_commons
-      sha256: "3e69fea4211727732cc385104e675ad1e40b29f12edd492ee52fa108423a6124"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.11.1"
-  google_mlkit_translation:
-    dependency: "direct main"
-    description:
-      name: google_mlkit_translation
-      sha256: "5cb1c156d926cb5f4795674835d9df480366e002a3a7e17729d2ee472aed11ae"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.13.1"
   google_sign_in:
     dependency: "direct main"
     description:
@@ -1296,54 +1272,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
-  sherpa_onnx:
-    dependency: "direct main"
-    description:
-      name: sherpa_onnx
-      sha256: "777e2e1ae2c0b526fbee4c0dc6ee0ce00ec08e3adec0d605d8b878858cc7c700"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.12.27"
-  sherpa_onnx_android:
-    dependency: transitive
-    description:
-      name: sherpa_onnx_android
-      sha256: e4419e982d78ced65007100bb7f7744039ee7fe029d76d486cc47daafbab8478
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.12.27"
-  sherpa_onnx_ios:
-    dependency: transitive
-    description:
-      name: sherpa_onnx_ios
-      sha256: dfe0460438a51c007c408a9007bc85e827616cb208d6f876c9489a3ad06cc585
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.12.27"
-  sherpa_onnx_linux:
-    dependency: transitive
-    description:
-      name: sherpa_onnx_linux
-      sha256: b08f5cd0bd4b76ce67c9b5f53829a0aede3827a6ae8d3a0ba7ff9890bf87df0c
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.12.27"
-  sherpa_onnx_macos:
-    dependency: transitive
-    description:
-      name: sherpa_onnx_macos
-      sha256: bac8c2bdb1d2e773ee5a03a508b146a31f08805763f90a8255c0939162b4aa2a
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.12.27"
-  sherpa_onnx_windows:
-    dependency: transitive
-    description:
-      name: sherpa_onnx_windows
-      sha256: "782eb607697b73abc0c8f9e379ffe989b8b65f3f6352c1f482287f3842921f14"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.12.27"
   shimmer:
     dependency: "direct main"
     description:
@@ -1764,14 +1692,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.23.0"
-  whisper_flutter_new:
-    dependency: "direct main"
-    description:
-      name: whisper_flutter_new
-      sha256: "56f5449cd459ed9bbb9d3641aae6a72ed594e1a200f56b1939891996fbd7dd4d"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.1"
   win32:
     dependency: transitive
     description:

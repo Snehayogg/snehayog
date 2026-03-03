@@ -42,12 +42,12 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24),
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        margin: EdgeInsets.symmetric(horizontal: 24),
+        padding: EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
           color: AppColors.backgroundPrimary,
           borderRadius: BorderRadius.circular(AppRadius.xl),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
               color: AppColors.shadowPrimary,
               blurRadius: 10,
@@ -144,7 +144,7 @@ class _ProfileStatsWidgetState extends State<ProfileStatsWidget> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               label,
               maxLines: 1,

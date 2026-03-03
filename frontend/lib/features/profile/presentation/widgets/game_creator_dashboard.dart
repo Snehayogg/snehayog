@@ -23,7 +23,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     return Consumer<GameCreatorManager>(
       builder: (context, gameManager, child) {
         if (gameManager.isCreatorGamesLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(child: CircularProgressIndicator());
         }
 
         return Stack(
@@ -40,12 +40,12 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
             ),
             if (gameManager.isGameActionLoading)
               Container(
-                color: Colors.black.withOpacity(0.3),
-                child: const Center(
+                color: Colors.black.withValues(alpha: 0.3),
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: AppColors.primary),
+                      const CircularProgressIndicator(color: AppColors.primary),
                       SizedBox(height: AppSpacing.spacing4),
                       Text(
                         'Processing...',
@@ -66,7 +66,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
   Widget _buildHeader(GameCreatorManager gameManager) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: AppSpacing.spacing4,
         vertical: AppSpacing.spacing4,
       ),
@@ -82,11 +82,11 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
               ),
               IconButton(
                 onPressed: () => gameManager.loadCreatorGames(),
-                icon: const Icon(Icons.refresh, color: AppColors.primary),
+                icon: Icon(Icons.refresh, color: AppColors.primary),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.spacing4),
+          SizedBox(height: AppSpacing.spacing4),
           _buildWebUploadCard(),
         ],
       ),
@@ -95,59 +95,59 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
   Widget _buildWebUploadCard() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.spacing4),
+      padding: EdgeInsets.all(AppSpacing.spacing4),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
+        color: AppColors.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.cloud_upload_outlined, color: AppColors.primary),
-              const SizedBox(width: AppSpacing.spacing2),
+              Icon(Icons.cloud_upload_outlined, color: AppColors.primary),
+              SizedBox(width: AppSpacing.spacing2),
               Text(
                 'Upload New Content via Web',
                 style: AppTypography.titleMedium.copyWith(color: AppColors.primary, fontWeight: AppTypography.weightBold),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.spacing2),
+          SizedBox(height: AppSpacing.spacing2),
           Text(
             'To ensure the best deployment experience, arcade content uploads are now handled through our dedicated web portal.',
             style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: AppSpacing.spacing3),
+          SizedBox(height: AppSpacing.spacing3),
           AppButton(
             onPressed: () {
               // Show instructions or open URL
               showModalBottomSheet(
                 context: context,
                 backgroundColor: AppColors.backgroundSecondary,
-                shape: const RoundedRectangleBorder(
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
                 ),
                 builder: (context) => Padding(
-                  padding: const EdgeInsets.all(AppSpacing.spacing6),
+                  padding: EdgeInsets.all(AppSpacing.spacing6),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('Deploy from Computer', style: AppTypography.headlineSmall),
-                      const SizedBox(height: AppSpacing.spacing4),
+                      SizedBox(height: AppSpacing.spacing4),
                       Text(
                         '1. Visit snehayog.site/creator.html\n2. Log in with your developer token\n3. Upload your Content ZIP',
                         style: AppTypography.bodyMedium,
                       ),
-                      const SizedBox(height: AppSpacing.spacing6),
+                      SizedBox(height: AppSpacing.spacing6),
                       Text(
                         'Your Developer Token:',
                         style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
                       ),
-                      const SizedBox(height: AppSpacing.spacing2),
+                      SizedBox(height: AppSpacing.spacing2),
                       Container(
-                        padding: const EdgeInsets.all(AppSpacing.spacing3),
+                        padding: EdgeInsets.all(AppSpacing.spacing3),
                         decoration: BoxDecoration(
                           color: AppColors.backgroundPrimary,
                           borderRadius: BorderRadius.circular(AppRadius.md),
@@ -157,7 +157,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                           style: TextStyle(fontFamily: 'monospace', fontSize: 12),
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.spacing6),
+                      SizedBox(height: AppSpacing.spacing6),
                       AppButton(
                         isFullWidth: true,
                         onPressed: () => Navigator.pop(context),
@@ -180,12 +180,12 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.spacing8),
+        padding: EdgeInsets.all(AppSpacing.spacing8),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(AppSpacing.spacing6),
+              padding: EdgeInsets.all(AppSpacing.spacing6),
               decoration: BoxDecoration(
                 color: AppColors.backgroundSecondary,
                 shape: BoxShape.circle,
@@ -194,15 +194,15 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
               child: Icon(
                 Icons.sports_esports_outlined,
                 size: 64,
-                color: AppColors.textTertiary.withOpacity(0.5),
+                color: AppColors.textTertiary.withValues(alpha: 0.5),
               ),
             ),
-            const SizedBox(height: AppSpacing.spacing6),
+            SizedBox(height: AppSpacing.spacing6),
             Text(
               'Your Arcade Content',
               style: AppTypography.headlineSmall.copyWith(color: AppColors.textPrimary),
             ),
-            const SizedBox(height: AppSpacing.spacing2),
+            SizedBox(height: AppSpacing.spacing2),
             Text(
               'Begin your journey by uploading high-quality interactive arcade content.',
               textAlign: TextAlign.center,
@@ -216,7 +216,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
   Widget _buildGamesList(GameCreatorManager gameManager) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: 16),
       itemCount: gameManager.creatorGames.length,
       itemBuilder: (context, index) {
         final game = gameManager.creatorGames[index];
@@ -229,12 +229,12 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     final isPending = game.status == 'pending';
     
     return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.spacing4),
+      margin: EdgeInsets.only(bottom: AppSpacing.spacing4),
       decoration: AppTheme.createCardDecoration(
         shadows: AppElevation.shadowMd,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.spacing4),
+        padding: EdgeInsets.all(AppSpacing.spacing4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -252,10 +252,10 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                     borderRadius: BorderRadius.circular(AppRadius.md),
                     child: game.thumbnailUrl != null && game.thumbnailUrl!.isNotEmpty
                         ? Image.network(game.thumbnailUrl!, fit: BoxFit.cover)
-                        : const Icon(Icons.sports_esports_outlined, color: AppColors.primary),
+                        : Icon(Icons.sports_esports_outlined, color: AppColors.primary),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.spacing4),
+                SizedBox(width: AppSpacing.spacing4),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,18 +264,18 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                         game.title,
                         style: AppTypography.titleLarge.copyWith(fontWeight: AppTypography.weightBold),
                       ),
-                      const SizedBox(height: AppSpacing.spacing1),
+                      SizedBox(height: AppSpacing.spacing1),
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: AppSpacing.spacing2,
                               vertical: AppSpacing.spacing1 * 0.5,
                             ),
                             decoration: BoxDecoration(
                               color: isPending 
-                                  ? AppColors.warning.withOpacity(0.1) 
-                                  : AppColors.success.withOpacity(0.1),
+                                  ? AppColors.warning.withValues(alpha: 0.1) 
+                                  : AppColors.success.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(AppRadius.pill),
                             ),
                             child: Text(
@@ -286,17 +286,17 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.spacing4),
-                          const Icon(Icons.play_arrow_outlined, size: 16, color: AppColors.primary),
-                          const SizedBox(width: 4),
+                          SizedBox(width: AppSpacing.spacing4),
+                          Icon(Icons.play_arrow_outlined, size: 16, color: AppColors.primary),
+                          SizedBox(width: 4),
                           Text(
                             '${game.plays} plays',
                             style: AppTypography.bodySmall.copyWith(fontWeight: AppTypography.weightBold),
                           ),
                           if (game.totalTimeSpent > 0) ...[
-                             const SizedBox(width: AppSpacing.spacing4),
-                            const Icon(Icons.timer_outlined, size: 14, color: AppColors.warning),
-                             const SizedBox(width: 4),
+                             SizedBox(width: AppSpacing.spacing4),
+                            Icon(Icons.timer_outlined, size: 14, color: AppColors.warning),
+                             SizedBox(width: 4),
                              Text(
                                '${(game.totalTimeSpent / 60).toStringAsFixed(1)}m',
                                style: AppTypography.bodySmall,
@@ -316,7 +316,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
               ],
             ),
             if (game.description.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.spacing3),
+              SizedBox(height: AppSpacing.spacing3),
               Text(
                 game.description,
                 maxLines: 2,

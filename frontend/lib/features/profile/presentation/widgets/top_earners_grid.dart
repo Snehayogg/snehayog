@@ -9,7 +9,6 @@ import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/core/design/elevation.dart';
@@ -194,11 +193,11 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: AppSpacing.spacing2,
         vertical: AppSpacing.spacing3,
       ),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
         crossAxisSpacing: AppSpacing.spacing2,
         mainAxisSpacing: AppSpacing.spacing3,
@@ -240,7 +239,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: AppSpacing.spacing3),
+            SizedBox(height: AppSpacing.spacing3),
             // Avatar + rank badge
             Stack(
               alignment: Alignment.bottomRight,
@@ -252,8 +251,8 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                     shape: BoxShape.circle,
                     border:
                         Border.all(color: AppColors.borderPrimary, width: 2),
-                    boxShadow: const [
-                      BoxShadow(
+                    boxShadow: const[
+                       BoxShadow(
                         color: AppColors.shadowSecondary,
                         blurRadius: 4,
                         offset: Offset(0, 2),
@@ -281,7 +280,7 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: AppSpacing.spacing1 + 3,
                     vertical: 3,
                   ),
@@ -311,16 +310,16 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.spacing2),
+            SizedBox(height: AppSpacing.spacing2),
             // Name
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spacing1 + 2),
+              padding: EdgeInsets.all(AppSpacing.spacing1 + 2),
               child: Text(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: AppTypography.fontSizeSM,
                   fontWeight: AppTypography.weightBold,
                   color: AppColors.textPrimary,
@@ -328,28 +327,28 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.spacing1 + 2),
+            SizedBox(height: AppSpacing.spacing1 + 2),
             // Score (Only show if > 0)
             if (score > 0)
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding: EdgeInsets.symmetric(
                   horizontal: AppSpacing.spacing2,
                   vertical: AppSpacing.spacing1,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.success.withOpacity(0.1),
+                  color: AppColors.success.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Text(
                   _formatScore(score),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: AppTypography.fontSizeXS + 1,
                     fontWeight: AppTypography.weightBold,
                     color: AppColors.success,
                   ),
                 ),
               ),
-            const SizedBox(height: AppSpacing.spacing3),
+            SizedBox(height: AppSpacing.spacing3),
           ],
         ),
       ),

@@ -149,7 +149,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
               height: _isDragging ? 6 : 2,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: AppColors.white.withOpacity(_isDragging ? 0.3 : 0.2),
+                color: AppColors.white.withValues(alpha: _isDragging ? 0.3 : 0.2),
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
@@ -185,7 +185,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
                   shape: BoxShape.circle,
                   boxShadow: _isDragging ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     )

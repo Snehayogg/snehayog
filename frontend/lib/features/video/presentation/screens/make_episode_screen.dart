@@ -4,7 +4,9 @@ import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
@@ -243,7 +245,18 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
             AppButton(
               onPressed: () {
                 Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Go back to previous screen
+                
+                // Navigate to Account tab (index 4)
+                try {
+                  final mainController = Provider.of<MainController>(context, listen: false);
+                  mainController.changeIndex(4);
+                  
+                  // Pop the MakeEpisodeScreen to return to the underlying tab (which is now Account)
+                  Navigator.pop(context);
+                } catch (e) {
+                  AppLogger.log('Error navigating to Account tab: $e');
+                  Navigator.pop(context); // Fallback pop
+                }
               },
               label: 'OK',
               variant: AppButtonVariant.primary,
@@ -283,7 +296,7 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
               'Select up to 10 episodes to upload as a sequence.',
               style: TextStyle(color: Colors.grey[600]),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             
             // Video List
             Expanded(
@@ -300,7 +313,7 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
                     )
                   : ListView.separated(
                       itemCount: _selectedEpisodes.length,
-                      separatorBuilder: (context, index) => const Divider(),
+                      separatorBuilder: (context, index) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final episode = _selectedEpisodes[index];
                         final isUploadingThis = _isUploading && _currentUploadIndex == index;
@@ -308,16 +321,16 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
                         
                         return ListTile(
                           leading: Container(
-                            width: 40,
-                            height: 40,
+                            width: 32,
+                            height: 32,
                             decoration: const BoxDecoration(
                               color: Colors.black12,
                               shape: BoxShape.circle,
                             ),
                             alignment: Alignment.center,
                             child: isCompleted 
-                              ? const Icon(Icons.check, color: Colors.green)
-                              : Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ? const Icon(Icons.check, color: Colors.green, size: 16)
+                              : Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                           // **NEW: Editable title display**
                           title: Text(
@@ -338,10 +351,12 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
                                   tooltip: 'Edit Title',
                                 ),
                                 
-                              if (!_isUploading) 
+                              if (!_isUploading)
                                 IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.red),
+                                  icon: const Icon(Icons.close, color: Colors.red, size: 20),
                                   onPressed: () => _removeVideo(index),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
                                 )
                               else if (isUploadingThis) 
                                 const SizedBox(

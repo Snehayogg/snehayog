@@ -98,9 +98,9 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
     return Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.blue.withOpacity(0.1),
+          color: Colors.blue.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+          border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
         ),
         child: InkWell(
           onTap: _trackClick,
@@ -110,7 +110,7 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.2),
+                color: Colors.blue.withValues(alpha: 0.2),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(8),
                   topRight: Radius.circular(8),
@@ -206,9 +206,9 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
       width: double.infinity,
       height: 200,
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
+        color: Colors.blue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
       ),
       child: InkWell(
         onTap: _trackClick,
@@ -237,7 +237,7 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.transparent,
-                      Colors.black.withOpacity(0.7),
+                      Colors.black.withValues(alpha: 0.7),
                     ],
                   ),
                   borderRadius: const BorderRadius.vertical(
@@ -300,9 +300,9 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
       width: double.infinity,
       height: 150,
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
       child: InkWell(
         onTap: _trackClick,

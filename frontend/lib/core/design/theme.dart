@@ -37,7 +37,7 @@ class AppTheme {
       foregroundColor: WidgetStateProperty.all(foregroundColor ?? AppColors.textPrimary),
       elevation: WidgetStateProperty.all(elevation ?? 0),
       padding: WidgetStateProperty.all(padding ??
-          const EdgeInsets.symmetric(
+          EdgeInsets.symmetric(
             horizontal: AppSpacing.spacing4,
             vertical: AppSpacing.spacing3,
           )),
@@ -118,7 +118,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        margin: const EdgeInsets.all(AppSpacing.spacing2),
+        margin: EdgeInsets.all(AppSpacing.spacing2),
       ),
 
       // Elevated button theme
@@ -127,7 +127,7 @@ class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(
+          padding: EdgeInsets.symmetric(
             horizontal: AppSpacing.spacing4,
             vertical: AppSpacing.spacing3,
           ),
@@ -143,7 +143,7 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.white,
           side: const BorderSide(color: AppColors.primary, width: 1.5),
-          padding: const EdgeInsets.symmetric(
+          padding: EdgeInsets.symmetric(
             horizontal: AppSpacing.spacing4,
             vertical: AppSpacing.spacing3,
           ),
@@ -158,7 +158,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.white,
-          padding: const EdgeInsets.symmetric(
+          padding: EdgeInsets.symmetric(
             horizontal: AppSpacing.spacing3,
             vertical: AppSpacing.spacing2,
           ),
@@ -189,7 +189,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.all(AppSpacing.spacing3),
+        contentPadding: EdgeInsets.all(AppSpacing.spacing3),
         labelStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
         hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textTertiary),
       ),
@@ -200,7 +200,7 @@ class AppTheme {
         selectedColor: AppColors.primary,
         disabledColor: AppColors.backgroundTertiary,
         labelStyle: AppTypography.labelMedium,
-        padding: const EdgeInsets.symmetric(
+        padding: EdgeInsets.symmetric(
           horizontal: AppSpacing.spacing2,
           vertical: AppSpacing.spacing1,
         ),
@@ -210,7 +210,7 @@ class AppTheme {
       ),
 
       // Divider theme
-      dividerTheme: const DividerThemeData(
+      dividerTheme: DividerThemeData(
         color: AppColors.divider,
         thickness: 1,
         space: AppSpacing.spacing4,
@@ -275,7 +275,7 @@ class AppTheme {
       ),
 
       // Bottom sheet theme
-      bottomSheetTheme: const BottomSheetThemeData(
+      bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: AppColors.backgroundSecondary,
         elevation: 8,
         shape: RoundedRectangleBorder(
@@ -309,7 +309,7 @@ class AppTheme {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary.withOpacity(0.3);
+            return AppColors.primary.withValues(alpha: 0.3);
           }
           return AppColors.backgroundTertiary;
         }),
@@ -341,7 +341,7 @@ class AppTheme {
         activeTrackColor: AppColors.primary,
         inactiveTrackColor: AppColors.backgroundSecondary,
         thumbColor: AppColors.primary,
-        overlayColor: AppColors.primary.withOpacity(0.2),
+        overlayColor: AppColors.primary.withValues(alpha: 0.2),
         valueIndicatorColor: AppColors.primary,
         valueIndicatorTextStyle: AppTypography.labelSmall.copyWith(color: AppColors.textInverse),
       ),
@@ -368,7 +368,7 @@ class AppTheme {
 
       // List tile theme
       listTileTheme: ListTileThemeData(
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding: EdgeInsets.symmetric(
           horizontal: AppSpacing.spacing4,
           vertical: AppSpacing.spacing2,
         ),

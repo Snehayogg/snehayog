@@ -104,7 +104,7 @@ class CampaignSettingsWidget extends StatelessWidget {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: (isDateValid == false)
-                          ? AppColors.error.withOpacity(0.1)
+                          ? AppColors.error.withValues(alpha: 0.1)
                           : AppColors.warning,
                       foregroundColor:
                           (isDateValid == false) ? AppColors.error : AppColors.white,

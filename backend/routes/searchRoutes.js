@@ -74,7 +74,8 @@ router.get('/creators', async (req, res) => {
     // Normalize for frontend convenience
     const normalized = creators.map((u) => ({
       ...u,
-      id: u._id,
+      id: u.googleId || u._id, // Prioritize googleId for seamless profile loading
+      _id: u._id, // Keep original _id explicitly available
       followersCount: Array.isArray(u.followers) ? u.followers.length : 0,
     }));
 

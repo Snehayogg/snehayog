@@ -68,10 +68,10 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
                     child: Text(
                       _isExpanded ? 'view less' : 'view more',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.textInverse.withOpacity(0.9),
+                        color: AppColors.textInverse.withValues(alpha: 0.9),
                         fontWeight: FontWeight.w500,
                         decoration: TextDecoration.underline,
-                        decorationColor: AppColors.textInverse.withOpacity(0.9),
+                        decorationColor: AppColors.textInverse.withValues(alpha: 0.9),
                       ),
                     ),
                   ),

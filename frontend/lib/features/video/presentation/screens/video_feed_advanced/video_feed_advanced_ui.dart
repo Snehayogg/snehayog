@@ -9,8 +9,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   double get _secondaryActionHitTargetSize {
-    const minTouchTarget = AppSpacing.minTouchTarget;
-    const secondaryContainer = AppConstants.secondaryActionButtonContainerSize;
+    final minTouchTarget = AppSpacing.minTouchTarget;
+    final secondaryContainer = AppConstants.secondaryActionButtonContainerSize;
     return minTouchTarget > secondaryContainer ? minTouchTarget : secondaryContainer;
   }
 
@@ -46,7 +46,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         children: [
           Icon(Icons.error_outline, size: 64, color: AppColors.error),
           AppSpacing.vSpace16,
-          const Text(
+          Text(
             'Failed to load videos',
             style: TextStyle(
               color: AppColors.white,
@@ -57,7 +57,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           if (_errorMessage != null) ...[
             AppSpacing.vSpace8,
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
+              padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 _getUserFriendlyErrorMessage(_errorMessage!),
                 style: TextStyle(color: AppColors.textSecondary, fontSize: AppTypography.fontSizeBase),
@@ -68,14 +68,14 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           AppSpacing.vSpace24,
           AppButton(
             onPressed: refreshVideos,
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh),
             label: 'Retry',
             variant: AppButtonVariant.primary,
           ),
           AppSpacing.vSpace12,
           AppButton(
             onPressed: _testApiConnection,
-            icon: const Icon(Icons.wifi_find),
+            icon: Icon(Icons.wifi_find),
             label: 'Test Connection',
             variant: AppButtonVariant.secondary,
           ),
@@ -95,13 +95,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           children: [
             Icon(Icons.warning_amber_rounded, color: AppColors.textSecondary, size: 48),
             AppSpacing.vSpace12,
-            const Text(
+            Text(
               'Playback Error',
               style: TextStyle(color: AppColors.white, fontWeight: AppTypography.weightBold),
             ),
              AppSpacing.vSpace4,
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
+              padding: EdgeInsets.symmetric(horizontal: 40),
               child: Text(
                 _getUserFriendlyErrorMessage(error),
                 style: TextStyle(color: AppColors.textSecondary, fontSize: AppTypography.fontSizeSM),
@@ -127,7 +127,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     }
                  });
               },
-              icon: const Icon(Icons.refresh, size: 16),
+              icon: Icon(Icons.refresh, size: 16),
               label: 'Retry',
               variant: AppButtonVariant.secondary,
             ),
@@ -142,13 +142,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.video_library_outlined,
             size: 64,
             color: AppColors.textSecondary,
           ),
           AppSpacing.vSpace16,
-          const Text(
+          Text(
             'No videos available',
             style: TextStyle(
               color: AppColors.white,
@@ -157,7 +157,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ),
           ),
           AppSpacing.vSpace8,
-          const Text(
+          Text(
             'Try refreshing or check back later',
             style: TextStyle(color: AppColors.textSecondary, fontSize: AppTypography.fontSizeBase),
             textAlign: TextAlign.center,
@@ -165,7 +165,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           AppSpacing.vSpace24,
           AppButton(
             onPressed: refreshVideos,
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh),
             label: 'Refresh',
             variant: AppButtonVariant.primary,
           ),
@@ -173,10 +173,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           if (_errorMessage != null && _errorMessage!.isNotEmpty) ...[
             AppSpacing.vSpace12,
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
+              padding: EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 'Error: ${_errorMessage!.length > 100 ? "${_errorMessage!.substring(0, 100)}..." : _errorMessage!}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.error,
                   fontSize: AppTypography.fontSizeSM,
                 ),
@@ -258,7 +258,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
                       _getUserFriendlyErrorMessage(_errorMessage!),
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: AppTypography.fontSizeSM),
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: AppTypography.fontSizeSM),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -281,7 +281,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textTertiary)
                   ),
                   AppSpacing.vSpace16,
-                  const Text("Loading more videos...", style: TextStyle(color: AppColors.textTertiary, fontSize: AppTypography.fontSizeSM)),
+                  Text("Loading more videos...", style: TextStyle(color: AppColors.textTertiary, fontSize: AppTypography.fontSizeSM)),
                   // **NEW: Safety Trigger: If we land on this screen, force a reload if not already loading**
                   if (mounted && !_isLoadingMore && !_isRefreshing && _hasMore) ...[
                      AppSpacing.vSpace8,
@@ -365,7 +365,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               icon: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: AppColors.backgroundPrimary.withOpacity(0.3),
+                  color: AppColors.backgroundPrimary.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.more_vert, color: AppColors.white, size: 20),
@@ -493,9 +493,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       child: Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: AppColors.backgroundSecondary.withOpacity(0.7),
+                          color: AppColors.backgroundSecondary.withValues(alpha: 0.7),
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.white.withOpacity(0.5), width: 2),
+                          border: Border.all(color: AppColors.white.withValues(alpha: 0.5), width: 2),
                         ),
                         child: const Icon(
                           Icons.play_arrow,
@@ -555,14 +555,14 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                               vertical: 10,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: AppColors.backgroundSecondary.withOpacity(0.8),
+                                              color: AppColors.backgroundSecondary.withValues(alpha: 0.8),
                                               borderRadius: BorderRadius.circular(AppRadius.xl),
-                                              border: Border.all(color: AppColors.white.withOpacity(0.1)),
+                                              border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
                                             ),
                                             child: index < _videos.length ? Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                 const Icon(
+                                                const Icon(
                                                   Icons.refresh_rounded,
                                                   color: AppColors.white,
                                                   size: 18,
@@ -571,7 +571,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                                 Text(
                                                   'Trouble playing? Tap to Reload',
                                                   style: TextStyle(
-                                                    color: AppColors.white.withOpacity(0.9),
+                                                    color: AppColors.white.withValues(alpha: 0.9),
                                                     fontSize: AppTypography.fontSizeSM,
                                                     fontWeight: AppTypography.weightSemiBold,
                                                   ),
@@ -644,7 +644,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppColors.backgroundPrimary.withOpacity(0.4),
+                  AppColors.backgroundPrimary.withValues(alpha: 0.4),
                   Colors.transparent,
                 ],
               ),
@@ -675,11 +675,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.backgroundSecondary.withOpacity(0.7),
+              color: AppColors.backgroundSecondary.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(AppRadius.lg),
-              border: Border.all(color: AppColors.white.withOpacity(0.1), width: 0.5),
+              border: Border.all(color: AppColors.white.withValues(alpha: 0.1), width: 0.5),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -691,7 +691,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   ),
                 ),
                 AppSpacing.hSpace4,
-                Icon(Icons.arrow_forward_ios, color: AppColors.white, size: 10),
+                const Icon(Icons.arrow_forward_ios, color: AppColors.white, size: 10),
               ],
             ),
           ),
@@ -1010,11 +1010,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       width: double.infinity,
       height: double.infinity,
       color: AppColors.backgroundPrimary,
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.play_circle_outline, size: 80, color: AppColors.textSecondary),
+            const Icon(Icons.play_circle_outline, size: 80, color: AppColors.textSecondary),
             AppSpacing.vSpace16,
             Text(
               'Tap to play video',
@@ -1062,7 +1062,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [
-                          AppColors.backgroundPrimary.withOpacity(0.55),
+                          AppColors.backgroundPrimary.withValues(alpha: 0.55),
                           Colors.transparent,
                         ],
                       ),
@@ -1111,7 +1111,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                                     ? video.uploader.name[0]
                                                         .toUpperCase()
                                                     : 'U',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   color: AppColors.white,
                                                   fontWeight: AppTypography.weightBold,
                                                   fontSize: AppTypography.fontSizeXS,
@@ -1128,7 +1128,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                                     ? video.uploader.name[0]
                                                         .toUpperCase()
                                                     : 'U',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   color: AppColors.white,
                                                   fontWeight: AppTypography.weightBold,
                                                   fontSize: AppTypography.fontSizeXS,
@@ -1144,7 +1144,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                               ? video.uploader.name[0]
                                                   .toUpperCase()
                                               : 'U',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             color: AppColors.white,
                                             fontWeight: AppTypography.weightBold,
                                             fontSize: AppTypography.fontSizeXS,
@@ -1159,7 +1159,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                 onTap: () => _navigateToCreatorProfile(video),
                                 child: Text(
                                   video.uploader.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppColors.white,
                                     fontSize: AppTypography.fontSizeBase, // Increased from 12
                                     fontWeight: AppTypography.weightSemiBold, // Bold
@@ -1177,12 +1177,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: isFollowing ? AppColors.backgroundTertiary : AppColors.backgroundSecondary.withOpacity(0.7),
+                                      color: isFollowing ? AppColors.backgroundTertiary : AppColors.backgroundSecondary.withValues(alpha: 0.7),
                                       borderRadius: BorderRadius.circular(AppRadius.pill),
                                     ),
                                     child: Text(
                                       isFollowing ? 'Subscribed' : 'Subscribe',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: AppColors.white,
                                         fontSize: AppTypography.fontSizeSM,
                                         fontWeight: AppTypography.weightBold,
@@ -1195,10 +1195,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 6),
+                     const SizedBox(height: 6),
                       Text(
                         video.videoName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.white,
                           fontSize: AppTypography.fontSizeSM, // Slightly increased
                           fontWeight: AppTypography.weightRegular, // Lighter
@@ -1215,7 +1215,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                             child: AppButton(
                               label: 'Visit Now',
                               onPressed: () => _handleVisitNow(video),
-                              icon: Icon(Icons.open_in_new, size: 14, color: AppColors.white),
+                              icon: const Icon(Icons.open_in_new, size: 14, color: AppColors.white),
                               variant: AppButtonVariant.secondary,
                               size: AppButtonSize.small,
                             ),
@@ -1275,7 +1275,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: AppColors.backgroundSecondary
-                                      .withOpacity(0.7),
+                                      .withValues(alpha: 0.7),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -1287,7 +1287,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                             ),
                           ),
                           AppSpacing.vSpace4,
-                          const Text(
+                          Text(
                             'Swipe',
                             style: TextStyle(
                               color: AppColors.white,
@@ -1382,11 +1382,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                           height: AppConstants.primaryActionButtonContainerSize,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: AppColors.backgroundSecondary.withOpacity(0.7),
+                            color: AppColors.backgroundSecondary.withValues(alpha: 0.7),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.shadowSecondary.withOpacity(0.2),
+                                color: AppColors.shadowSecondary.withValues(alpha: 0.2),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -1397,7 +1397,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                             color: isLiked ? AppColors.error : AppColors.white,
                             size: AppConstants.primaryActionButtonSize,
                             shadows: const [
-                              Shadow(
+                               Shadow(
                                 color: AppColors.overlayMedium,
                                 blurRadius: 4,
                                 offset: Offset(0, 2),
@@ -1416,7 +1416,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 AppSpacing.vSpace4,
                 Text(
                   _formatCount(likeCount),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.white,
                     fontSize: AppTypography.fontSizeSM,
                     fontWeight: AppTypography.weightMedium,
@@ -1451,11 +1451,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 height: AppConstants.secondaryActionButtonContainerSize,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppColors.backgroundSecondary.withOpacity(0.7),
+                  color: AppColors.backgroundSecondary.withValues(alpha: 0.7),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.shadowSecondary.withOpacity(0.2),
+                      color: AppColors.shadowSecondary.withValues(alpha: 0.2),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -1480,11 +1480,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             AppSpacing.vSpace4,
             Text(
               _formatCount(count),
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.white,
                 fontSize: AppTypography.fontSizeSM,
                 fontWeight: AppTypography.weightMedium,
-                shadows: [
+                shadows: const [
                   Shadow(
                     offset: Offset(0, 1),
                     blurRadius: 2,
@@ -1644,7 +1644,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       border: Border.all(color: AppColors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.backgroundPrimary.withOpacity(0.5),
+                          color: AppColors.backgroundPrimary.withValues(alpha: 0.5),
                           blurRadius: 10,
                           spreadRadius: 2,
                         ),
@@ -1680,7 +1680,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       valueListenable: _showOfflineBannerVN,
       builder: (context, show, _) {
         if (!show) {
-          return const SizedBox.shrink();
+          return SizedBox.shrink();
         }
 
         return Positioned(
@@ -1691,9 +1691,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             bottom: false,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               color: Colors.orange.shade700,
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
@@ -1731,8 +1731,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        padding: EdgeInsets.all(16),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
@@ -1769,7 +1769,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     placeholder: (context, url) => Container(color: AppColors.borderPrimary),
                     errorWidget: (context, url, error) => Container(
                       color: AppColors.borderPrimary,
-                      child: const Icon(Icons.error),
+                      child: Icon(Icons.error),
                     ),
                   ),
                 ),
@@ -1777,14 +1777,14 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   top: 4,
                   left: 4,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.backgroundPrimary.withOpacity(0.7),
+                      color: AppColors.backgroundPrimary.withValues(alpha: 0.7),
                       borderRadius: AppRadius.borderRadiusXS,
                     ),
                     child: Text(
                       sequenceNumber,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.white,
                         fontWeight: AppTypography.weightBold,
                         fontSize: AppTypography.fontSizeSM,
@@ -1794,12 +1794,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 ),
                 Center(
                   child: Container(
-                    padding: const EdgeInsets.all(4),
+                    padding: EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: AppColors.backgroundPrimary.withOpacity(0.5),
+                      color: AppColors.backgroundPrimary.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.play_arrow,
                       color: AppColors.white,
                       size: 16,
@@ -1866,7 +1866,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   });
                 }
               },
-              icon: const Icon(Icons.edit_outlined, size: 14),
+              icon: Icon(Icons.edit_outlined, size: 14),
               label: 'Edit',
             ),
           ),
@@ -1877,12 +1877,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         children: [
           Row(
             children: [
-              const Icon(Icons.calendar_today, size: 20, color: AppColors.textSecondary),
+              Icon(Icons.calendar_today, size: 20, color: AppColors.textSecondary),
               AppSpacing.hSpace12,
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Published on',
                     style: TextStyle(
                       fontSize: AppTypography.fontSizeSM,
@@ -1891,7 +1891,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   ),
                   Text(
                     _formatUploadDate(video.uploadedAt),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: AppTypography.fontSizeLG,
                       fontWeight: AppTypography.weightMedium,
                       color: AppColors.textPrimary,
@@ -1902,17 +1902,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ],
           ),
           AppSpacing.vSpace16,
-          const Divider(),
+          Divider(),
           AppSpacing.vSpace16,
           Row(
             children: [
-              const Icon(Icons.remove_red_eye_outlined,
+              Icon(Icons.remove_red_eye_outlined,
                   size: 20, color: AppColors.textSecondary),
               AppSpacing.hSpace12,
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Total Views',
                     style: TextStyle(
                       fontSize: AppTypography.fontSizeSM,
@@ -1921,7 +1921,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   ),
                   Text(
                     '${_formatCount(video.views)} views',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: AppTypography.fontSizeLG,
                       fontWeight: AppTypography.weightMedium,
                       color: AppColors.textPrimary,
@@ -1932,7 +1932,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ],
           ),
           AppSpacing.vSpace16,
-          const Divider(),
+          Divider(),
           AppSpacing.vSpace12,
           _buildDubButton(video),
         ],
@@ -1941,7 +1941,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildDubButton(VideoModel video) {
-    if (!FeatureFlags.isDubbingEnabled) return const SizedBox.shrink();
+    if (!FeatureFlags.isDubbingEnabled) return SizedBox.shrink();
     final videoId = video.id;
     final progressVN = _dubbingProgressVN.putIfAbsent(videoId, () => ValueNotifier<double>(0));
     final isActiveVN = _isDubbedActiveVN.putIfAbsent(videoId, () => ValueNotifier<bool>(false));
@@ -1958,7 +1958,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               onTap: () => _handleSmartDub(video),
               borderRadius: BorderRadius.circular(AppRadius.lg),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                padding: EdgeInsets.symmetric(vertical: 8.0),
                 child: Row(
                   children: [
                     Stack(
@@ -1969,8 +1969,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                           height: 40,
                           decoration: BoxDecoration(
                             color: isActive 
-                              ? AppColors.primary.withOpacity(0.1) 
-                              : AppColors.textSecondary.withOpacity(0.1),
+                              ? AppColors.primary.withValues(alpha: 0.1) 
+                              : AppColors.textSecondary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -2019,7 +2019,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       ),
                     ),
                     if (isActive)
-                      const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+                      Icon(Icons.check_circle, color: AppColors.primary, size: 20),
                   ],
                 ),
               ),

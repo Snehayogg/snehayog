@@ -38,6 +38,7 @@ class _ProfessionalLikeButtonState extends State<ProfessionalLikeButton>
 
   bool _isLiked = false;
   bool _justLiked = false;
+  bool _isDebouncing = false;
 
   @override
   void initState() {
@@ -96,10 +97,18 @@ class _ProfessionalLikeButtonState extends State<ProfessionalLikeButton>
   }
 
   void _handleTap() {
-    if (!widget.isProcessing) {
+    if (!widget.isProcessing && !_isDebouncing) {
+      _isDebouncing = true;
       // Don't trigger animation on tap - let state change handle it
       // This prevents duplicate animations
       widget.onTap();
+
+      // Debounce further taps for 500ms
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _isDebouncing = false;
+        }
+      });
     }
   }
 
@@ -139,7 +148,7 @@ class _ProfessionalLikeButtonState extends State<ProfessionalLikeButton>
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -272,7 +281,7 @@ class _HeartBurstAnimationState extends State<HeartBurstAnimation>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.red
-                              .withOpacity(0.3 * _opacityAnimation.value),
+                              .withValues(alpha: 0.3 * _opacityAnimation.value),
                         ),
                       ),
                       Container(
@@ -281,7 +290,7 @@ class _HeartBurstAnimationState extends State<HeartBurstAnimation>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.red
-                              .withOpacity(0.5 * _opacityAnimation.value),
+                              .withValues(alpha: 0.5 * _opacityAnimation.value),
                         ),
                       ),
                       // Heart icon

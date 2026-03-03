@@ -1,7 +1,7 @@
 FROM node:18-alpine
 
-# Install FFmpeg and other necessary tools
-RUN apk add --no-cache ffmpeg ffmpeg-dev
+# Install FFmpeg and build dependencies for native modules
+RUN apk add --no-cache ffmpeg ffmpeg-dev build-base g++ make python3
 
 WORKDIR /app
 

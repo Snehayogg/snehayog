@@ -23,7 +23,7 @@ class VideoErrorWidget extends StatelessWidget {
             Icon(
               Icons.error_outline,
               size: VideoConstants.mediumIconSize,
-              color: Colors.red.withOpacity(VideoConstants.lightTextOpacity),
+              color: Colors.red.withValues(alpha: VideoConstants.lightTextOpacity),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -40,7 +40,7 @@ class VideoErrorWidget extends StatelessWidget {
               child: Text(
                 errorMessage,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(VideoConstants.lightTextOpacity),
+                  color: Colors.white.withValues(alpha: VideoConstants.lightTextOpacity),
                   fontSize: VideoConstants.mediumTextSize,
                 ),
                 textAlign: TextAlign.center,

@@ -15,12 +15,12 @@ class VideoSeekingIndicator extends StatelessWidget {
 
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(VideoConstants.lightOverlayOpacity),
+        color: Colors.black.withValues(alpha: VideoConstants.lightOverlayOpacity),
         child: Center(
           child: Container(
             padding: const EdgeInsets.all(VideoConstants.smallOverlayPadding),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(VideoConstants.overlayOpacity),
+              color: Colors.black.withValues(alpha: VideoConstants.overlayOpacity),
               borderRadius: BorderRadius.circular(VideoConstants.borderRadius),
             ),
             child: const Row(

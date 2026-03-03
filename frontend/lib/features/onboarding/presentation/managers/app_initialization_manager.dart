@@ -43,6 +43,9 @@ class AppInitializationManager {
   DateTime? _initialVideosTimestamp;
   bool hasInitialVideosMore = false;
 
+  // **NEW: Track if a forced update is required**
+  final ValueNotifier<bool> isUpdateRequired = ValueNotifier(false);
+
   /// **NEW: Check if initialVideos are still fresh (within 3 minutes)**
   bool get isInitialVideosFresh {
     if (initialVideos == null || _initialVideosTimestamp == null) return false;
@@ -175,6 +178,18 @@ class AppInitializationManager {
       }
     } catch (e) {
        AppLogger.log('❌ InitManager: Video Fetch Failed: $e');
+       
+       // **NEW: Check for Version Error (Force Update)**
+       // Using string representation since DioException might be wrapped
+       final errorStr = e.toString();
+       if (errorStr.contains('Unsupported API Version') || 
+           errorStr.contains('410') || 
+           (errorStr.contains('400') && errorStr.contains('API Version'))) {
+          AppLogger.log('🚨 InitManager: CRITICAL VERSION ERROR DETECTED. Forcing update dialog.');
+          isUpdateRequired.value = true;
+          initializationStatus.value = 'Update Required';
+       }
+       
        initializationProgress.value = 1.0; // Fail gracefully
     }
   }

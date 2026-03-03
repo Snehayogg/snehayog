@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 
@@ -131,7 +128,7 @@ class _EditVideoTitleState extends State<EditVideoTitle> {
                 hintText: 'Enter video title',
                 hintStyle: const TextStyle(color: Colors.grey),
                 enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
+                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
                 ),
                 focusedBorder: const UnderlineInputBorder(
                   borderSide: BorderSide(color: AppColors.primary),

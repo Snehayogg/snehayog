@@ -321,6 +321,58 @@ class RecommendationService {
   }
 
   /**
+   * Enforces that no more than `maxConsecutive` videos from the same creator appear consecutively.
+   * Modifies the array by pushing violating videos down the line.
+   * Ideal for pagination endpoints where hard diversity might fail due to lack of diverse candidates.
+   */
+  static enforceMaxConsecutive(videos, maxConsecutive = 2) {
+    if (!videos || videos.length <= 1) return videos;
+
+    const result = [];
+    const pending = [...videos];
+    
+    let lastCreatorId = '';
+    let consecutiveCount = 0;
+
+    while (pending.length > 0) {
+      let selectedIndex = -1;
+
+      for (let i = 0; i < pending.length; i++) {
+        const video = pending[i];
+        const creatorId = video.uploader?._id?.toString() || video.uploader?.id?.toString() || video.uploader?.toString() || 'unknown';
+        
+        if (creatorId === lastCreatorId) {
+          if (consecutiveCount < maxConsecutive) {
+            selectedIndex = i;
+            break;
+          }
+        } else {
+          selectedIndex = i;
+          break;
+        }
+      }
+
+      // If all remaining videos are from the same creator, we have no choice but to accept them
+      if (selectedIndex === -1) {
+        selectedIndex = 0;
+      }
+
+      const selectedVideo = pending.splice(selectedIndex, 1)[0];
+      result.push(selectedVideo);
+
+      const creatorId = selectedVideo.uploader?._id?.toString() || selectedVideo.uploader?.id?.toString() || selectedVideo.uploader?.toString() || 'unknown';
+      if (creatorId === lastCreatorId) {
+        consecutiveCount++;
+      } else {
+        lastCreatorId = creatorId;
+        consecutiveCount = 1;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Recalculate scores for all videos (or a batch)
    * 
    * @param {Object} options - Options for batch processing

@@ -58,12 +58,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : ListView.separated(
-              padding: const EdgeInsets.all(AppSpacing.spacing4),
+              padding: EdgeInsets.all(AppSpacing.spacing4),
               itemCount: 3,
               separatorBuilder: (_, __) =>
-                  const SizedBox(height: AppSpacing.spacing4),
+                  SizedBox(height: AppSpacing.spacing4),
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return _buildSection(
@@ -117,7 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(title),
-        const SizedBox(height: AppSpacing.spacing2),
+        SizedBox(height: AppSpacing.spacing2),
         child,
       ],
     );
@@ -135,7 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildTokenCard() {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.spacing4),
+      padding: EdgeInsets.all(AppSpacing.spacing4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -149,7 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     .copyWith(color: AppColors.textPrimary),
               ),
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.copy,
                   size: AppSpacing.spacing5,
                   color: AppColors.primary,
@@ -160,7 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.spacing2),
+          SizedBox(height: AppSpacing.spacing2),
           Text(
             _developerToken ??
                 AppText.get('settings_no_token', fallback: 'No token found'),
@@ -171,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             maxLines: _tokenPreviewMaxLines,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: AppSpacing.spacing2),
+          SizedBox(height: AppSpacing.spacing2),
           Text(
             AppText.get('settings_token_usage',
                 fallback:

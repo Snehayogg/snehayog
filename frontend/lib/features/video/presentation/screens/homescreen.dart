@@ -662,7 +662,7 @@ class _MainScreenState extends State<MainScreen>
                       height: 34, // Same size for all icons
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFF2196F3).withOpacity(0.2)
+                            ? const Color(0xFF2196F3).withValues(alpha: 0.2)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(20),
                       ),

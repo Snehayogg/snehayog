@@ -190,7 +190,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade600.withOpacity(0.5),
+                        color: Colors.blue.shade600.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.white24, width: 0.5),
                       ),
@@ -327,7 +327,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                         vertical: 3,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.shade600.withOpacity(0.5),
+                                        color: Colors.blue.shade600.withValues(alpha: 0.5),
                                         borderRadius: BorderRadius.circular(6),
                                         border: Border.all(color: Colors.white24, width: 0.5),
                                       ),
@@ -357,7 +357,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.3),
+                                      color: Colors.black.withValues(alpha: 0.3),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: const Text(

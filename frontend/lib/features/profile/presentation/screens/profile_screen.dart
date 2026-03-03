@@ -690,10 +690,10 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   //     // **HLS SUPPORT: Configure headers for HLS videos**
   //     final Map<String, String> headers = videoUrl.contains('.m3u8')
-  //         ? const {
+  //         ? {
   //             'Accept': 'application/vnd.apple.mpegurl,application/x-mpegURL',
   //           }
-  //         : const {};
+  //         : {};
 
   //     // Create controller
   //     final controller = VideoPlayerController.networkUrl(
@@ -903,7 +903,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final String referralLink =
           referralCode.isNotEmpty ? '$base/?ref=$referralCode' : base;
       final String message =
-          'I am using Vayug! Refer 2 friends and get full access. Join now: $referralLink';
+          'Monetize from your content. Enjoy ad-free videos $referralLink';
       // Optimistically increment invite counter immediately on click
       final prefs = await SharedPreferences.getInstance();
       _invitedCount.value = (prefs.getInt('referral_invite_count') ?? 0) + 1;
@@ -911,7 +911,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       await sp.Share.share(
         message,
-        subject: 'Vayug – Refer 2 friends and get full access',
+        subject: 'Vayug – Monetize from your content. Enjoy ad-free videos',
       );
       // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
     } catch (e) {
@@ -1072,7 +1072,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       builder: (BuildContext context) {
         return Center(
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppColors.surfacePrimary,
               borderRadius: BorderRadius.circular(AppRadius.md),
@@ -1120,14 +1120,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.15),
+                        color: AppColors.error.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.error.withOpacity(0.3),
+                          color: AppColors.error.withValues(alpha: 0.3),
                           width: 2,
                         ),
                       ),
-                      child: HugeIcon(icon: HugeIcons.strokeRoundedDelete02,
+                      child: const HugeIcon(icon: HugeIcons.strokeRoundedDelete02,
                         color: AppColors.error,
                         size: 32,
                       ),
@@ -1205,7 +1205,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: HugeIcon(icon: HugeIcons.strokeRoundedCamera01),
+                  leading: const HugeIcon(icon: HugeIcons.strokeRoundedCamera01),
                   title: Text(AppText.get('profile_take_photo')),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
@@ -1214,7 +1214,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   },
                 ),
                 ListTile(
-                  leading: HugeIcon(icon: HugeIcons.strokeRoundedImage02),
+                  leading: const HugeIcon(icon: HugeIcons.strokeRoundedImage02),
                   title: Text(AppText.get('profile_choose_gallery')),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
@@ -1428,7 +1428,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               // **NEW: Signing In Overlay**
               if (_isSigningIn)
                 Container(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -1438,7 +1438,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -1587,7 +1587,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           size: 64,
                           color: Colors.red[300],
                         ),
-                        const SizedBox(height: 16),
+                       const SizedBox(height: 16),
                         Text(
                           AppText.get('error_load_profile'),
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -1615,7 +1615,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ? null
                                   : () => _loadData(forceRefresh: true),
                               isLoading: isLoading,
-                              icon: HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
+                              icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
                               label: AppText.get('btn_retry', fallback: 'Retry'),
                               variant: AppButtonVariant.primary,
                             );
@@ -1667,7 +1667,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               textAlign: TextAlign.center,
                             ),
                           ],
-                          const SizedBox(height: 24),
+                         const SizedBox(height: 24),
                           // **ENHANCED: Retry button with loading state**
                           ValueListenableBuilder<bool>(
                             valueListenable: _isLoading,
@@ -1677,7 +1677,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ? null
                                     : () => _loadData(forceRefresh: true),
                                 isLoading: isLoading,
-                                icon: HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
+                                icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
                                 label: AppText.get('btn_retry', fallback: 'Retry'),
                                 variant: AppButtonVariant.primary,
                               );
@@ -1803,7 +1803,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       )),
             leading: isViewingOwnProfile
                 ? IconButton(
-                    icon: HugeIcon(icon: HugeIcons.strokeRoundedMenu01,
+                    icon: const HugeIcon(icon: HugeIcons.strokeRoundedMenu01,
                         color: AppColors.textPrimary, size: 20),
                     tooltip: 'Menu',
                     onPressed: () {
@@ -1811,7 +1811,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     },
                   )
                 : IconButton(
-                    icon: HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01,
+                    icon: const HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01,
                         color: AppColors.textPrimary, size: 20),
                     tooltip: 'Back',
                     onPressed: () {
@@ -1835,7 +1835,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   List<Widget> _buildAppBarActions(ProfileStateManager stateManager, bool isViewingOwnProfile) {
     final actions = <Widget>[
       IconButton(
-        icon: HugeIcon(icon: HugeIcons.strokeRoundedSearch01,
+        icon: const HugeIcon(icon: HugeIcons.strokeRoundedSearch01,
           color: AppColors.textPrimary,
           size: 20,
         ),
@@ -1859,7 +1859,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               color: Colors.red.withValues(alpha:0.1),
               shape: BoxShape.circle,
             ),
-            child: HugeIcon(icon: HugeIcons.strokeRoundedDelete02,
+            child: const HugeIcon(icon: HugeIcons.strokeRoundedDelete02,
               color: Colors.red,
               size: 24,
             ),
@@ -1880,7 +1880,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               color: Colors.grey.withValues(alpha:0.1),
               shape: BoxShape.circle,
             ),
-            child: HugeIcon(icon: HugeIcons.strokeRoundedCancel01,
+            child: const HugeIcon(icon: HugeIcons.strokeRoundedCancel01,
               color: Colors.grey,
               size: 24,
             ),
@@ -1896,7 +1896,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildFeedbackAction() {
     return IconButton(
-      icon: HugeIcon(icon: HugeIcons.strokeRoundedIdea01,
+      icon: const HugeIcon(icon: HugeIcons.strokeRoundedIdea01,
         color: Color(0xFF10B981),
         size: 20,
       ),
@@ -1994,7 +1994,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             child: Column(
               children: [
-                const Text(
+               const  Text(
                   '🧪 Debug: Token Refresh Test',
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
                 ),
@@ -2058,12 +2058,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: ValueListenableBuilder<int>(
           valueListenable: _activeProfileTabIndex,
           builder: (context, activeIndex, child) {
-            final int effectiveActiveIndex = isViewingOwnProfile ? activeIndex : 0;
             return ProfileTabsWidget(
-              activeIndex: effectiveActiveIndex,
+              activeIndex: activeIndex,
               showTopCreators: isViewingOwnProfile,
               onSelect: (i) {
-                if (!isViewingOwnProfile) return;
                 _activeProfileTabIndex.value = i;
               },
             );
@@ -2073,15 +2071,28 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
 
     // 4. Videos or Recommendations Section
-    if (!isViewingOwnProfile || _activeProfileTabIndex.value == 0) {
+    if (_activeProfileTabIndex.value == 0) {
+      // Yug Tab
       slivers.add(
         ProfileVideosWidget(
           stateManager: _stateManager,
           showHeader: false,
-          isSliver: true, // **ENABLE VIRTUALIZATION**
+          isSliver: true,
+          filterVideoType: 'yog',
         ),
       );
-    } else {
+    } else if (_activeProfileTabIndex.value == 1) {
+      // Vayu Tab
+      slivers.add(
+        ProfileVideosWidget(
+          stateManager: _stateManager,
+          showHeader: false,
+          isSliver: true,
+          filterVideoType: 'vayu',
+        ),
+      );
+    } else if (_activeProfileTabIndex.value == 2 && isViewingOwnProfile) {
+      // Recommendations Tab
       slivers.add(
         SliverToBoxAdapter(
           child: _buildRecommendationsSection(),
@@ -2099,11 +2110,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _buildRecommendationsSection() {
     return RepaintBoundary(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        padding: EdgeInsets.symmetric(horizontal: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               AppText.get('profile_top_earners'),
               style: AppTypography.titleSmall.copyWith(
@@ -2111,7 +2122,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             const TopEarnersGrid(),
           ],
         ),
@@ -2717,10 +2728,10 @@ class _EarningsBottomSheetContentState
       children: [
         // Header
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.grey[100],
-            borderRadius: const BorderRadius.vertical(
+            borderRadius: BorderRadius.vertical(
               top: Radius.circular(20),
             ),
           ),
@@ -2728,10 +2739,10 @@ class _EarningsBottomSheetContentState
             children: [
               HugeIcon(icon: HugeIcons.strokeRoundedWallet01,
                   color: Colors.black87, size: 24),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Text(
                 AppText.get('profile_video_earnings'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
@@ -2740,13 +2751,13 @@ class _EarningsBottomSheetContentState
               const Spacer(),
               Text(
                 '${totalEarnings.toStringAsFixed(2)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF10B981),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 icon: HugeIcon(icon: HugeIcons.strokeRoundedCancel01, color: Colors.black54),
@@ -2759,14 +2770,14 @@ class _EarningsBottomSheetContentState
         // Content
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: CircularProgressIndicator())
               : widget.videos.isEmpty
                   ? Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(32.0),
+                        padding: EdgeInsets.all(32.0),
                         child: Text(
                           AppText.get('profile_no_videos'),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey,
                           ),
@@ -2775,15 +2786,15 @@ class _EarningsBottomSheetContentState
                     )
                   : ListView.builder(
                       controller: widget.scrollController,
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(16),
                       itemCount: widget.videos.length,
                       itemBuilder: (context, index) {
                         final video = widget.videos[index];
                         final earnings = _videoEarnings[video.id] ?? 0.0;
 
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
+                          margin: EdgeInsets.only(bottom: 12),
+                          padding: EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
@@ -2793,7 +2804,7 @@ class _EarningsBottomSheetContentState
                               BoxShadow(
                                 color: Colors.black.withValues(alpha:0.05),
                                 blurRadius: 4,
-                                offset: const Offset(0, 2),
+                                offset: Offset(0, 2),
                               ),
                             ],
                           ),
@@ -2803,7 +2814,7 @@ class _EarningsBottomSheetContentState
                               // Video name
                               Text(
                                 video.videoName,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.black87,
@@ -2811,7 +2822,7 @@ class _EarningsBottomSheetContentState
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(height: 12),
+                              SizedBox(height: 12),
 
                               // Stats row
                               Row(
@@ -2866,16 +2877,16 @@ class _EarningsBottomSheetContentState
     return Column(
       children: [
         Icon(icon, size: 20, color: color),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: 2),
         Text(
           label,
           style: TextStyle(

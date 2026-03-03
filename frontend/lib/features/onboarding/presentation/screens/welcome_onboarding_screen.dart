@@ -96,7 +96,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
       backgroundColor: AppColors.backgroundPrimary,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+          padding: EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -104,22 +104,22 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
 
               // Icon
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
                   color: AppColors.backgroundSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.video_camera_front_rounded,
                   size: 64,
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
 
               // Main heading text - Backend-driven
               if (_isLoading)
-                const SizedBox(
+                SizedBox(
                   height: 60,
                   child: Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
@@ -134,7 +134,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // Supporting text - Backend-driven
               if (!_isLoading && _subheading.isNotEmpty)
@@ -165,7 +165,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                 isFullWidth: true,
                 size: AppButtonSize.large,
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
               // Legal Disclosure
               RichText(
                 textAlign: TextAlign.center,
@@ -178,7 +178,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                     const TextSpan(text: 'By continuing, you agree to our '),
                     TextSpan(
                       text: 'Terms of Service',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.primary,
                         decoration: TextDecoration.underline,
                       ),
@@ -188,7 +188,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                     const TextSpan(text: ' and '),
                     TextSpan(
                       text: 'Privacy Policy',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.primary,
                         decoration: TextDecoration.underline,
                       ),
@@ -199,7 +199,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: 32),
             ],
           ),
         ),

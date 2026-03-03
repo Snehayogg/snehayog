@@ -247,7 +247,7 @@ class _AgentScreenState extends State<AgentScreen> {
                   Container(
                     width: 28, height: 28,
                     decoration: BoxDecoration(
-                       color: AppColors.primary.withOpacity(0.2),
+                       color: AppColors.primary.withValues(alpha: 0.2),
                        shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
@@ -324,7 +324,7 @@ class _AgentScreenState extends State<AgentScreen> {
           const SizedBox(height: 12),
           Container(
              padding: const EdgeInsets.all(8),
-             decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+             decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
              child: Text(hashtags, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
           ),
           

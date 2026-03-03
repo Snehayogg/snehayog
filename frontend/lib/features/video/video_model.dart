@@ -1,4 +1,4 @@
-﻿class VideoModel {
+class VideoModel {
   final String id;
   final String videoName;
   final String videoUrl;
@@ -277,7 +277,7 @@
 
             return null;
           } catch (e) {
-            print('âš ï¸ VideoModel: Error parsing hlsVariants: $e');
+            print('⚠️ VideoModel: Error parsing hlsVariants: $e');
             return null;
           }
         }(),

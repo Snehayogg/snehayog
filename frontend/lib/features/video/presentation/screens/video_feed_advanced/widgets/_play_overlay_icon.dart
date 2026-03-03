@@ -8,7 +8,7 @@ class PlayOverlayIcon extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
+        color: Colors.black.withValues(alpha: 0.6),
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2),
       ),

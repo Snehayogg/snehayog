@@ -37,7 +37,7 @@ class ProfileHeaderWidget extends StatelessWidget {
       builder: (context, stateManager, child) {
         AppLogger.log('🎨 ProfileHeaderWidget: Rebuilding (Videos: ${stateManager.totalVideoCount})');
         return Container(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+          padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -45,7 +45,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _buildAvatar(stateManager),
-                  const SizedBox(width: 20),
+                  SizedBox(width: 20),
                   Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -88,7 +88,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 stateManager.userData?['bio'] ?? '',
                 maxLines: 2,
@@ -97,7 +97,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               _buildActionButtons(stateManager),
             ],
           ),
@@ -177,7 +177,7 @@ class ProfileHeaderWidget extends StatelessWidget {
               fontWeight: isLoadingText ? FontWeight.w600 : FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: 2),
           Text(
             label,
             maxLines: 1,
@@ -237,7 +237,7 @@ class ProfileHeaderWidget extends StatelessWidget {
   }
 
   Widget _buildActionButtons(ProfileStateManager stateManager) {
-    if (!isViewingOwnProfile) return const SizedBox.shrink();
+    if (!isViewingOwnProfile) return SizedBox.shrink();
 
     return Row(
       children: [
@@ -259,7 +259,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                           child: Text(AppText.get('btn_cancel')),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
                           onPressed: onSaveProfile,
@@ -281,7 +281,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                     icon: const HugeIcon(icon: HugeIcons.strokeRoundedWallet01, size: 18),
                     label: Text(
                       AppText.get('btn_add_upi_id'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -294,7 +294,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                   ),
           ),
         if (!stateManager.isEditing) ...[
-          if (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock) const SizedBox(width: 12),
+          if (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock) SizedBox(width: 12),
           Expanded(
             child: OutlinedButton(
               onPressed: onReferFriends,
@@ -311,7 +311,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                 softWrap: false,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),

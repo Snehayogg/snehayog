@@ -111,7 +111,7 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
         return Scaffold(
           backgroundColor: AppColors.backgroundPrimary,
           body: _games.isEmpty && _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: CircularProgressIndicator())
               : _games.isEmpty && !_isLoading
                   ? Center(
                       child: Column(
@@ -120,7 +120,7 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
                           Icon(Icons.auto_awesome,
                               size: 64,
                               color: AppColors.primary.withValues(alpha: 0.5)),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           Text(
                             'Arcade Fun Coming Soon',
                             style: AppTypography.headlineMedium.copyWith(
@@ -128,9 +128,9 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 48),
+                            padding: EdgeInsets.symmetric(horizontal: 48),
                             child: Text(
                               'We are curating the best interactive experiences for you. Stay tuned!',
                               textAlign: TextAlign.center,

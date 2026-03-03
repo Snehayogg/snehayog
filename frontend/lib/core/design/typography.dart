@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'colors.dart';
 
 class AppTypography {
@@ -13,19 +14,19 @@ class AppTypography {
   static const FontWeight weightBold = FontWeight.w700;
   static const FontWeight weightExtraBold = FontWeight.w800;
 
-  // Font sizes
-  static const double fontSizeXS = 10.0;
-  static const double fontSizeSM = 12.0;
-  static const double fontSizeBase = 14.0;
-  static const double fontSizeLG = 16.0;
-  static const double fontSizeXL = 18.0;
-  static const double fontSize2XL = 20.0;
-  static const double fontSize3XL = 24.0;
-  static const double fontSize4XL = 30.0;
-  static const double fontSize5XL = 36.0;
+  // Font sizes - Responsive via .sp
+  static double get fontSizeXS => 10.0.sp;
+  static double get fontSizeSM => 12.0.sp;
+  static double get fontSizeBase => 14.0.sp;
+  static double get fontSizeLG => 16.0.sp;
+  static double get fontSizeXL => 18.0.sp;
+  static double get fontSize2XL => 20.0.sp;
+  static double get fontSize3XL => 24.0.sp;
+  static double get fontSize4XL => 30.0.sp;
+  static double get fontSize5XL => 36.0.sp;
 
-  // Text styles with semantic naming
-  static TextStyle displayLarge = GoogleFonts.inter(
+  // Text styles with semantic naming - Dynamic getters
+  static TextStyle get displayLarge => GoogleFonts.inter(
     fontSize: fontSize5XL,
     fontWeight: weightBold,
     color: AppColors.textPrimary,
@@ -33,7 +34,7 @@ class AppTypography {
     letterSpacing: -0.5,
   );
 
-  static TextStyle displayMedium = GoogleFonts.inter(
+  static TextStyle get displayMedium => GoogleFonts.inter(
     fontSize: fontSize4XL,
     fontWeight: weightBold,
     color: AppColors.textPrimary,
@@ -41,91 +42,91 @@ class AppTypography {
     letterSpacing: -0.25,
   );
 
-  static TextStyle displaySmall = GoogleFonts.inter(
+  static TextStyle get displaySmall => GoogleFonts.inter(
     fontSize: fontSize3XL,
     fontWeight: weightBold,
     color: AppColors.textPrimary,
     height: 1.3,
   );
 
-  static TextStyle headlineLarge = GoogleFonts.inter(
+  static TextStyle get headlineLarge => GoogleFonts.inter(
     fontSize: fontSize2XL,
     fontWeight: weightSemiBold,
     color: AppColors.textPrimary,
     height: 1.4,
   );
 
-  static TextStyle headlineMedium = GoogleFonts.inter(
+  static TextStyle get headlineMedium => GoogleFonts.inter(
     fontSize: fontSizeXL,
     fontWeight: weightSemiBold,
     color: AppColors.textPrimary,
     height: 1.4,
   );
 
-  static TextStyle headlineSmall = GoogleFonts.inter(
+  static TextStyle get headlineSmall => GoogleFonts.inter(
     fontSize: fontSizeLG,
     fontWeight: weightSemiBold,
     color: AppColors.textPrimary,
     height: 1.5,
   );
 
-  static TextStyle titleLarge = GoogleFonts.inter(
+  static TextStyle get titleLarge => GoogleFonts.inter(
     fontSize: fontSizeLG,
     fontWeight: weightMedium,
     color: AppColors.textPrimary,
     height: 1.5,
   );
 
-  static TextStyle titleMedium = GoogleFonts.inter(
+  static TextStyle get titleMedium => GoogleFonts.inter(
     fontSize: fontSizeBase,
     fontWeight: weightMedium,
     color: AppColors.textPrimary,
     height: 1.5,
   );
 
-  static TextStyle titleSmall = GoogleFonts.inter(
+  static TextStyle get titleSmall => GoogleFonts.inter(
     fontSize: fontSizeSM,
     fontWeight: weightMedium,
     color: AppColors.textPrimary,
     height: 1.5,
   );
 
-  static TextStyle bodyLarge = GoogleFonts.inter(
+  static TextStyle get bodyLarge => GoogleFonts.inter(
     fontSize: fontSizeLG,
     fontWeight: weightRegular,
     color: AppColors.textPrimary,
     height: 1.6,
   );
 
-  static TextStyle bodyMedium = GoogleFonts.inter(
+  static TextStyle get bodyMedium => GoogleFonts.inter(
     fontSize: fontSizeBase,
     fontWeight: weightRegular,
     color: AppColors.textPrimary,
     height: 1.6,
   );
 
-  static TextStyle bodySmall = GoogleFonts.inter(
+  static TextStyle get bodySmall => GoogleFonts.inter(
     fontSize: fontSizeSM,
     fontWeight: weightRegular,
     color: AppColors.textSecondary,
     height: 1.6,
   );
 
-  static TextStyle labelLarge = GoogleFonts.inter(
+  static TextStyle get labelLarge => GoogleFonts.inter(
     fontSize: fontSizeBase,
     fontWeight: weightMedium,
     color: AppColors.textPrimary,
     height: 1.4,
   );
 
-  static TextStyle labelMedium = GoogleFonts.inter(
+  static TextStyle get labelMedium => GoogleFonts.inter(
     fontSize: fontSizeSM,
     fontWeight: weightMedium,
     color: AppColors.textPrimary,
     height: 1.4,
   );
 
-  static TextStyle labelSmall = GoogleFonts.inter(
+  static TextStyle get labelSmall => GoogleFonts.inter(
     fontSize: fontSizeXS,
     fontWeight: weightMedium,
     color: AppColors.textSecondary,

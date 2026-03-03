@@ -176,7 +176,7 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFD700).withOpacity(0.2),
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -321,7 +321,7 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
           border: Border.all(color: Colors.grey[300]!),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),

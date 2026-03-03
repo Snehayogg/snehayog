@@ -21,6 +21,7 @@ class ProfileVideosWidget extends StatelessWidget {
   final VoidCallback? onVideoSelection;
   final bool showHeader;
   final bool isSliver;
+  final String? filterVideoType;
 
   const ProfileVideosWidget({
     super.key,
@@ -30,6 +31,7 @@ class ProfileVideosWidget extends StatelessWidget {
     this.onVideoSelection,
     this.showHeader = true,
     this.isSliver = false,
+    this.filterVideoType,
   });
 
   /// **NEW: Preload video thumbnails for faster loading**
@@ -173,6 +175,23 @@ class ProfileVideosWidget extends StatelessWidget {
         final Set<String> processedSeriesIds = {};
 
         for (final video in manager.userVideos) {
+          // **NEW: Filtering based on Verticality (Aspect Ratio)**
+          // Vertical videos (9:16) -> Yug tab
+          // All others (Landscape/Square) -> Vayu tab
+          final isVertical = (video.aspectRatio < 0.8) || 
+                             (video.aspectRatio <= 1.2 && video.videoType.toLowerCase() == 'yog');
+          
+          bool shouldShow = false;
+          if (filterVideoType == null) {
+            shouldShow = true;
+          } else if (filterVideoType!.toLowerCase() == 'yog') {
+            shouldShow = isVertical;
+          } else if (filterVideoType!.toLowerCase() == 'vayu') {
+            shouldShow = !isVertical;
+          }
+
+          if (!shouldShow) continue;
+
           if (video.seriesId != null) {
             if (!processedSeriesIds.contains(video.seriesId)) {
               processedSeriesIds.add(video.seriesId!);
@@ -183,11 +202,13 @@ class ProfileVideosWidget extends StatelessWidget {
           }
         }
 
-        const gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
+        // **NEW: Dynamic Grid Layout**
+        final bool isVayu = filterVideoType?.toLowerCase() == 'vayu';
+        final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: isVayu ? 2 : 3,
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
-          childAspectRatio: 0.5,
+          childAspectRatio: isVayu ? (16 / 9) : 0.5,
         );
 
         if (isSliver) {
@@ -355,9 +376,9 @@ class ProfileVideosWidget extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 0.5),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 0.5),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -470,7 +491,7 @@ class ProfileVideosWidget extends StatelessWidget {
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withOpacity(0.2),
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.2),
                         borderRadius: BorderRadius.zero,
                         border: Border.all(
                           color: const Color(0xFFEF4444),
@@ -508,7 +529,7 @@ class ProfileVideosWidget extends StatelessWidget {
                         width: 24,
                         height: 24,
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.8),
+                          color: isSelected ? const Color(0xFFEF4444) : Colors.white.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: isSelected ? const Color(0xFFEF4444) : Colors.white,
@@ -598,7 +619,7 @@ class ProfileVideosWidget extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
+                      color: Colors.black.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -615,7 +636,7 @@ class ProfileVideosWidget extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
