@@ -27,6 +27,23 @@ class VideoControllerManager {
 
   final int maxPoolSize = 4; // **PARTITIONED: 4/10 of global budget**
 
+  // **ROUTE-POP HOOK: Called by AppNavigatorObserver when any route is popped**
+  // The Yug feed registers a callback here so it can re-validate controllers
+  // after the user pops back from a profile-launched video screen.
+  void Function()? _onRoutePoppedCallback;
+
+  void registerOnRoutePopped(void Function() callback) {
+    _onRoutePoppedCallback = callback;
+  }
+
+  void unregisterOnRoutePopped() {
+    _onRoutePoppedCallback = null;
+  }
+
+  void notifyRoutePopped() {
+    _onRoutePoppedCallback?.call();
+  }
+
   /// Choose a playback URL preferring Cloudflare/R2 or backend HLS over Cloudinary
   String _selectPlaybackUrl(VideoModel video) {
 
@@ -109,19 +126,36 @@ class VideoControllerManager {
     String finalUrl = _selectPlaybackUrl(video);
     // AppLogger.log('🎯 VideoControllerManager: Selected playback URL: $finalUrl');
 
-    // **OPTIMIZED: Reuse existing controller if available and valid**
+    // **CRITICAL FIX: Check if existing controller is valid**
     if (_controllers.containsKey(index)) {
       final existingController = _controllers[index];
-      if (existingController != null &&
-          existingController.value.isInitialized &&
-          !existingController.value.hasError) {
+      if (existingController != null && _isControllerValid(index)) {
         AppLogger.log(
-            '♻️ VideoControllerManager: Reusing existing controller $index');
+            '♻️ VideoControllerManager: Reusing existing valid controller $index');
         return existingController;
       } else {
+        // **CRITICAL FIX: Controller is invalid/disposed - completely remove it**
         AppLogger.log(
-            '🔄 VideoControllerManager: Disposing invalid controller $index');
-        _disposeController(index);
+            '🔄 VideoControllerManager: Found invalid/disposed controller $index - removing for reinitialization');
+        if (existingController != null) {
+          // Stop position tracking before removal
+          final videoId = _controllerVideoIds[index];
+          if (videoId != null) {
+            _positionCache.stopPositionTracking(existingController);
+          }
+          // Dispose if not already disposed
+          try {
+            // Try to pause and dispose - if it throws, controller is already disposed
+            existingController.pause();
+            existingController.setVolume(0.0);
+            existingController.dispose();
+          } catch (e) {
+            AppLogger.log(
+                '⚠️ VideoControllerManager: Controller $index already disposed or error: $e');
+          }
+        }
+        // **CRITICAL: Completely remove from tracking**
+        _removeControllerFromTracking(index);
       }
     }
 
@@ -463,9 +497,14 @@ class VideoControllerManager {
         final controller = _controllers[index]!;
 
         // **CRITICAL: Pause and stop before disposing**
-        if (controller.value.isInitialized) {
-          controller.pause();
-          controller.setVolume(0.0);
+        try {
+          if (controller.value.isInitialized) {
+            controller.pause();
+            controller.setVolume(0.0);
+          }
+        } catch (e) {
+          AppLogger.log(
+              '⚠️ VideoControllerManager: Controller $index already paused/stopped: $e');
         }
 
         // **POSITION CACHING: Stop tracking position for this video**
@@ -474,24 +513,20 @@ class VideoControllerManager {
           _positionCache.stopPositionTracking(controller);
         }
 
-        // **CACHING: Only dispose if we have too many controllers**
-        if (_controllers.length > maxPoolSize) {
-          // **MEMORY: Use disposal utility for proper cleanup**
-          VideoDisposalUtils.disposeController(controller,
-              identifier: 'manager_index_$index');
-          _controllers.remove(index);
-          _order.removeWhere((i) => i == index);
-          _intentionallyPaused.remove(index);
-          _controllerSourceUrl.remove(index);
-          _controllerVideoIds.remove(index);
-        } else {
-          // **CACHING: Keep controller in cache but pause it**
-          controller.pause();
-          controller.setVolume(0.0);
-          _intentionallyPaused.add(index);
+        // **CRITICAL FIX: Always dispose and remove controller from tracking**
+        // Don't cache disposed controllers - they can't be reused
+        try {
+          controller.dispose();
+        } catch (e) {
           AppLogger.log(
-              '💾 VideoControllerManager: Cached controller $index for reuse');
+              '⚠️ VideoControllerManager: Controller $index already disposed or error during disposal: $e');
         }
+
+        // **CRITICAL: Completely remove from all tracking maps**
+        _removeControllerFromTracking(index);
+
+        AppLogger.log(
+            '🗑️ VideoControllerManager: Fully disposed and removed controller $index from tracking');
 
         // **FORCE: Small delay to ensure MediaCodec cleanup**
         Future.delayed(const Duration(milliseconds: 50), () {
@@ -501,6 +536,8 @@ class VideoControllerManager {
       } catch (e) {
         AppLogger.log(
             '❌ VideoControllerManager: Error disposing controller $index: $e');
+        // **CRITICAL: Even on error, remove from tracking**
+        _removeControllerFromTracking(index);
       }
     }
   }
@@ -644,13 +681,38 @@ class VideoControllerManager {
 
   /// Check if controller is cached and valid
   bool isControllerCached(int index) {
-    if (!_controllers.containsKey(index)) return false;
-    final controller = _controllers[index]!;
-    return controller.value.isInitialized && !controller.value.hasError;
+    return _isControllerValid(index);
   }
 
   /// Get cached controller count
   int get cachedControllerCount => _controllers.length;
+
+  /// **CRITICAL FIX: Check if controller is valid and initialized**
+  bool _isControllerValid(int index) {
+    if (!_controllers.containsKey(index)) return false;
+    final controller = _controllers[index]!;
+    try {
+      // Check if controller is initialized and has no errors
+      // If controller is disposed, accessing .value will throw
+      return controller.value.isInitialized && 
+             !controller.value.hasError;
+    } catch (e) {
+      // If we can't access the value, it's disposed/invalid
+      AppLogger.log(
+          '⚠️ VideoControllerManager: Controller $index is invalid (access error: $e)');
+      return false;
+    }
+  }
+
+  /// **CRITICAL FIX: Completely remove controller from all tracking maps**
+  void _removeControllerFromTracking(int index) {
+    _controllers.remove(index);
+    _order.removeWhere((i) => i == index);
+    _intentionallyPaused.remove(index);
+    _pinned.remove(index);
+    _controllerSourceUrl.remove(index);
+    _controllerVideoIds.remove(index);
+  }
 
   /// Cleanup all controllers
   void cleanup() {

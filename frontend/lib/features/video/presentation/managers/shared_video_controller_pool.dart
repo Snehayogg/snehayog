@@ -63,13 +63,7 @@ class SharedVideoControllerPool {
 
   /// **Check if video controller is already loaded (updates LRU)**
   bool isVideoLoaded(String videoId) {
-    if (_controllerPool.containsKey(videoId) &&
-        _controllerPool[videoId]!.value.isInitialized) {
-      // **LRU: Update access time when checked**
-      _lastAccessed[videoId] = DateTime.now();
-      return true;
-    }
-    return false;
+    return _validatedController(videoId) != null;
   }
 
   /// **Check if a controller is effectively disposed**
@@ -84,23 +78,91 @@ class SharedVideoControllerPool {
     }
   }
 
+  /// Safely read controller value. Returns null if controller is disposed.
+  VideoPlayerValue? _safeControllerValue(
+    String videoId,
+    VideoPlayerController controller,
+  ) {
+    try {
+      return controller.value;
+    } catch (e) {
+      _evictController(videoId, controller, reason: 'stale/disposed: $e');
+      return null;
+    }
+  }
+
+  /// Remove invalid controller references so caller can recreate a fresh one.
+  void _evictController(
+    String videoId,
+    VideoPlayerController controller, {
+    String? reason,
+    bool disposeInstance = false,
+  }) {
+    final listener = _listeners[videoId];
+    if (listener != null) {
+      try {
+        controller.removeListener(listener);
+      } catch (_) {}
+    }
+
+    _controllerPool.remove(videoId);
+    _controllerStates.remove(videoId);
+    _listeners.remove(videoId);
+    _lastAccessed.remove(videoId);
+    _videoIndices.remove(videoId);
+
+    if (disposeInstance) {
+      try {
+        controller.dispose();
+      } catch (_) {}
+    }
+
+    AppLogger.log(
+      'SharedPool: Evicted invalid controller for video: $videoId'
+      '${reason != null ? ' ($reason)' : ''}',
+    );
+  }
+
+  VideoPlayerController? _validatedController(
+    String videoId, {
+    bool requireInitialized = true,
+  }) {
+    final controller = _controllerPool[videoId];
+    if (controller == null) return null;
+
+    final value = _safeControllerValue(videoId, controller);
+    if (value == null) return null;
+
+    if (value.hasError) {
+      _evictController(
+        videoId,
+        controller,
+        reason: 'controller has error',
+        disposeInstance: true,
+      );
+      return null;
+    }
+
+    if (requireInitialized && !value.isInitialized) {
+      _evictController(
+        videoId,
+        controller,
+        reason: 'not initialized',
+        disposeInstance: true,
+      );
+      return null;
+    }
+
+    _lastAccessed[videoId] = DateTime.now();
+    return controller;
+  }
+
   /// **Get existing controller for a video (updates LRU)**
   VideoPlayerController? getController(String videoId) {
-    if (_controllerPool.containsKey(videoId)) {
-      // **LRU: Update access time**
-      _lastAccessed[videoId] = DateTime.now();
-      final controller = _controllerPool[videoId]!;
-
-      // **NEW: Return only if initialized and valid**
-      if (controller.value.isInitialized && !controller.value.hasError) {
-        trackCacheHit();
-        return controller;
-      } else {
-        // **AUTO-CLEANUP: Remove invalid controllers**
-        disposeController(videoId);
-        trackCacheMiss();
-        return null;
-      }
+    final controller = _validatedController(videoId);
+    if (controller != null) {
+      trackCacheHit();
+      return controller;
     }
     trackCacheMiss();
     return null;
@@ -109,10 +171,15 @@ class SharedVideoControllerPool {
   /// **Get controller with instant playback guarantee (for cached videos)**
   VideoPlayerController? getControllerForInstantPlay(String videoId) {
     final controller = getController(videoId);
-    if (controller != null && controller.value.isInitialized) {
+    if (controller != null) {
+      final value = _safeControllerValue(videoId, controller);
+      if (value == null || !value.isInitialized) {
+        trackCacheMiss();
+        return null;
+      }
+
       // **INSTANT PLAYBACK: Ensure first frame is ready**
-      if (controller.value.position > Duration.zero ||
-          !controller.value.isBuffering) {
+      if (value.position > Duration.zero || !value.isBuffering) {
         return controller;
       }
     }
@@ -257,6 +324,7 @@ class SharedVideoControllerPool {
   Future<void> disposeController(String videoId) async {
     if (_controllerPool.containsKey(videoId)) {
       final controller = _controllerPool[videoId]!;
+      final listener = _listeners[videoId];
       
       // **CRITICAL: Remove from pool IMMEDIATELY to prevent reuse while disposing**
       _controllerPool.remove(videoId);
@@ -273,7 +341,9 @@ class SharedVideoControllerPool {
           controller.pause(); 
           controller.setVolume(0.0);
         }
-        controller.removeListener(_listeners[videoId] ?? () {});
+        if (listener != null) {
+          controller.removeListener(listener);
+        }
         
         // **FIX: Instant disposal to prevent OOM**
         // Removed delay which caused decoder pile-up during fast scroll
@@ -319,7 +389,7 @@ class SharedVideoControllerPool {
 
   /// **Check if controller exists (even if not initialized)**
   bool hasController(String videoId) {
-    return _controllerPool.containsKey(videoId);
+    return _validatedController(videoId, requireInitialized: false) != null;
   }
 
   /// **Get statistics**
@@ -404,9 +474,11 @@ class SharedVideoControllerPool {
 
   /// **Check if controller is paused (not disposed)**
   bool isControllerPaused(String videoId) {
-    return _controllerPool.containsKey(videoId) &&
-        _controllerPool[videoId]!.value.isInitialized &&
-        !_controllerPool[videoId]!.value.isPlaying;
+    final controller = _validatedController(videoId);
+    if (controller == null) return false;
+
+    final value = _safeControllerValue(videoId, controller);
+    return value != null && !value.isPlaying;
   }
 
   /// **Memory management: Dispose controllers when memory usage is high**

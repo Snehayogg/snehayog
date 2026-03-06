@@ -60,7 +60,7 @@ class LocalDubbingService {
       onProgress?.call('Loading AI Models...', 0.05);
       await LocalAiInferenceService().initializeModels(onProgress);
 
-      onProgress?.call('Extracting audio...', 0.1);
+      onProgress?.call('Extracting audio...', 0.20);
       final extractSession = await FFmpegKit.executeWithArguments([
         '-i',
         videoPath,
@@ -82,10 +82,10 @@ class LocalDubbingService {
         throw Exception('Audio extraction failed. End of logs:\n$errorLog');
       }
 
-      onProgress?.call('Transcribing audio (AI)...', 0.25);
+      onProgress?.call('Transcribing audio (AI)...', 0.35);
       final transcribedText = await LocalAiInferenceService().transcribeAudio(audioPath);
 
-      onProgress?.call('Translating content (AI)...', 0.4);
+      onProgress?.call('Translating content (AI)...', 0.50);
       final translatedText =
           await LocalAiInferenceService().translateText(transcribedText, targetLang);
 
@@ -93,7 +93,7 @@ class LocalDubbingService {
         throw Exception('AI returned empty translation output.');
       }
 
-      onProgress?.call('Synthesizing local voice...', 0.6);
+      onProgress?.call('Synthesizing local voice...', 0.70);
 
       try {
         final engines = await _flutterTts.getEngines;
@@ -255,7 +255,7 @@ class LocalDubbingService {
         );
       }
 
-      onProgress?.call('Merging video & audio...', 0.8);
+      onProgress?.call('Merging video & audio...', 0.85);
       final muxSession = await FFmpegKit.executeWithArguments([
         '-i',
         videoPath,
@@ -279,7 +279,7 @@ class LocalDubbingService {
         throw Exception('Muxing failed. Check FFmpeg logs for codec compatibility.');
       }
 
-      onProgress?.call('Uploading to global cache...', 0.9);
+      onProgress?.call('Uploading to global cache...', 0.95);
       final file = File(finalVideoPath);
       if (!file.existsSync()) {
         throw Exception('Final video file not found after muxing');

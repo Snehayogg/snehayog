@@ -7,10 +7,8 @@ import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/ads/presentation/screens/create_ad_screen_refactored.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_static_views.dart';
@@ -114,7 +112,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete Advertisement'),
+        title: const Text('Delete Advertisement'),
         content: Text(
             'Are you sure you want to delete "${ad.title}"? This action cannot be undone.'),
         actions: [
@@ -214,7 +212,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete Multiple Ads'),
+        title: const Text('Delete Multiple Ads'),
         content: Text(
             'Are you sure you want to delete ${_selectedAdIds.length} selected ads? This action cannot be undone.'),
         actions: [
@@ -274,7 +272,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
           height: MediaQuery.of(context).size.height * 0.8,
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,7 +287,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       ),
                     ),
                     Container(
-                      padding: EdgeInsets.symmetric(
+                      padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: ad.performanceColor,
@@ -297,7 +295,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       ),
                       child: Text(
                         ad.performanceStatus,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.white,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -306,11 +304,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.close),
+                      icon: const Icon(Icons.close),
                     ),
                   ],
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
 
                 // Media preview
                 if (ad.imageUrl != null) ...[
@@ -324,12 +322,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       errorBuilder: (context, error, stackTrace) => Container(
                         height: 200,
                         color: AppColors.backgroundTertiary,
-                        child: Icon(Icons.image,
+                        child: const Icon(Icons.image,
                             size: 48, color: AppColors.textSecondary),
                       ),
                     ),
                   ),
-                  SizedBox(height: 16),
+                 const SizedBox(height: 16),
                 ],
 
                 // Performance metrics tabs
@@ -367,7 +365,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildPerformanceTab(AdModel ad) {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           // Key metrics cards
@@ -393,18 +391,18 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   'CPC', ad.formattedCpc, Icons.monetization_on, AppColors.primaryDark),
             ],
           ),
-          SizedBox(height: 16),
+         const SizedBox(height: 16),
 
           // Budget pacing
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Budget Pacing',
+                 const Text('Budget Pacing',
                       style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
+                 const SizedBox(height: 8),
                   LinearProgressIndicator(
                     value: ad.budgetPacing.clamp(0.0, 1.0),
                     backgroundColor: AppColors.backgroundTertiary,
@@ -416,7 +414,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                               : AppColors.warning,
                     ),
                   ),
-                  SizedBox(height: 8),
+                 const SizedBox(height: 8),
                   Text(ad.budgetPacingStatus),
                 ],
               ),
@@ -429,7 +427,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildTargetingTab(AdModel ad) {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           _buildTargetingCard('Age', ad.ageTargeting, Icons.person),
@@ -448,7 +446,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildDetailsTab(AdModel ad) {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -474,12 +472,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: color, size: 24),
-            SizedBox(height: 8),
+           const SizedBox(height: 8),
             Text(
               value,
               style: TextStyle(
@@ -490,7 +488,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
             Text(
               title,
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
           ],
@@ -501,10 +499,10 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildTargetingCard(String title, String value, IconData icon) {
     return Card(
-      margin: EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(icon, color: AppColors.primary),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(value),
       ),
     );
@@ -512,7 +510,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildDetailItem(String label, String value) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -520,7 +518,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             width: 100,
             child: Text(
               '$label:',
-              style: TextStyle(fontWeight: FontWeight.w500),
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ),
           Expanded(
@@ -597,24 +595,24 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       appBar: AppBar(
         title: _isMultiSelectMode
             ? Text('${_selectedAdIds.length} selected')
-            : Text('Ad Management'),
+            : const Text('Ad Management'),
         centerTitle: true,
         elevation: 0,
         actions: [
           if (_isMultiSelectMode) ...[
             IconButton(
               onPressed: () => _bulkUpdateStatus('active'),
-              icon: Icon(Icons.play_arrow),
+              icon: const Icon(Icons.play_arrow),
               tooltip: 'Activate Selected',
             ),
             IconButton(
               onPressed: () => _bulkUpdateStatus('paused'),
-              icon: Icon(Icons.pause),
+              icon: const Icon(Icons.pause),
               tooltip: 'Pause Selected',
             ),
             IconButton(
               onPressed: _bulkDelete,
-              icon: Icon(Icons.delete),
+              icon: const Icon(Icons.delete),
               tooltip: 'Delete Selected',
             ),
             IconButton(
@@ -624,7 +622,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   _selectedAdIds.clear();
                 });
               },
-              icon: Icon(Icons.close),
+              icon: const Icon(Icons.close),
             ),
           ] else ...[
             IconButton(
@@ -639,7 +637,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                 // Refresh list after returning
                 await _loadAds();
               },
-              icon: Icon(Icons.add_circle_outline),
+              icon: const Icon(Icons.add_circle_outline),
               tooltip: 'Create Ad',
             ),
             IconButton(
@@ -648,12 +646,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   _isMultiSelectMode = true;
                 });
               },
-              icon: Icon(Icons.checklist),
+              icon: const Icon(Icons.checklist),
               tooltip: 'Multi-select',
             ),
             IconButton(
               onPressed: _loadAds,
-              icon: Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh),
             ),
           ],
         ],
@@ -718,7 +716,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search ads, keywords...',
-                  prefixIcon: Icon(Icons.search),
+                  prefixIcon: const Icon(Icons.search),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           onPressed: () {
@@ -727,10 +725,10 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                               _searchQuery = '';
                             });
                           },
-                          icon: Icon(Icons.clear),
+                          icon: const Icon(Icons.clear),
                         )
                       : null,
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
                   setState(() {
@@ -738,7 +736,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   });
                 },
               ),
-              SizedBox(height: 12),
+             const SizedBox(height: 12),
 
               // Filter and sort row
               Row(
@@ -747,9 +745,9 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       initialValue: _selectedFilter,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Status',
-                        border: OutlineInputBorder(),
+                        border:  OutlineInputBorder(),
                         contentPadding:
                             EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       ),
@@ -758,31 +756,31 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                             value: 'all',
                             child: Text('All (${_ads.length})',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13))),
+                                style: const TextStyle(fontSize: 13))),
                         DropdownMenuItem(
                             value: 'active',
                             child: Text(
                                 'Active (${_ads.where((ad) => ad.isActive).length})',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13))),
+                                style: const TextStyle(fontSize: 13))),
                         DropdownMenuItem(
                             value: 'draft',
                             child: Text(
                                 'Draft (${_ads.where((ad) => ad.isDraft).length})',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13))),
+                                style: const TextStyle(fontSize: 13))),
                         DropdownMenuItem(
                             value: 'paused',
                             child: Text(
                                 'Paused (${_ads.where((ad) => ad.isPaused).length})',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13))),
+                                style: const TextStyle(fontSize: 13))),
                         DropdownMenuItem(
                             value: 'completed',
                             child: Text(
                                 'Completed (${_ads.where((ad) => ad.isCompleted).length})',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13))),
+                                style: const TextStyle(fontSize: 13))),
                       ],
                       onChanged: (value) {
                         setState(() {
@@ -796,18 +794,18 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       initialValue: _selectedSort,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Sort by',
                         border: OutlineInputBorder(),
                         contentPadding:
                             EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       ),
-                      items: [
+                      items: const [
                         DropdownMenuItem(
                             value: 'created_desc',
                             child: Text('Newest first',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13))),
+                                style:  TextStyle(fontSize: 13))),
                         DropdownMenuItem(
                             value: 'created_asc',
                             child: Text('Oldest first',
@@ -844,20 +842,20 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
         // Stats overview
         Container(
-          padding: EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               Expanded(
                   child: _buildStatCard('Total Ads', _ads.length.toString(),
                       Icons.campaign, AppColors.primary)),
-              SizedBox(width: 8),
+             const SizedBox(width: 8),
               Expanded(
                   child: _buildStatCard(
                       'Active',
                       _ads.where((ad) => ad.isActive).length.toString(),
                       Icons.play_circle,
                       AppColors.success)),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                   child: _buildStatCard(
                       'Total Spend',
@@ -868,26 +866,26 @@ class _AdManagementScreenState extends State<AdManagementScreen>
           ),
         ),
 
-        SizedBox(height: 16),
+       const SizedBox(height: 16),
 
         // Ads list
         Expanded(
           child: _isLoading
-              ? Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator())
               : _errorMessage != null
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.error_outline,
+                         const Icon(Icons.error_outline,
                               size: 64, color: AppColors.error),
-                          SizedBox(height: 16),
+                         const SizedBox(height: 16),
                           Text(
                             _errorMessage!,
-                            style: TextStyle(color: AppColors.error),
+                            style: const TextStyle(color: AppColors.error),
                             textAlign: TextAlign.center,
                           ),
-                          SizedBox(height: 16),
+                         const SizedBox(height: 16),
                           AppButton(
                             onPressed: _loadAds,
                             label: 'Retry',
@@ -901,18 +899,18 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.campaign_outlined,
+                              const Icon(Icons.campaign_outlined,
                                   size: 64, color: AppColors.textTertiary),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
                                 _selectedFilter == 'all'
                                     ? 'No advertisements found'
                                     : 'No $_selectedFilter advertisements found',
-                                style: TextStyle(
+                                style: const TextStyle(
                                     color: AppColors.textSecondary, fontSize: 18),
                               ),
-                              SizedBox(height: 8),
-                              Text(
+                             const SizedBox(height: 8),
+                              const Text(
                                 'Create your first advertisement to get started',
                                 style: TextStyle(color: AppColors.textTertiary),
                                 textAlign: TextAlign.center,
@@ -921,7 +919,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                           ),
                         )
                       : ListView.builder(
-                          padding: EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(16),
                           itemCount: _filteredAds.length,
                           itemBuilder: (context, index) {
                             final ad = _filteredAds[index];
@@ -937,7 +935,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     final isSelected = _selectedAdIds.contains(ad.id);
 
     return Card(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: isSelected ? 4 : 1,
       color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : null,
       child: InkWell(
@@ -953,7 +951,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
               }
             : () => _showAdDetails(ad),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -981,7 +979,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       children: [
                         Text(
                           ad.title,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1000,7 +998,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Container(
-                        padding: EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _getStatusColor(ad.status),
@@ -1008,16 +1006,16 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                         ),
                         child: Text(
                           ad.status.toUpperCase(),
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Container(
-                        padding: EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: ad.performanceColor.withValues(alpha: 0.1),
@@ -1039,7 +1037,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                 ],
               ),
 
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
 
               // Performance metrics
               Row(
@@ -1059,7 +1057,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                 ],
               ),
 
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
 
               // Targeting summary
               Wrap(
@@ -1072,7 +1070,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                 ],
               ),
 
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
 
               // Actions row (only when not in multi-select mode)
               if (!_isMultiSelectMode)
@@ -1086,12 +1084,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                         variant: AppButtonVariant.outline,
                       ),
                     ),
-                    SizedBox(width: 8),
+                   const SizedBox(width: 8),
                     if (ad.isDraft || ad.isPaused)
                       Expanded(
                         child: AppButton(
                           onPressed: () => _updateAdStatus(ad, 'active'),
-                          icon: Icon(Icons.play_arrow, size: 16),
+                          icon: const Icon(Icons.play_arrow, size: 16),
                           label: 'Activate',
                           variant: AppButtonVariant.primary,
                         ),

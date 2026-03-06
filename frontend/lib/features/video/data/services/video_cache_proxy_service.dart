@@ -67,6 +67,14 @@ class VideoCacheProxyService {
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
+    // **GUARD: Reject all requests if proxy not yet fully initialized**
+    // Without this, _cachePath is null and File('null/hash.chunk').openWrite() crashes.
+    if (_cachePath == null) {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await request.response.close();
+      return;
+    }
+
     // **ROUTING**
     if (request.uri.path == '/proxy-hls') {
       await _handleHlsManifestRequest(request);
@@ -276,6 +284,8 @@ class VideoCacheProxyService {
     final client = http.Client();
     // **TRACKING: Register this stream so we can cancel it if needed**
     _activeProxyStreams[fileKey] = client;
+    final localResponse = request.response;
+    IOSink? fileSink;
 
     try {
       final remoteRequest = http.Request('GET', Uri.parse(url));
@@ -289,30 +299,43 @@ class VideoCacheProxyService {
 
       final remoteResponse = await client.send(remoteRequest);
 
-      // Copy remote headers back to local response
-      final localResponse = request.response;
-      localResponse.statusCode = remoteResponse.statusCode;
-      remoteResponse.headers.forEach((name, value) {
-        // HLS chunks might need specific content types
-        localResponse.headers.set(name, value);
-      });
-
-      // **SMART CACHING**: We only want to cache the full initial chunk (e.g., first 5MB)
-      // or the whole video if it's small.
-      final IOSink fileSink = cacheFile.openWrite();
-
-      await for (final List<int> chunk in remoteResponse.stream) {
-        localResponse.add(chunk);
-
-        // Save to disk while streaming
-        if (cacheFile.existsSync() ||
-            !_activeDownloads.containsKey(cacheFile.path)) {
-          fileSink.add(chunk);
-        }
+      // **FIX: If remote returns error, forward status and close immediately**
+      // Do NOT open a cache file or stream error body — causes corrupt cache + ExoPlayer Source error
+      if (remoteResponse.statusCode != 200 && remoteResponse.statusCode != 206) {
+        AppLogger.log('⚠️ Proxy: Remote returned ${remoteResponse.statusCode} for $url');
+        localResponse.statusCode = remoteResponse.statusCode;
+        await remoteResponse.stream.drain<void>();
+        await localResponse.close();
+        return;
       }
 
+      localResponse.statusCode = remoteResponse.statusCode;
+      remoteResponse.headers.forEach((name, value) {
+        try {
+          localResponse.headers.set(name, value);
+        } catch (_) {}
+      });
+
+      fileSink = cacheFile.openWrite();
+      await for (final List<int> chunk in remoteResponse.stream) {
+        localResponse.add(chunk);
+        fileSink.add(chunk);
+      }
       await fileSink.close();
+      fileSink = null;
       await localResponse.close();
+    } catch (e) {
+      AppLogger.log('❌ Proxy: Stream error for $url: $e');
+      // Close and discard the partial cache file to avoid serving corrupt data
+      try { await fileSink?.close(); } catch (_) {}
+      try {
+        if (await cacheFile.exists()) await cacheFile.delete();
+      } catch (_) {}
+      // Send a proper error status to ExoPlayer so it can handle it cleanly
+      try {
+        localResponse.statusCode = HttpStatus.badGateway;
+        await localResponse.close();
+      } catch (_) {}
     } finally {
       client.close();
       // **CLEANUP: Remove from tracker**

@@ -124,6 +124,20 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
     // Add app lifecycle observer
     WidgetsBinding.instance.addObserver(this);
 
+    // **ROUTE-POP FIX: Register controller re-validation callback for the main Yug feed.**
+    // When a profile-launched VideoFeedAdvanced is popped, it fully disposes its controllers.
+    // The Yug feed's local _controllerPool still holds the (now-disposed) references.
+    // AppNavigatorObserver.didPop calls VideoControllerManager().notifyRoutePopped() which
+    // triggers _validateAndRestoreControllers() here, re-initializing stale controllers
+    // before _tryAutoplayCurrent() to prevent "Bad state: No active player with ID N".
+    if (!_openedFromProfile) {
+      _videoControllerManager.registerOnRoutePopped(() {
+        if (mounted && !_openedFromProfile) {
+          _validateAndRestoreControllers();
+        }
+      });
+    }
+
     // Initialize services
     _initializeServices();
     _checkDeviceCapabilities();
@@ -1879,6 +1893,11 @@ class _VideoFeedAdvancedState extends State<VideoFeedAdvanced>
       );
     } catch (e) {
       AppLogger.log('⚠️ VideoFeedAdvanced: Error unregistering callbacks: $e');
+    }
+
+    // **ROUTE-POP FIX: Unregister route-pop callback (only registered for main Yug feed)**
+    if (!_openedFromProfile) {
+      _videoControllerManager.unregisterOnRoutePopped();
     }
 
     // **NEW: Clean up views service**

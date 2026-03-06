@@ -15,7 +15,7 @@ class LocalAiInferenceService {
   Future<void> initializeModels(void Function(String, double)? onProgress) async {
     try {
       if (!_isWhisperInit) {
-        onProgress?.call('Initializing AI Engine...', 0.2);
+        onProgress?.call('Loading AI Engine (one-time setup if first run)...', 0.08);
         // The Whisper package handles downloading the model itself via downloadHost and WhisperModel if not found
         _whisper = const Whisper(
           model: WhisperModel.tiny,
@@ -25,12 +25,12 @@ class LocalAiInferenceService {
         AppLogger.log('🧠 AI: Whisper engine initialized (model: tiny).');
       }
 
-      onProgress?.call('Initializing AI Translator...', 0.35);
+      onProgress?.call('Initializing AI Translator...', 0.12);
       final modelManager = OnDeviceTranslatorModelManager();
       
       final bool hasHindi = await modelManager.isModelDownloaded(TranslateLanguage.hindi.bcpCode);
       if (!hasHindi) {
-         onProgress?.call('Downloading Translation Dictionary (~30MB)...', 0.45);
+         onProgress?.call('Downloading Translation Model (~30MB, one-time)...', 0.15);
          await modelManager.downloadModel(TranslateLanguage.hindi.bcpCode);
       }
       

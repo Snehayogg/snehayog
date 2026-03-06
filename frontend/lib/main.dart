@@ -508,6 +508,13 @@ class AppNavigatorObserver extends NavigatorObserver {
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
     AppLogger.log('🚀 NAV: Popped ${route.settings.name} (Now on: ${previousRoute?.settings.name})');
+    // **ROUTE-POP FIX: Notify the Yug feed to re-validate its video controllers.**
+    // When a profile-launched VideoFeedAdvanced is popped, it fully disposes its
+    // controllers. The Yug feed still has stale references → "Bad state: No active
+    // player with ID N". This triggers _validateAndRestoreControllers() on the Yug feed.
+    try {
+      VideoControllerManager().notifyRoutePopped();
+    } catch (_) {}
   }
 
   /// Pause all videos using singleton controllers (no BuildContext needed)
