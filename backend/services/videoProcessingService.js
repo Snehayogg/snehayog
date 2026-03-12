@@ -1,5 +1,4 @@
 import { spawn } from 'child_process';
-import path from 'path';
 import fs from 'fs/promises';
 
 class VideoProcessingService {
@@ -15,7 +14,6 @@ class VideoProcessingService {
   async cleanupLocalFile(filePath) {
     try {
       await fs.unlink(filePath);
-      console.log('🧹 Local file cleaned up:', filePath);
     } catch (error) {
       console.warn('⚠️ Failed to cleanup local file:', error);
     }
@@ -46,9 +44,6 @@ class VideoProcessingService {
       });
 
       ffprobe.on('error', (error) => {
-        console.log('⚠️ FFprobe not available, using fallback video info');
-        console.log('⚠️ Error details:', error.message);
-        // Return fallback video info when ffprobe is not available
         resolve({
           format: { duration: 30, size: 0 },
           streams: [{

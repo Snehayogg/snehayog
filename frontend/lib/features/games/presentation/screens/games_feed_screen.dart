@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:vayu/features/games/data/game_model.dart';
 import 'package:vayu/features/games/data/services/game_service.dart';
 import 'package:vayu/features/games/presentation/widgets/game_feed_item.dart';
-import 'package:provider/provider.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 
-class GamesFeedScreen extends StatefulWidget {
+class GamesFeedScreen extends ConsumerStatefulWidget {
   const GamesFeedScreen({super.key});
 
   @override
-  State<GamesFeedScreen> createState() => _GamesFeedScreenState();
+  ConsumerState<GamesFeedScreen> createState() => _GamesFeedScreenState();
 }
 
-class _GamesFeedScreenState extends State<GamesFeedScreen>
+class _GamesFeedScreenState extends ConsumerState<GamesFeedScreen>
     with AutomaticKeepAliveClientMixin {
   final PageController _pageController = PageController();
   final List<GameModel> _games = [];
@@ -25,19 +25,16 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
   bool? _wasSignedIn;
 
   @override
-  bool get wantKeepAlive => true; // Keep state alive
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _loadGames();
 
-    // As soon as this screen mounts, we should probably pause videos if not already paused by main controller logic.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = ref.read(mainControllerProvider);
       if (mainController.currentIndex == 2) {
-        // Assuming Games is index 2
         mainController.forcePauseVideos();
       }
     });
@@ -51,7 +48,6 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
     });
 
     try {
-      // Fetch next page
       final newGames = await GameService().getGames(page: _currentPage);
 
       if (newGames.isEmpty && _games.isEmpty) {
@@ -68,13 +64,16 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
         });
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _refreshGames() async {
+    if (!mounted) return;
     setState(() {
       _games.clear();
       _currentPage = 1;
@@ -93,74 +92,69 @@ class _GamesFeedScreenState extends State<GamesFeedScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<GoogleSignInController>(
-      builder: (context, authController, _) {
-        final bool isSignedIn = authController.isSignedIn;
+    final authController = ref.watch(googleSignInProvider);
+    final bool isSignedIn = authController.isSignedIn;
 
-        // **SYNC: Trigger refresh when auth state changes**
-        if (_wasSignedIn != null && _wasSignedIn != isSignedIn) {
-          _wasSignedIn = isSignedIn;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _refreshGames();
-            }
-          });
+    if (_wasSignedIn != null && _wasSignedIn != isSignedIn) {
+      _wasSignedIn = isSignedIn;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _refreshGames();
         }
-        _wasSignedIn = isSignedIn;
+      });
+    }
+    _wasSignedIn = isSignedIn;
 
-        return Scaffold(
-          backgroundColor: AppColors.backgroundPrimary,
-          body: _games.isEmpty && _isLoading
-              ? Center(child: CircularProgressIndicator())
-              : _games.isEmpty && !_isLoading
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.auto_awesome,
-                              size: 64,
-                              color: AppColors.primary.withValues(alpha: 0.5)),
-                          SizedBox(height: 16),
-                          Text(
-                            'Arcade Fun Coming Soon',
-                            style: AppTypography.headlineMedium.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 48),
-                            child: Text(
-                              'We are curating the best interactive experiences for you. Stay tuned!',
-                              textAlign: TextAlign.center,
-                              style: AppTypography.bodyMedium.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
+    return Scaffold(
+      backgroundColor: AppColors.backgroundPrimary,
+      body: _games.isEmpty && _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _games.isEmpty && !_isLoading
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.auto_awesome,
+                          size: 64,
+                          color: AppColors.primary.withValues(alpha: 0.5)),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Arcade Fun Coming Soon',
+                        style: AppTypography.headlineMedium.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    )
-                  : PageView.builder(
-                      controller: _pageController,
-                      scrollDirection: Axis.vertical,
-                      itemCount: _games.length,
-                      onPageChanged: (index) {
-                        // Load more when we're 3 items from the end
-                        if (index >= _games.length - 3) {
-                          _loadGames();
-                        }
-                      },
-                      itemBuilder: (context, index) {
-                        return GameFeedItem(
-                          game: _games[index],
-                          isVisible: true,
-                        );
-                      },
-                    ),
-        );
-      },
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Text(
+                          'We are curating the best interactive experiences for you. Stay tuned!',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : PageView.builder(
+                  controller: _pageController,
+                  scrollDirection: Axis.vertical,
+                  itemCount: _games.length,
+                  onPageChanged: (index) {
+                    if (index >= _games.length - 3) {
+                      _loadGames();
+                    }
+                  },
+                  itemBuilder: (context, index) {
+                    return GameFeedItem(
+                      game: _games[index],
+                      isVisible: true,
+                    );
+                  },
+                ),
     );
   }
 }

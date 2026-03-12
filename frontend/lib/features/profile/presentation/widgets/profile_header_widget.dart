@@ -1,16 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/providers/user_data_providers.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 
-class ProfileHeaderWidget extends StatelessWidget {
+class ProfileHeaderWidget extends ConsumerWidget {
   final bool isViewingOwnProfile;
+  final ProfileStateManager stateManager;
   final bool hasReferralBillingUnlock;
   final VoidCallback? onProfilePhotoChange;
   final VoidCallback? onAddUpiId;
@@ -22,6 +23,7 @@ class ProfileHeaderWidget extends StatelessWidget {
   const ProfileHeaderWidget({
     super.key,
     required this.isViewingOwnProfile,
+    required this.stateManager,
     this.hasReferralBillingUnlock = false,
     this.onProfilePhotoChange,
     this.onAddUpiId,
@@ -32,77 +34,77 @@ class ProfileHeaderWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<ProfileStateManager>(
-      builder: (context, stateManager, child) {
-        AppLogger.log('🎨 ProfileHeaderWidget: Rebuilding (Videos: ${stateManager.totalVideoCount})');
-        return Container(
-          padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context, WidgetRef ref) {
+    AppLogger.log(
+        '🎨 ProfileHeaderWidget: Rebuilding (Videos: ${stateManager.totalVideoCount})');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _buildAvatar(stateManager),
-                  SizedBox(width: 20),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: _buildStatItem(
-                            context,
-                            label: AppText.get('profile_stat_subscribers'),
-                            value: _getFollowersCountString(context, stateManager),
-                          ),
-                        ),
-                        Container(
-                          height: 24,
-                          width: 1,
-                          color: AppColors.borderPrimary,
-                        ),
-                        Expanded(
-                          child: _buildStatItem(
-                            context,
-                            label: AppText.get('profile_stat_content'),
-                            value: stateManager.totalVideoCount.toString(),
-                          ),
-                        ),
-                        Container(
-                          height: 24,
-                          width: 1,
-                          color: AppColors.borderPrimary,
-                        ),
-                        Expanded(
-                          child: _buildStatItem(
-                            context,
-                            label: isViewingOwnProfile ? AppText.get('profile_stat_earnings') : AppText.get('profile_stat_rank'),
-                            isHighlighted: true,
-                            value: _getEarningsOrRankValue(stateManager),
-                            onTap: isViewingOwnProfile ? onEarningsTap : null,
-                          ),
-                        ),
-                      ],
+              _buildAvatar(stateManager),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        label: AppText.get('profile_stat_subscribers'),
+                        value:
+                            _getFollowersCountString(context, stateManager, ref),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12),
-              Text(
-                stateManager.userData?['bio'] ?? '',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.textSecondary,
+                    Container(
+                      height: 24,
+                      width: 1,
+                      color: AppColors.borderPrimary,
+                    ),
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        label: AppText.get('profile_stat_content'),
+                        value: stateManager.totalVideoCount.toString(),
+                      ),
+                    ),
+                    Container(
+                      height: 24,
+                      width: 1,
+                      color: AppColors.borderPrimary,
+                    ),
+                    Expanded(
+                      child: _buildStatItem(
+                        context,
+                        label: isViewingOwnProfile
+                            ? AppText.get('profile_stat_earnings')
+                            : AppText.get('profile_stat_rank'),
+                        isHighlighted: true,
+                        value: _getEarningsOrRankValue(stateManager),
+                        onTap: isViewingOwnProfile ? onEarningsTap : null,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(height: 16),
-              _buildActionButtons(stateManager),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 12),
+          Text(
+            stateManager.userData?['bio'] ?? '',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildActionButtons(stateManager),
+        ],
+      ),
     );
   }
 
@@ -134,7 +136,10 @@ class ProfileHeaderWidget extends StatelessWidget {
                 }
                 return Container(
                   color: AppColors.backgroundSecondary,
-                  child: const HugeIcon(icon: HugeIcons.strokeRoundedUser, color: AppColors.textTertiary, size: 40),
+                  child: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedUser,
+                      color: AppColors.textTertiary,
+                      size: 40),
                 );
               }(),
             ),
@@ -146,7 +151,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                   color: Colors.black.withValues(alpha: 0.4),
                   shape: BoxShape.circle,
                 ),
-                child: const HugeIcon(icon: HugeIcons.strokeRoundedCamera01,
+                child: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedCamera01,
                   color: Colors.white,
                   size: 24,
                 ),
@@ -177,7 +183,7 @@ class ProfileHeaderWidget extends StatelessWidget {
               fontWeight: isLoadingText ? FontWeight.w600 : FontWeight.w700,
             ),
           ),
-          SizedBox(height: 2),
+          const SizedBox(height: 2),
           Text(
             label,
             maxLines: 1,
@@ -204,7 +210,8 @@ class ProfileHeaderWidget extends StatelessWidget {
     }
   }
 
-  String _getFollowersCountString(BuildContext context, ProfileStateManager stateManager) {
+  String _getFollowersCountString(
+      BuildContext context, ProfileStateManager stateManager, WidgetRef ref) {
     if (stateManager.userData != null) {
       final followersCount = stateManager.userData!['followersCount'] ??
           stateManager.userData!['followers'];
@@ -212,22 +219,23 @@ class ProfileHeaderWidget extends StatelessWidget {
       if (followersCount != null) {
         if (followersCount is int) return followersCount.toString();
         if (followersCount is List) return followersCount.length.toString();
-        
+
         final count = int.tryParse(followersCount.toString());
         if (count != null && count > 0) return count.toString();
       }
     }
 
     try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userProviderRef = ref.read(userProvider);
       final userIdCandidates = [
         stateManager.userData?['googleId'],
         stateManager.userData?['_id'] ?? stateManager.userData?['id'],
       ].whereType<String>().toSet();
 
       for (final id in userIdCandidates) {
-        final userModel = userProvider.getUserData(id);
-        if (userModel?.followersCount != null && userModel!.followersCount > 0) {
+        final userModel = userProviderRef.getUserData(id);
+        if (userModel?.followersCount != null &&
+            userModel!.followersCount > 0) {
           return userModel.followersCount.toString();
         }
       }
@@ -237,11 +245,12 @@ class ProfileHeaderWidget extends StatelessWidget {
   }
 
   Widget _buildActionButtons(ProfileStateManager stateManager) {
-    if (!isViewingOwnProfile) return SizedBox.shrink();
+    if (!isViewingOwnProfile) return const SizedBox.shrink();
 
     return Row(
       children: [
-        if (stateManager.isEditing || (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock))
+        if (stateManager.isEditing ||
+            (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock))
           Expanded(
             child: stateManager.isEditing
                 ? Row(
@@ -259,7 +268,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                           child: Text(AppText.get('btn_cancel')),
                         ),
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
                           onPressed: onSaveProfile,
@@ -278,10 +287,11 @@ class ProfileHeaderWidget extends StatelessWidget {
                   )
                 : ElevatedButton.icon(
                     onPressed: onAddUpiId,
-                    icon: const HugeIcon(icon: HugeIcons.strokeRoundedWallet01, size: 18),
+                    icon: const HugeIcon(
+                        icon: HugeIcons.strokeRoundedWallet01, size: 18),
                     label: Text(
                       AppText.get('btn_add_upi_id'),
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -294,7 +304,8 @@ class ProfileHeaderWidget extends StatelessWidget {
                   ),
           ),
         if (!stateManager.isEditing) ...[
-          if (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock) SizedBox(width: 12),
+          if (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock)
+            const SizedBox(width: 12),
           Expanded(
             child: OutlinedButton(
               onPressed: onReferFriends,
@@ -311,7 +322,7 @@ class ProfileHeaderWidget extends StatelessWidget {
                 softWrap: false,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -323,5 +334,3 @@ class ProfileHeaderWidget extends StatelessWidget {
     );
   }
 }
-
-

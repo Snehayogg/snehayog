@@ -75,8 +75,7 @@ const videoSchema = new mongoose.Schema({
     lowercase: true
   }],
   aspectRatio: {
-    type: Number,
-    default: 9/16
+    type: Number
   },
   duration: {
     type: Number,

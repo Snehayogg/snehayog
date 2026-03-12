@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/features/video/video_model.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
@@ -96,9 +93,10 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                      const Icon(Icons.error_outline,
+                          size: 48, color: AppColors.error),
                       const SizedBox(height: 16),
-                      Text(
+                      const Text(
                         'Failed to load saved videos',
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
@@ -155,14 +153,16 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                       backgroundColor: AppColors.surfacePrimary,
                       child: GridView.builder(
                         padding: const EdgeInsets.all(1),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 3,
                           crossAxisSpacing: 1,
                           mainAxisSpacing: 1,
                           childAspectRatio: 0.5,
                         ),
                         itemCount: _savedVideos.length,
-                        itemBuilder: (context, index) => _buildVideoItem(_savedVideos[index]),
+                        itemBuilder: (context, index) =>
+                            _buildVideoItem(_savedVideos[index]),
                       ),
                     ),
     );
@@ -208,11 +208,13 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
                     video.thumbnailUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Icon(Icons.video_library, color: AppColors.textSecondary),
+                      child: Icon(Icons.video_library,
+                          color: AppColors.textSecondary),
                     ),
                   )
                 : const Center(
-                    child: Icon(Icons.video_library, color: AppColors.textSecondary),
+                    child: Icon(Icons.video_library,
+                        color: AppColors.textSecondary),
                   ),
           ),
           // Views Overlay
@@ -224,14 +226,16 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.visibility, color: Colors.white, size: 12),
+                      const Icon(Icons.visibility,
+                          color: Colors.white, size: 12),
                       const SizedBox(width: 4),
                       Text(
                         _formatViews(video.views),

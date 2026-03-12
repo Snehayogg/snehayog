@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/design/spacing.dart';
 import 'package:vayu/core/design/radius.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 
 import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
@@ -25,14 +25,14 @@ class _VideoStats {
   const _VideoStats(this.earnings, this.adViews);
 }
 
-class CreatorRevenueScreen extends StatefulWidget {
+class CreatorRevenueScreen extends ConsumerStatefulWidget {
   const CreatorRevenueScreen({super.key});
 
   @override
-  State<CreatorRevenueScreen> createState() => _CreatorRevenueScreenState();
+  ConsumerState<CreatorRevenueScreen> createState() => _CreatorRevenueScreenState();
 }
 
-class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
+class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
   final VideoService _videoService = VideoService();
@@ -79,18 +79,19 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         // This ensures video load failure doesn't block revenue display
         await Future.wait([
           _fetchRevenueData(userId, true).catchError((e) {
-             AppLogger.log('⚠️ CreatorRevenueScreen: Revenue load failed: $e');
+            AppLogger.log('⚠️ CreatorRevenueScreen: Revenue load failed: $e');
           }),
           _fetchVideosAndCalculateStats(userId, userMap, true).catchError((e) {
-             AppLogger.log('⚠️ CreatorRevenueScreen: Video load failed: $e');
+            AppLogger.log('⚠️ CreatorRevenueScreen: Video load failed: $e');
           }),
         ]);
 
         if (mounted) {
           // **FALLBACK LOGIC: If revenue is 0, try to get from video uploader stats**
           // This matches ProfileStatsWidget logic to ensure consistency
-          final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-          
+          final thisMonth =
+              (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+
           if (thisMonth == 0 && _userVideos.isNotEmpty) {
             double fallbackEarnings = 0.0;
             bool foundFallback = false;
@@ -98,9 +99,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             // 1. Try uploader.earnings from first video (Backend Profile Summary)
             final uploaderEarnings = _userVideos.first.uploader.earnings;
             if (uploaderEarnings != null && uploaderEarnings > 0) {
-               fallbackEarnings = uploaderEarnings;
-               foundFallback = true;
-               AppLogger.log('💰 CreatorRevenueScreen: Using uploader.earnings fallback: $fallbackEarnings');
+              fallbackEarnings = uploaderEarnings;
+              foundFallback = true;
+              AppLogger.log(
+                  '💰 CreatorRevenueScreen: Using uploader.earnings fallback: $fallbackEarnings');
             }
 
             // 2. If still 0, Aggregate from individual video earnings (Client-side Sum)
@@ -112,7 +114,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
               if (aggregated > 0) {
                 fallbackEarnings = aggregated;
                 foundFallback = true;
-                AppLogger.log('💰 CreatorRevenueScreen: Aggregated earnings from video list: $fallbackEarnings');
+                AppLogger.log(
+                    '💰 CreatorRevenueScreen: Aggregated earnings from video list: $fallbackEarnings');
               }
             }
 
@@ -141,11 +144,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         }
         return;
       }
-      
-      setState(() {
-         _isLoading = false;
-      });
 
+      setState(() {
+        _isLoading = false;
+      });
     } catch (e) {
       AppLogger.log('❌ CreatorRevenueScreen: Error loading data: $e');
       _handleLoadError(e);
@@ -153,135 +155,144 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
   }
 
   Future<void> _fetchRevenueData(String userId, bool forceRefresh) async {
-      try {
-        AppLogger.log('🔄 CreatorRevenueScreen: Fetching fresh revenue from backend...');
-        
-        // **NO CACHE: Always request fresh data from server**
-        final freshRevenueData = await _adService.getCreatorRevenueSummary(forceRefresh: true);
-        
-        if (mounted) {
-          setState(() {
-            _revenueData = freshRevenueData;
-          });
-        }
-        final thisMonth = (freshRevenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
-        AppLogger.log('💰 Revenue Display: Month: ${DateTime.now().month} | Source: Backend API | Amount: $thisMonth');
-        AppLogger.log('✅ CreatorRevenueScreen: Revenue updated from backend');
-      } catch (e) {
-         AppLogger.log('⚠️ CreatorRevenueScreen: Backend revenue fetch failed: $e');
-         // Set default UI to avoid null errors, but don't overwrite if we have partial data
-         if (_revenueData == null && mounted) {
-           setState(() {
-             _revenueData = {
-               'thisMonth': 0.0,
-               'lastMonth': 0.0,
-             };
-           });
-         }
-         rethrow;
+    try {
+      AppLogger.log(
+          '🔄 CreatorRevenueScreen: Fetching fresh revenue from backend...');
+
+      // **NO CACHE: Always request fresh data from server**
+      final freshRevenueData =
+          await _adService.getCreatorRevenueSummary(forceRefresh: true);
+
+      if (mounted) {
+        setState(() {
+          _revenueData = freshRevenueData;
+        });
       }
+      final thisMonth =
+          (freshRevenueData['thisMonth'] as num?)?.toDouble() ?? 0.0;
+      AppLogger.log(
+          '💰 Revenue Display: Month: ${DateTime.now().month} | Source: Backend API | Amount: $thisMonth');
+      AppLogger.log('✅ CreatorRevenueScreen: Revenue updated from backend');
+    } catch (e) {
+      AppLogger.log(
+          '⚠️ CreatorRevenueScreen: Backend revenue fetch failed: $e');
+      // Set default UI to avoid null errors, but don't overwrite if we have partial data
+      if (_revenueData == null && mounted) {
+        setState(() {
+          _revenueData = {
+            'thisMonth': 0.0,
+            'lastMonth': 0.0,
+          };
+        });
+      }
+      rethrow;
+    }
   }
 
   /// **OPTIMIZED: Parse per-video revenue from backend response**
   Future<void> _fetchVideosAndCalculateStats(
-    String userId, 
+    String userId,
     Map<String, dynamic> userMap,
     bool forceRefresh,
   ) async {
+    try {
+      AppLogger.log('🔍 CreatorRevenueScreen: Loading videos...');
+      List<VideoModel> videos = [];
+
       try {
-        AppLogger.log('🔍 CreatorRevenueScreen: Loading videos...');
-        List<VideoModel> videos = [];
-        
-        try {
-          // Try network load first
-          videos = await _videoService.getUserVideos(userId);
-        } catch (e) {
-          AppLogger.log('⚠️ CreatorRevenueScreen: Network video load failed: $e');
-        }
-
-        // **FALLBACK: Try Hive Cache if network failed or returned empty**
-        if (videos.isEmpty) {
-           try {
-             AppLogger.log('🔍 CreatorRevenueScreen: Trying Hive cache for videos...');
-             final cachedVideos = await ProfileLocalDataSource().getCachedUserVideos(userId);
-             if (cachedVideos != null && cachedVideos.isNotEmpty) {
-               videos = cachedVideos;
-               AppLogger.log('✅ CreatorRevenueScreen: Loaded ${videos.length} videos from Hive cache');
-             }
-           } catch (e) {
-             AppLogger.log('⚠️ CreatorRevenueScreen: Hive cache load failed: $e');
-           }
-        }
-        
-        if (mounted) {
-          setState(() {
-            _userVideos = videos;
-          });
-        }
-
-        // **NEW: Parse per-video revenue from Backend API response**
-        if (_revenueData != null && _revenueData!.containsKey('videos')) {
-           final List<dynamic> videoStatsList = _revenueData!['videos'] ?? [];
-           
-           _videoRevenueMap.clear();
-           _videoStatsMap.clear();
-
-           for (var stat in videoStatsList) {
-             final String videoId = stat['videoId']?.toString() ?? '';
-             final double creatorRevenue = (stat['creatorRevenue'] as num?)?.toDouble() ?? 0.0;
-             final int views = (stat['views'] as num?)?.toInt() ?? 0;
-             // We can also get ad impressions from backend if needed
-             final int adImpressions = (stat['totalAdImpressions'] as num?)?.toInt() ?? 0;
-             
-             if (videoId.isNotEmpty) {
-               _videoRevenueMap[videoId] = creatorRevenue;
-               _videoStatsMap[videoId] = _VideoStats(creatorRevenue, adImpressions > 0 ? adImpressions : views);
-             }
-           }
-           
-           AppLogger.log('✅ CreatorRevenueScreen: Parsed revenue for ${_videoRevenueMap.length} videos from backend');
-        } else {
-           AppLogger.log('⚠️ CreatorRevenueScreen: No video revenue details in backend response');
-        }
-
-        // **OPTIMIZED: Calculate monthly views in background (non-blocking)**
-        Future.microtask(() => _calculateMonthlyViews(userMap));
-
+        // Try network load first
+        videos = await _videoService.getUserVideos(userId);
       } catch (e) {
-         AppLogger.log('❌ CreatorRevenueScreen: Failed to fetch videos: $e');
-         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-               content: Text('Unable to load video details.'),
-               backgroundColor: AppColors.warning,
-               duration:  Duration(seconds: 4),
-             ),
-           );
-         }
+        AppLogger.log('⚠️ CreatorRevenueScreen: Network video load failed: $e');
       }
-  }
 
-  void _handleLoadError(dynamic e) {
-      String errorMessage = AppText.get('error_load_revenue',
-              fallback: 'Error loading revenue data: {error}')
-          .replaceAll('{error}', e.toString());
-      if (e.toString().contains('401') ||
-          e.toString().contains('Unauthorized')) {
-        errorMessage = AppText.get('error_revenue_sign_in');
-      } else if (e.toString().contains('Authentication token not found') ||
-          e.toString().contains('token not found')) {
-        errorMessage = AppText.get('error_revenue_token');
+      // **FALLBACK: Try Hive Cache if network failed or returned empty**
+      if (videos.isEmpty) {
+        try {
+          AppLogger.log(
+              '🔍 CreatorRevenueScreen: Trying Hive cache for videos...');
+          final cachedVideos =
+              await ProfileLocalDataSource().getCachedUserVideos(userId);
+          if (cachedVideos != null && cachedVideos.isNotEmpty) {
+            videos = cachedVideos;
+            AppLogger.log(
+                '✅ CreatorRevenueScreen: Loaded ${videos.length} videos from Hive cache');
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ CreatorRevenueScreen: Hive cache load failed: $e');
+        }
       }
 
       if (mounted) {
         setState(() {
-          _errorMessage = errorMessage;
-          _isLoading = false;
+          _userVideos = videos;
         });
       }
+
+      // **NEW: Parse per-video revenue from Backend API response**
+      if (_revenueData != null && _revenueData!.containsKey('videos')) {
+        final List<dynamic> videoStatsList = _revenueData!['videos'] ?? [];
+
+        _videoRevenueMap.clear();
+        _videoStatsMap.clear();
+
+        for (var stat in videoStatsList) {
+          final String videoId = stat['videoId']?.toString() ?? '';
+          final double creatorRevenue =
+              (stat['creatorRevenue'] as num?)?.toDouble() ?? 0.0;
+          final int views = (stat['views'] as num?)?.toInt() ?? 0;
+          // We can also get ad impressions from backend if needed
+          final int adImpressions =
+              (stat['totalAdImpressions'] as num?)?.toInt() ?? 0;
+
+          if (videoId.isNotEmpty) {
+            _videoRevenueMap[videoId] = creatorRevenue;
+            _videoStatsMap[videoId] = _VideoStats(
+                creatorRevenue, adImpressions > 0 ? adImpressions : views);
+          }
+        }
+
+        AppLogger.log(
+            '✅ CreatorRevenueScreen: Parsed revenue for ${_videoRevenueMap.length} videos from backend');
+      } else {
+        AppLogger.log(
+            '⚠️ CreatorRevenueScreen: No video revenue details in backend response');
+      }
+
+      // **OPTIMIZED: Calculate monthly views in background (non-blocking)**
+      Future.microtask(() => _calculateMonthlyViews(userMap));
+    } catch (e) {
+      AppLogger.log('❌ CreatorRevenueScreen: Failed to fetch videos: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to load video details.'),
+            backgroundColor: AppColors.warning,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
+  void _handleLoadError(dynamic e) {
+    String errorMessage = AppText.get('error_load_revenue',
+            fallback: 'Error loading revenue data: {error}')
+        .replaceAll('{error}', e.toString());
+    if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
+      errorMessage = AppText.get('error_revenue_sign_in');
+    } else if (e.toString().contains('Authentication token not found') ||
+        e.toString().contains('token not found')) {
+      errorMessage = AppText.get('error_revenue_token');
+    }
 
+    if (mounted) {
+      setState(() {
+        _errorMessage = errorMessage;
+        _isLoading = false;
+      });
+    }
+  }
 
   Future<void> _calculateMonthlyViews(Map<String, dynamic> userData) async {
     final totalViews =
@@ -352,8 +363,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -364,7 +373,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         actions: [
           IconButton(
             onPressed: () => _loadRevenueData(forceRefresh: true),
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
@@ -388,7 +397,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-         Icon(
+          const Icon(
             Icons.lock_outline,
             size: 64,
             color: AppColors.textSecondary,
@@ -396,20 +405,18 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           AppSpacing.vSpace16,
           Text(
             AppText.get('revenue_sign_in_to_view'),
-            style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
+            style:
+                const TextStyle(fontSize: 18, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           AppSpacing.vSpace24,
           AppButton(
             isFullWidth: true,
             onPressed: () async {
-              final authController = Provider.of<GoogleSignInController>(
-                context,
-                listen: false,
-              );
+              final authController = ref.read(googleSignInProvider);
               final user = await authController.signIn();
               if (user != null) {
-                await LogoutService.refreshAllState(context);
+                await LogoutService.refreshAllState(ref);
                 if (mounted) {
                   setState(() {});
                 }
@@ -425,7 +432,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildRevenueContent() {
     if (_isLoading) {
-      return Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null) {
@@ -433,11 +440,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: AppColors.error),
+            const Icon(Icons.error_outline, size: 64, color: AppColors.error),
             AppSpacing.vSpace16,
             Text(
               _errorMessage!,
-              style: TextStyle(color: AppColors.error),
+              style: const TextStyle(color: AppColors.error),
               textAlign: TextAlign.center,
             ),
             AppSpacing.vSpace16,
@@ -458,43 +465,41 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async => await _loadRevenueData(forceRefresh: true),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(AppSpacing.spacing4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // **NEW: Revenue Overview Card**
-          _buildRevenueOverviewCard(),
+        onRefresh: () async => await _loadRevenueData(forceRefresh: true),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(AppSpacing.spacing4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // **NEW: Revenue Overview Card**
+              _buildRevenueOverviewCard(),
 
-          AppSpacing.vSpace16,
+              AppSpacing.vSpace16,
 
-          // **NEW: Monthly Views Card**
-          _buildMonthlyViewsCard(),
+              // **NEW: Monthly Views Card**
+              _buildMonthlyViewsCard(),
 
-          AppSpacing.vSpace24,
+              AppSpacing.vSpace24,
 
-          // **NEW: Revenue Analytics Card**
-          _buildRevenueAnalyticsCard(),
+              // **NEW: Revenue Analytics Card**
+              _buildRevenueAnalyticsCard(),
 
-          AppSpacing.vSpace24,
+              AppSpacing.vSpace24,
 
-          // **NEW: Revenue Breakdown**
-          _buildRevenueBreakdownCard(),
-          AppSpacing.vSpace24,
-        ],
-      ),
-    ));
+              // **NEW: Revenue Breakdown**
+              _buildRevenueBreakdownCard(),
+              AppSpacing.vSpace24,
+            ],
+          ),
+        ));
   }
 
   Widget _buildRevenueOverviewCard() {
     final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
     final creatorRevenue = thisMonth;
-    final grossRevenue = thisMonth > 0
-        ? thisMonth / AppConfig.creatorRevenueShare
-        : 0.0;
-
+    final grossRevenue =
+        thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
 
     return Card(
       elevation: 0,
@@ -509,7 +514,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
           children: [
             Text(
               AppText.get('revenue_creator_earnings'),
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 16,
                 color: AppColors.textSecondary,
               ),
@@ -518,7 +523,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             Text(
               creatorRevenue.toStringAsFixed(2),
               style: AppTypography.displaySmall.copyWith(
-                color: AppColors.success, // Use success color for positive rewards
+                color:
+                    AppColors.success, // Use success color for positive rewards
               ),
             ),
             AppSpacing.vSpace24,
@@ -597,7 +603,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     fontWeight: AppTypography.weightBold,
                   ),
                 ),
-               Icon(
+                const Icon(
                   Icons.visibility,
                   color: AppColors.textSecondary,
                 ),
@@ -605,11 +611,11 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
             ),
             AppSpacing.vSpace16,
             if (_isMonthlyViewsLoading)
-              Center(child: CircularProgressIndicator())
+              const Center(child: CircularProgressIndicator())
             else ...[
               Text(
                 AppText.get('revenue_current_cycle_views'),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
                 ),
@@ -693,13 +699,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
     return '${date.day} $monthName ${date.year}';
   }
 
-
-
   Widget _buildRevenueAnalyticsCard() {
     // **FIXED: Use backend API value directly - no fallback**
-    final thisMonth =
-        (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+
     final thisMonthGross =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
 
@@ -716,7 +719,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        side: BorderSide(color: AppColors.borderPrimary, width: 1),
+        side: const BorderSide(color: AppColors.borderPrimary, width: 1),
       ),
       color: AppColors.backgroundPrimary,
       child: Padding(
@@ -732,10 +735,10 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
                     fontWeight: AppTypography.weightBold,
                   ),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Container(
                   padding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -778,9 +781,8 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
   Widget _buildRevenueBreakdownCard() {
     // **FIXED: Use backend API value directly - no fallback**
-    final thisMonth =
-        (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
-    
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+
     final creatorRevenue = thisMonth;
     final grossRevenue =
         thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
@@ -802,7 +804,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        side: BorderSide(color: AppColors.borderPrimary, width: 1),
+        side: const BorderSide(color: AppColors.borderPrimary, width: 1),
       ),
       color: AppColors.backgroundPrimary,
       child: Padding(
@@ -848,7 +850,7 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
 
             _buildBreakdownRow(AppText.get('revenue_gross_revenue'),
                 grossRevenue.toStringAsFixed(2), AppColors.success),
-            Divider(),
+            const Divider(),
             _buildBreakdownRow(
                 AppText.get('revenue_creator_earnings',
                         fallback: 'Creator Earnings ({percent}%)')
@@ -871,12 +873,17 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
         children: [
           Text(
             label,
-            style: isTotal ? AppTypography.titleMedium : AppTypography.bodyMedium,
+            style:
+                isTotal ? AppTypography.titleMedium : AppTypography.bodyMedium,
           ),
           Text(
             value,
-            style: (isTotal ? AppTypography.titleMedium : AppTypography.bodyMedium).copyWith(
-              fontWeight: isTotal ? AppTypography.weightBold : AppTypography.weightRegular,
+            style:
+                (isTotal ? AppTypography.titleMedium : AppTypography.bodyMedium)
+                    .copyWith(
+              fontWeight: isTotal
+                  ? AppTypography.weightBold
+                  : AppTypography.weightRegular,
               color: color,
             ),
           ),
@@ -884,7 +891,6 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       ),
     );
   }
-
 
   /// Show detailed video analytics
 
@@ -924,5 +930,4 @@ class _CreatorRevenueScreenState extends State<CreatorRevenueScreen> {
       return {};
     }
   }
-
 }

@@ -53,7 +53,9 @@ class ProfileMenuWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.backgroundPrimary,
           border: Border(
-            left: BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5), width: 1),
+            left: BorderSide(
+                color: AppColors.borderPrimary.withValues(alpha: 0.5),
+                width: 1),
           ),
         ),
         child: SafeArea(
@@ -64,13 +66,17 @@ class ProfileMenuWidget extends StatelessWidget {
                 padding: EdgeInsets.all(AppSpacing.spacing5),
                 decoration: BoxDecoration(
                   color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.borderPrimary, width: 1),
+                  border: const Border(
+                    bottom:
+                        BorderSide(color: AppColors.borderPrimary, width: 1),
                   ),
                 ),
                 child: Row(
                   children: [
-                    const HugeIcon(icon: HugeIcons.strokeRoundedMenu01, color: AppColors.primary, size: 24),
+                    const HugeIcon(
+                        icon: HugeIcons.strokeRoundedMenu01,
+                        color: AppColors.primary,
+                        size: 24),
                     SizedBox(width: AppSpacing.spacing3),
                     Text(
                       'Account Menu',
@@ -96,7 +102,8 @@ class ProfileMenuWidget extends StatelessWidget {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                          MaterialPageRoute(
+                              builder: (context) => const SettingsScreen()),
                         );
                       },
                     });
@@ -112,7 +119,8 @@ class ProfileMenuWidget extends StatelessWidget {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
+                              content: Text(
+                                  'Auto Scroll: ${!enabled ? 'ON' : 'OFF'}'),
                               duration: const Duration(seconds: 1),
                               backgroundColor: AppColors.surfacePrimary,
                             ),
@@ -154,11 +162,14 @@ class ProfileMenuWidget extends StatelessWidget {
                       });
                     }
 
-
                     // Creator Mode Toggle
                     menuItems.add({
-                      'title': gameManager.isCreatorMode ? 'Video Studio' : 'Arcade Studio',
-                      'icon': gameManager.isCreatorMode ? HugeIcons.strokeRoundedVideo01 : HugeIcons.strokeRoundedGameController01,
+                      'title': gameManager.isCreatorMode
+                          ? 'Video Studio'
+                          : 'Arcade Studio',
+                      'icon': gameManager.isCreatorMode
+                          ? HugeIcons.strokeRoundedVideo01
+                          : HugeIcons.strokeRoundedGameController01,
                       'color': AppColors.primary,
                       'onTap': () {
                         Navigator.pop(context);
@@ -269,7 +280,8 @@ class ProfileMenuWidget extends StatelessWidget {
                 padding: EdgeInsets.all(AppSpacing.spacing5),
                 child: Text(
                   'Vayu v1.1.0',
-                  style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
+                  style: AppTypography.labelSmall
+                      .copyWith(color: AppColors.textTertiary),
                   textAlign: TextAlign.center,
                 ),
               ),

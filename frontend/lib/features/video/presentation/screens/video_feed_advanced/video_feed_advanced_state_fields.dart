@@ -1,6 +1,6 @@
 part of '../video_feed_advanced.dart';
 
-mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
+mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   // Core state - **OPTIMIZED: Using ValueNotifiers for granular updates**
   List<VideoModel> _videos = [];
   final ValueNotifier<bool> _isLoadingVN = ValueNotifier<bool>(true);
@@ -220,8 +220,6 @@ mixin VideoFeedStateFieldsMixin on State<VideoFeedAdvanced> {
 
   // **NEW: Track when screen was first opened to delay sign-in prompts**
   DateTime? _lastPausedAt;
-  DateTime? _screenFirstOpenedAt;
-  Duration get _signInPromptDelay => const Duration(minutes: 5);
 
   // Background page preload logic
   bool _hasStartedBackgroundPreload = false;

@@ -11,7 +11,6 @@ import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 /// Global search UI for videos and creators.
 class VideoCreatorSearchDelegate extends SearchDelegate<void> {
@@ -47,7 +46,8 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: InputBorder.none,
-        hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+        hintStyle:
+            AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
       ),
     );
   }
@@ -57,7 +57,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     return <Widget>[
       if (query.isNotEmpty)
         IconButton(
-          icon: Icon(Icons.clear),
+          icon: const Icon(Icons.clear),
           onPressed: () {
             query = '';
             showSuggestions(context);
@@ -69,7 +69,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
   @override
   Widget buildLeading(BuildContext context) {
     return IconButton(
-      icon: Icon(Icons.arrow_back),
+      icon: const Icon(Icons.arrow_back),
       onPressed: () => close(context, null),
     );
   }
@@ -78,7 +78,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
   Widget buildResults(BuildContext context) {
     final String q = query.trim();
     if (q.isEmpty) {
-      return Center(
+      return const Center(
         child: Text('Type a name or video to search'),
       );
     }
@@ -97,15 +97,15 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       builder:
           (BuildContext context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Icon(Icons.error_outline, size: 48, color: Colors.grey),
-                SizedBox(height: 16),
+                const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
                 Text(
                   'Search failed. Please try again.',
                   textAlign: TextAlign.center,
@@ -127,8 +127,8 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Icon(Icons.search_off, size: 48, color: Colors.grey),
-                SizedBox(height: 16),
+                const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
                 Text(
                   'No results found',
                   style: TextStyle(
@@ -137,7 +137,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                     color: Colors.grey[700],
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Try a different search term',
                   style: TextStyle(color: Colors.grey[600]),
@@ -151,7 +151,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
           children: <Widget>[
             if (creators.isNotEmpty)
               Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Text(
                   'Creators',
                   style: Theme.of(context)
@@ -165,7 +165,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
             ),
             if (videos.isNotEmpty)
               Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Text(
                   'Videos',
                   style: Theme.of(context)
@@ -196,7 +196,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Icon(Icons.search, size: 64, color: Colors.grey[300]),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'Search for creators or videos',
               style: TextStyle(
@@ -205,7 +205,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'Type at least 2 characters to see suggestions',
               style: TextStyle(
@@ -259,7 +259,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       builder:
           (BuildContext context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
+          return const Center(
             child: Padding(
               padding: EdgeInsets.all(16.0),
               child: CircularProgressIndicator(),
@@ -268,7 +268,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
         }
 
         if (snapshot.hasError) {
-          return SizedBox.shrink();
+          return const SizedBox.shrink();
         }
 
         final data = snapshot.data ?? <String, dynamic>{};
@@ -280,12 +280,12 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
         if (creators.isEmpty && videos.isEmpty) {
           return Center(
             child: Padding(
-              padding: EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
                   Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Text(
                     'No suggestions found',
                     style: TextStyle(
@@ -294,7 +294,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'Press Enter to search anyway',
                     style: TextStyle(
@@ -312,11 +312,11 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
           children: <Widget>[
             if (creators.isNotEmpty)
               Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Row(
                   children: <Widget>[
                     Icon(Icons.person, size: 18, color: Colors.grey[600]),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
                       'Creators',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -332,12 +332,12 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
             ),
             if (videos.isNotEmpty)
               Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Row(
                   children: <Widget>[
                     Icon(Icons.play_circle_outline,
                         size: 18, color: Colors.grey[600]),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
                       'Videos',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -367,7 +367,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
             ? CachedNetworkImageProvider(creator.profilePic)
             : null,
         child: creator.profilePic.isEmpty
-            ? Icon(Icons.person, color: AppColors.textSecondary)
+            ? const Icon(Icons.person, color: AppColors.textSecondary)
             : null,
       ),
       title: Text(
@@ -380,13 +380,14 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
         overflow: TextOverflow.ellipsis,
         style: AppTypography.bodySmall,
       ),
-      trailing: Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textTertiary),
+      trailing: const Icon(Icons.arrow_forward_ios,
+          size: 14, color: AppColors.textTertiary),
       onTap: () {
         close(context, null);
-        
+
         final authService = Provider.of<AuthService>(context, listen: false);
         final myId = authService.currentUserId;
-        
+
         if (creator.id == myId) {
           // If navigating to self, pop to root (Profile Tab root)
           Navigator.of(context).popUntil((route) => route.isFirst);
@@ -394,7 +395,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
           // Replace if already viewing a creator to avoid deep stacks
           final isPushed = Navigator.of(context).canPop();
           if (isPushed) {
-             Navigator.of(context).pushReplacement(
+            Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'profile_creator'),
                 builder: (_) => ProfileScreen(userId: creator.id),
@@ -424,7 +425,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
             ? CachedNetworkImageProvider(creator.profilePic)
             : null,
         child: creator.profilePic.isEmpty
-            ? Icon(Icons.person, color: AppColors.textSecondary, size: 18)
+            ? const Icon(Icons.person, color: AppColors.textSecondary, size: 18)
             : null,
       ),
       title: Text(
@@ -437,13 +438,14 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
         overflow: TextOverflow.ellipsis,
         style: AppTypography.labelSmall,
       ),
-      trailing: Icon(Icons.north_west, size: 14, color: AppColors.textTertiary),
+      trailing:
+          const Icon(Icons.north_west, size: 14, color: AppColors.textTertiary),
       onTap: () {
         close(context, null);
-        
+
         final authService = Provider.of<AuthService>(context, listen: false);
         final myId = authService.currentUserId;
-        
+
         if (creator.id == myId) {
           // If navigating to self, pop to root (Profile Tab root)
           Navigator.of(context).popUntil((route) => route.isFirst);
@@ -451,7 +453,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
           // Replace if already viewing a creator to avoid deep stacks
           final isPushed = Navigator.of(context).canPop();
           if (isPushed) {
-             Navigator.of(context).pushReplacement(
+            Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 settings: const RouteSettings(name: 'profile_creator'),
                 builder: (_) => ProfileScreen(userId: creator.id),
@@ -477,7 +479,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     final videoIndex = allVideos.indexWhere((v) => v.id == video.id);
 
     return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: video.thumbnailUrl.isNotEmpty
@@ -490,7 +492,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                   width: 72,
                   height: 72,
                   color: Colors.grey[200],
-                  child: Center(
+                  child: const Center(
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ),
@@ -498,15 +500,15 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
                   width: 72,
                   height: 72,
                   color: AppColors.backgroundSecondary,
-child:
-                      Icon(Icons.play_circle_outline, color: AppColors.textTertiary),
+                  child: const Icon(Icons.play_circle_outline,
+                      color: AppColors.textTertiary),
                 ),
               )
             : Container(
                 width: 72,
                 height: 72,
                 color: AppColors.backgroundSecondary,
-                child: Icon(Icons.play_circle_outline,
+                child: const Icon(Icons.play_circle_outline,
                     color: AppColors.textTertiary, size: 32),
               ),
       ),
@@ -517,14 +519,16 @@ child:
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Padding(
-        padding: EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.only(top: 4),
         child: Row(
           children: [
-            Icon(Icons.visibility, size: 14, color: AppColors.textTertiary),
-            SizedBox(width: 4),
+            const Icon(Icons.visibility,
+                size: 14, color: AppColors.textTertiary),
+            const SizedBox(width: 4),
             Text(
               _formatViewCount(video.views),
-              style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+              style: AppTypography.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -554,7 +558,7 @@ child:
     final videoIndex = allVideos.indexWhere((v) => v.id == video.id);
 
     return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: video.thumbnailUrl.isNotEmpty
@@ -567,7 +571,7 @@ child:
                   width: 56,
                   height: 56,
                   color: Colors.grey[200],
-                  child: Center(
+                  child: const Center(
                     child: SizedBox(
                       width: 16,
                       height: 16,
@@ -579,7 +583,7 @@ child:
                   width: 56,
                   height: 56,
                   color: AppColors.backgroundSecondary,
-                  child: Icon(Icons.play_circle_outline,
+                  child: const Icon(Icons.play_circle_outline,
                       color: AppColors.textTertiary, size: 24),
                 ),
               )
@@ -587,7 +591,7 @@ child:
                 width: 56,
                 height: 56,
                 color: AppColors.backgroundSecondary,
-                child: Icon(Icons.play_circle_outline,
+                child: const Icon(Icons.play_circle_outline,
                     color: AppColors.textTertiary, size: 24),
               ),
       ),

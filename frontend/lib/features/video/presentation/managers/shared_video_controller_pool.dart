@@ -13,8 +13,7 @@ class SharedVideoControllerPool {
 
   // **CONTROLLER STORAGE**
   final Map<String, VideoPlayerController> _controllerPool = {};
-  final Map<String, bool> _controllerStates =
-      {}; // Track if controller is active
+  final Map<String, bool> _controllerStates = {}; // Track if controller is active
   final Map<String, VoidCallback> _listeners = {};
 
   // **LRU TRACKING**
@@ -26,7 +25,7 @@ class SharedVideoControllerPool {
   // **DYNAMIC CONFIG: Hard limit to prevent NO_MEMORY**
   // Android usually supports ~16 hardware decoders, but other apps/services might use them.
   // We stay well below this limit.
-  int _maxPoolSize = 3; // **PARTITIONED: 3/10 of global budget**
+  int _maxPoolSize = 4; // **PARTITIONED: 3/10 of global budget**
 
   /// **Configure pool based on device capabilities**
   void configurePool({required bool isLowEndDevice}) {

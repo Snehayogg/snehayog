@@ -1,5 +1,5 @@
-import 'dotenv/config';
 import newrelic from 'newrelic';
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -84,13 +84,6 @@ if (!mongoUri) {
 const PORT = parseInt(process.env.PORT, 10) || 5001;
 const HOST = '0.0.0.0'; // Force 0.0.0.0 for reliable deployment binding
 
-// Port and Host configuration - PRODUCTION SAFE
-// Fly.io and Railway inject process.env.PORT (typically 8080)
-// Must use 0.0.0.0 to accept external requests through the proxy
-console.log('📡 Starting server with configuration:');
-console.log(`   - Requested Port: ${PORT}`);
-console.log(`   - Bind Address: ${HOST}`);
-console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
 // Validate port is a valid number
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
@@ -147,7 +140,7 @@ app.use(cors({
       /^http:\/\/localhost:\d+$/, // Any localhost port (for Flutter web)
       'http://127.0.0.1', // Localhost alternative (any port)
       /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 port (for Flutter web)
-      'http:/192.168.0.187:5001', // Local development (User Laptop)
+      'http:/192.168.0.198:5001', // Local development (User Laptop)
       'http:/192.168.0.190:5001', 
       /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Any LAN IP (for mobile devices)
       'http://10.0.2.2:5001', // Android emulator

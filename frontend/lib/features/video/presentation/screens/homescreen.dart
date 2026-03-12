@@ -2,16 +2,17 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:talker_flutter/talker_flutter.dart';
-
+import 'package:vayu/features/video/presentation/screens/upload_screen.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
-import 'package:vayu/features/video/presentation/screens/upload_screen.dart';
 import 'package:vayu/features/video/presentation/screens/vayu_screen.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/features/profile/data/services/background_profile_preloader.dart';
 import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
@@ -19,18 +20,19 @@ import 'package:vayu/features/onboarding/presentation/managers/app_initializatio
 import 'package:vayu/features/games/presentation/screens/games_feed_screen.dart'; // Import GamesFeedScreen
 import 'package:in_app_update/in_app_update.dart';
 import 'package:vayu/core/design/colors.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/shared/managers/activity_recovery_manager.dart';
 import 'package:vayu/shared/models/app_activity.dart';
 import 'package:hugeicons/hugeicons.dart';
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen>
+class _MainScreenState extends ConsumerState<MainScreen>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   final _videoScreenKey = GlobalKey();
   final _vayuScreenKey = GlobalKey<VayuScreenState>();
@@ -76,7 +78,7 @@ class _MainScreenState extends State<MainScreen>
       }
 
       // Navigate to video tab ONLY if user is still on upload tab (index 3)
-      final mainController = Provider.of<MainController>(context, listen: false);
+      final mainController = ref.read(mainControllerProvider);
       if (mainController.currentIndex == 3) {
         AppLogger.log('🔄 MainScreen: Still on upload tab, navigating to video tab');
         mainController.changeIndex(0);
@@ -283,8 +285,7 @@ class _MainScreenState extends State<MainScreen>
   /// **NEW: Restore last tab index from saved state**
   Future<void> _restoreLastTabIndex() async {
     try {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = ref.read(mainControllerProvider);
       
       // Check for high-priority activity recovery first
       final activity = await ActivityRecoveryManager().getSavedActivity();
@@ -320,10 +321,24 @@ class _MainScreenState extends State<MainScreen>
       // Users can access login from settings/profile if needed
       final needsReLogin = await _authService.needsReLogin();
       if (needsReLogin) {
+        // Don't "logout" automatically. First try to recover silently.
+        final refreshed = await _authService.refreshAccessToken();
+        if (refreshed == null) {
+          // Mark that we should show a sign-in CTA (instead of empty state)
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('auth_needs_login', true);
+            // Remove only the JWT to avoid 401 loops; keep fallback_user for UI.
+            await prefs.remove('jwt_token');
+          } catch (_) {}
 
-        await _authService.clearExpiredTokens();
-        // **DISABLED: No redirect to login screen - user stays on home screen**
- 
+          // Trigger auth controller refresh so Profile screen shows sign-in view
+          try {
+            if (mounted) {
+              await ref.read(googleSignInProvider).refreshAuthState();
+            }
+          } catch (_) {}
+        }
       }
     } catch (e) {
       print('❌ MainScreen: Error checking token validity: $e');
@@ -377,7 +392,7 @@ class _MainScreenState extends State<MainScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    final mainController = Provider.of<MainController>(context, listen: false);
+    final mainController = ref.read(mainControllerProvider);
 
     // **FIXED: Use dedicated methods for better audio leak prevention**
     if (state == AppLifecycleState.paused ||
@@ -477,9 +492,8 @@ class _MainScreenState extends State<MainScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MainController>(
-      builder: (context, mainController, child) {
-        return AnnotatedRegion<SystemUiOverlayStyle>(
+    final mainController = ref.watch(mainControllerProvider);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
             systemNavigationBarColor: Colors.transparent,
             systemNavigationBarIconBrightness: Brightness.light,
@@ -617,9 +631,7 @@ class _MainScreenState extends State<MainScreen>
                 : const SizedBox(height: 0, width: double.infinity),
             ),
           ),
-          ),
-        );
-      },
+        ),
     );
   }
 

@@ -4,9 +4,9 @@ import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
@@ -19,15 +19,15 @@ class EpisodeItem {
   EpisodeItem({required this.file, required this.title});
 }
 
-class MakeEpisodeScreen extends StatefulWidget {
+class MakeEpisodeScreen extends ConsumerStatefulWidget {
   final File? initialFile;
   const MakeEpisodeScreen({super.key, this.initialFile});
 
   @override
-  State<MakeEpisodeScreen> createState() => _MakeEpisodeScreenState();
+  ConsumerState<MakeEpisodeScreen> createState() => _MakeEpisodeScreenState();
 }
 
-class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
+class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
   final VideoService _videoService = VideoService();
   final List<EpisodeItem> _selectedEpisodes = [];
   bool _isUploading = false;
@@ -248,7 +248,7 @@ class _MakeEpisodeScreenState extends State<MakeEpisodeScreen> {
                 
                 // Navigate to Account tab (index 4)
                 try {
-                  final mainController = Provider.of<MainController>(context, listen: false);
+                  final mainController = ref.read(mainControllerProvider);
                   mainController.changeIndex(4);
                   
                   // Pop the MakeEpisodeScreen to return to the underlying tab (which is now Account)

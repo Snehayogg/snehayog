@@ -20,7 +20,7 @@ class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _opacityAnimation;
-  
+
   // **SMART PROGRESS: Dedicated controller for the progress bar**
   late AnimationController _progressController;
   bool _isNavigating = false;
@@ -28,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
-    
+
     // Fade controller for the Vayu text
     _fadeController = AnimationController(
       vsync: this,
@@ -42,7 +42,8 @@ class _SplashScreenState extends State<SplashScreen>
     // **SMART PROGRESS: Adaptive Controller**
     _progressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800), // Fast crawl to match quick auth
+      duration:
+          const Duration(milliseconds: 800), // Fast crawl to match quick auth
     );
 
     // 1. Start Fade
@@ -53,8 +54,9 @@ class _SplashScreenState extends State<SplashScreen>
     _progressController.animateTo(0.7, curve: Curves.easeOutCubic);
 
     // 3. Listen to real logic progress
-    AppInitializationManager.instance.initializationProgress.addListener(_syncProgress);
-    
+    AppInitializationManager.instance.initializationProgress
+        .addListener(_syncProgress);
+
     // 4. Fire initialization
     _startBackgroundInitialization();
   }
@@ -62,14 +64,15 @@ class _SplashScreenState extends State<SplashScreen>
   /// **SMART SYNC: Bridge Logic Progress to UI Animation**
   void _syncProgress() {
     if (!mounted) return;
-    
-    final realProgress = AppInitializationManager.instance.initializationProgress.value;
-    
+
+    final realProgress =
+        AppInitializationManager.instance.initializationProgress.value;
+
     // If logic is ahead of our crawl, surge forward to catch up
     if (realProgress > _progressController.value) {
       // Use faster surge animation
       _progressController.animateTo(
-        realProgress, 
+        realProgress,
         duration: const Duration(milliseconds: 600),
         curve: Curves.easeOutQuad,
       );
@@ -77,12 +80,10 @@ class _SplashScreenState extends State<SplashScreen>
 
     // If logic is 100% complete, finish the bar quickly and navigate
     if (realProgress >= 1.0) {
-      _isNavigating = true; 
+      _isNavigating = true;
       _navigateToHome(); // Direct navigation for maximum speed
     }
   }
-
-
 
   Future<void> _startBackgroundInitialization() async {
     if (mounted) {
@@ -95,7 +96,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted || _isNavigating) return;
 
     final initManager = AppInitializationManager.instance;
-    
+
     // **FINAL GATE: Only navigate if logic stage 2 is complete**
     // Decoupled from progress bar animation for maximum speed
     if (initManager.isStage2Complete) {
@@ -118,7 +119,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    AppInitializationManager.instance.initializationProgress.removeListener(_syncProgress);
+    AppInitializationManager.instance.initializationProgress
+        .removeListener(_syncProgress);
     _fadeController.dispose();
     _progressController.dispose();
     super.dispose();
@@ -142,7 +144,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
           ),
-          
+
           // **NEW: Force Update Dialog Overlay**
           ValueListenableBuilder<bool>(
             valueListenable: initManager.isUpdateRequired,
@@ -202,13 +204,16 @@ class _SplashScreenState extends State<SplashScreen>
                           child: ElevatedButton(
                             onPressed: () async {
                               // Replace with your actual Play Store URL or App ID
-                              final url = Uri.parse('market://details?id=com.vayu.app');
-                              final fallbackUrl = Uri.parse('https://play.google.com/store/apps/details?id=com.vayu.app');
-                              
+                              final url =
+                                  Uri.parse('market://details?id=com.vayu.app');
+                              final fallbackUrl = Uri.parse(
+                                  'https://play.google.com/store/apps/details?id=com.vayu.app');
+
                               if (await canLaunchUrl(url)) {
                                 await launchUrl(url);
                               } else {
-                                await launchUrl(fallbackUrl, mode: LaunchMode.externalApplication);
+                                await launchUrl(fallbackUrl,
+                                    mode: LaunchMode.externalApplication);
                               }
                             },
                             style: ElevatedButton.styleFrom(
@@ -236,7 +241,7 @@ class _SplashScreenState extends State<SplashScreen>
               );
             },
           ),
-          
+
           // Bottom Content: Progress Bar and Status
           Positioned(
             bottom: 80,
@@ -252,18 +257,22 @@ class _SplashScreenState extends State<SplashScreen>
                     ValueListenableBuilder<String>(
                       valueListenable: initManager.initializationStatus,
                       builder: (context, status, _) {
-                        final displayStatus = status.toLowerCase().contains('ready') ? status : '';
+                        final displayStatus =
+                            status.toLowerCase().contains('ready')
+                                ? status
+                                : '';
                         return Text(
                           displayStatus,
                           style: AppTypography.labelSmall.copyWith(
-                            color: AppColors.textSecondary.withValues(alpha: 0.6),
+                            color:
+                                AppColors.textSecondary.withValues(alpha: 0.6),
                             letterSpacing: 0.5,
                           ),
                         );
                       },
                     ),
-                    SizedBox(height: 16),
-                    
+                    const SizedBox(height: 16),
+
                     // Progress Indicator - THICKER & PROFESSIONAL
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
@@ -271,18 +280,22 @@ class _SplashScreenState extends State<SplashScreen>
                         animation: _progressController,
                         builder: (context, _) {
                           return ValueListenableBuilder<bool>(
-                            valueListenable: initManager.isUpdateRequired,
-                            builder: (context, isUpdateRequired, _) {
-                              // Hide progress bar if update is required
-                              if (isUpdateRequired) return const SizedBox.shrink();
-                              return LinearProgressIndicator(
-                                value: _progressController.value,
-                                backgroundColor: AppColors.white.withValues(alpha: 0.1),
-                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                minHeight: 6, // Increased from 3
-                              );
-                            }
-                          );
+                              valueListenable: initManager.isUpdateRequired,
+                              builder: (context, isUpdateRequired, _) {
+                                // Hide progress bar if update is required
+                                if (isUpdateRequired) {
+                                  return const SizedBox.shrink();
+                                }
+                                return LinearProgressIndicator(
+                                  value: _progressController.value,
+                                  backgroundColor:
+                                      AppColors.white.withValues(alpha: 0.1),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                          AppColors.primary),
+                                  minHeight: 6, // Increased from 3
+                                );
+                              });
                         },
                       ),
                     ),

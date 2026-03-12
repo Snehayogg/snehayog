@@ -105,7 +105,7 @@ class VayuBottomSheet extends StatelessWidget {
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 10,
-                  offset: Offset(0, -2),
+                  offset: const Offset(0, -2),
                 ),
               ],
             ),
@@ -145,13 +145,17 @@ class VayuBottomSheet extends StatelessWidget {
                           ),
                         if (actions != null) ...actions!,
                         IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                          icon: const Icon(Icons.close,
+                              color: AppColors.textSecondary),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
                   ),
-                if (title != null) Divider(height: 1, color: AppColors.white.withValues(alpha: 0.05)),
+                if (title != null)
+                  Divider(
+                      height: 1,
+                      color: AppColors.white.withValues(alpha: 0.05)),
                 Flexible(
                   child: Padding(
                     padding: padding ?? EdgeInsets.all(AppSpacing.spacing5),

@@ -50,13 +50,20 @@ const SUPPORTED_VERSIONS = {
     deprecatedDate: null,
     endOfLifeDate: null,
     description: 'Scalability Refactor - Counts instead of Arrays (March 2, 2026)'
+  },
+  '2026-03-12': {
+    releaseDate: new Date('2026-03-12'),
+    deprecated: false,
+    deprecatedDate: null,
+    endOfLifeDate: null,
+    description: 'API Version Sync (March 12, 2026)'
   }
 };
 
 /**
  * Default API version if none specified
  */
-const DEFAULT_VERSION = '2026-03-01';
+const DEFAULT_VERSION = '2026-03-12';
 
 /**
  * Header name for API version

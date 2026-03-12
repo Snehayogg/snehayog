@@ -1,0 +1,241 @@
+﻿
+warning - Unused 
+import: 'package:vayu/
+features/video/present
+ation/managers/main_co
+ntroller.dart' - lib\f
+eatures\ads\presentati
+on\widgets\create_ad\m
+edia_uploader_widget.d
+art:9:8 - 
+unused_import
+warning - Unused 
+import: 'package:vayu/
+shared/providers/user_
+provider.dart' - lib\f
+eatures\profile\presen
+tation\widgets\profile
+_header_widget.dart:10
+:8 - unused_import
+warning - Unused 
+import: 'package:vayu/
+shared/providers/user_
+provider.dart' - lib\f
+eatures\profile\presen
+tation\widgets\profile
+_stats_widget.dart:5:8
+ - unused_import
+warning - The value 
+of the local variable 
+'userProviderRef' 
+isn't used - lib\featu
+res\profile\presentati
+on\widgets\profile_sta
+ts_widget.dart:35:11 
+- 
+unused_local_variable
+warning - The value 
+of the field '_adImpre
+ssionService' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:75:29 
+- unused_field
+warning - The value 
+of the field 
+'_authService' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:76:21 
+- unused_field
+warning - The value 
+of the field 
+'_isLoadingAd' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:79:9 - 
+unused_field
+warning - The 
+declaration 
+'_currentVideo' isn't 
+referenced - lib\featu
+res\video\presentation
+\screens\vayu_long_for
+m_player_screen.dart:8
+2:18 - unused_element
+warning - The value 
+of the field 
+'_hasError' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:100:8 
+- unused_field
+warning - The value 
+of the field 
+'_errorMessage' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:101:10 
+- unused_field
+warning - The value 
+of the local variable 
+'hasError' isn't used 
+- lib\features\video\p
+resentation\screens\va
+yu_long_form_player_sc
+reen.dart:1263:11 - 
+unused_local_variable
+warning - Unused 
+import: 'package:vayu/
+core/providers/video_p
+roviders.dart' - lib\f
+eatures\video\presenta
+tion\screens\video_fee
+d_advanced.dart:10:8 
+- unused_import
+warning - Duplicate 
+import - lib\features\
+video\presentation\scr
+eens\video_feed_advanc
+ed.dart:17:8 - 
+duplicate_import
+warning - The 
+declaration '_navigate
+ToLoginScreen' isn't 
+referenced - lib\featu
+res\video\presentation
+\screens\video_feed_ad
+vanced.dart:1542:8 - 
+unused_element
+  error - The method 
+'of' isn't defined 
+for the type 
+'Provider' - lib\featu
+res\video\presentation
+\screens\video_feed_ad
+vanced.dart:1565:20 - 
+undefined_method
+  error - The method 
+'of' isn't defined 
+for the type 
+'Provider' - lib\featu
+res\video\presentation
+\screens\video_feed_ad
+vanced.dart:1653:37 - 
+undefined_method
+  error - The type 
+'Consumer' is 
+declared with 0 type 
+parameters, but 1 
+type arguments were 
+given - lib\features\v
+ideo\presentation\scre
+ens\video_feed_advance
+d.dart:1791:12 - wrong
+_number_of_type_argume
+nts
+  error - The getter 
+'isSignedIn' isn't 
+defined for the type 
+'WidgetRef' - lib\feat
+ures\video\presentatio
+n\screens\video_feed_a
+dvanced.dart:1793:48 
+- undefined_getter
+  error - The getter 
+'userData' isn't 
+defined for the type 
+'WidgetRef' - lib\feat
+ures\video\presentatio
+n\screens\video_feed_a
+dvanced.dart:1810:42 
+- undefined_getter
+  error - The getter 
+'userData' isn't 
+defined for the type 
+'WidgetRef' - lib\feat
+ures\video\presentatio
+n\screens\video_feed_a
+dvanced.dart:1811:41 
+- undefined_getter
+  error - The getter 
+'userData' isn't 
+defined for the type 
+'WidgetRef' - lib\feat
+ures\video\presentatio
+n\screens\video_feed_a
+dvanced.dart:1812:30 
+- undefined_getter
+  error - The type 
+'Consumer' is 
+declared with 0 type 
+parameters, but 1 
+type arguments were 
+given - lib\features\v
+ideo\presentation\scre
+ens\video_feed_advance
+d.dart:1839:16 - wrong
+_number_of_type_argume
+nts
+  error - The getter 
+'currentIndex' isn't 
+defined for the type 
+'WidgetRef' - lib\feat
+ures\video\presentatio
+n\screens\video_feed_a
+dvanced.dart:1841:53 
+- undefined_getter
+warning - Unused 
+import: 'package:vayu/
+features/auth/data/ser
+vices/authservices.dar
+t' - lib\shared\widget
+s\follow_button_widget
+.dart:9:8 - 
+unused_import
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:74:
+11 - avoid_print
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:119
+:11 - avoid_print
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:134
+:7 - avoid_print
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:165
+:11 - avoid_print
+   info - Empty catch 
+block - lib\shared\wid
+gets\follow_button_wid
+get.dart:172:23 - 
+empty_catches
+   info - Empty catch 
+block - lib\shared\wid
+gets\follow_button_wid
+get.dart:178:23 - 
+empty_catches
+   info - Empty catch 
+block - lib\shared\wid
+gets\follow_button_wid
+get.dart:184:23 - 
+empty_catches
+
+

@@ -10,10 +10,8 @@ import 'package:vayu/features/auth/data/services/authservices.dart';
 // import 'package:vayu/features/video/data/services/video_service.dart'; // Unused import removed
 // import 'package:url_launcher/url_launcher.dart'; // Unused import removed
 import 'package:vayu/shared/services/share_service.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/shared/widgets/in_app_browser.dart';
@@ -23,7 +21,8 @@ class CarouselAdWidget extends StatefulWidget {
   final CarouselAdModel carouselAd;
   final VoidCallback? onAdClosed;
   final bool autoPlay;
-  final String? videoId; // **NEW: Track which video context this ad was shown in**
+  final String?
+      videoId; // **NEW: Track which video context this ad was shown in**
   final VoidCallback? onVideoPause;
   final VoidCallback? onVideoResume;
 
@@ -61,7 +60,6 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   final AdImpressionService _adImpressionService = AdImpressionService();
   final AuthService _authService = AuthService();
   final ShareService _shareService = ShareService();
-
 
   @override
   void initState() {
@@ -233,19 +231,18 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     // Launch CTA URL if available
     String ctaUrl = widget.carouselAd.callToActionUrl;
     if (ctaUrl.isNotEmpty) {
-      
       // **UTM TRACKING IMPLEMENTATION**
       // Automatically append source and medium if not present
       final uri = Uri.parse(ctaUrl);
       final Map<String, String> queryParams = Map.from(uri.queryParameters);
-        
+
       if (!queryParams.containsKey('utm_source')) {
         queryParams['utm_source'] = 'vayug_app';
       }
       if (!queryParams.containsKey('utm_medium')) {
-        queryParams['utm_medium'] = 'in_app_ad'; 
+        queryParams['utm_medium'] = 'in_app_ad';
       }
-      
+
       // Reconstruct URL with new params
       ctaUrl = uri.replace(queryParameters: queryParams).toString();
       AppLogger.log('🔗 CarouselAdWidget: Resolved Link with UTM: $ctaUrl');
@@ -394,12 +391,12 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.campaign,
               color: AppColors.textSecondary,
               size: 80,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'Advertisement',
               style: AppTypography.headlineMedium.copyWith(
@@ -421,17 +418,17 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       child: SafeArea(
         child: Center(
           child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: AppColors.backgroundPrimary.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(AppRadius.lg),
-              border:
-                  Border.all(color: AppColors.white.withValues(alpha: 0.2), width: 1.0),
+              border: Border.all(
+                  color: AppColors.white.withValues(alpha: 0.2), width: 1.0),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.4),
                   blurRadius: 10,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -453,13 +450,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     return GestureDetector(
       onTap: widget.onAdClosed,
       child: Container(
-        padding: EdgeInsets.all(10),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppColors.backgroundPrimary.withValues(alpha: 0.6),
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
         ),
-        child: Icon(
+        child: const Icon(
           Icons.arrow_back_ios_new,
           color: AppColors.white,
           size: 18,
@@ -471,7 +468,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   Widget _buildLoadingPlaceholder() {
     return Container(
       color: AppColors.backgroundSecondary,
-      child: Center(
+      child: const Center(
         child: CircularProgressIndicator(
           color: AppColors.primary,
         ),
@@ -482,7 +479,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
   Widget _buildErrorPlaceholder() {
     return Container(
       color: AppColors.backgroundSecondary,
-      child: Center(
+      child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -526,16 +523,17 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             decoration: BoxDecoration(
               color: AppColors.backgroundPrimary.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(AppRadius.md),
-              border:
-                  Border.all(color: AppColors.white.withValues(alpha: 0.15), width: 0.8),
+              border: Border.all(
+                  color: AppColors.white.withValues(alpha: 0.15), width: 0.8),
             ),
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.campaign_outlined, size: 14, color: AppColors.white),
-                  SizedBox(width: 6),
+                  const Icon(Icons.campaign_outlined,
+                      size: 14, color: AppColors.white),
+                  const SizedBox(width: 6),
                   Text(
                     'Sponsored',
                     style: AppTypography.labelSmall.copyWith(
@@ -578,7 +576,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             onTap: _onHeartTap,
             count: _displayLikes(),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Share icon
           _buildActionButton(
@@ -586,7 +584,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             onTap: _onShareTap,
             count: widget.carouselAd.shares,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -599,7 +597,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       left: 0,
       right: 70, // Slightly tighter space
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -608,8 +606,8 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             Row(
               children: [
                 Container(
-                  padding: EdgeInsets.all(1.5),
-                  decoration: BoxDecoration(
+                  padding: const EdgeInsets.all(1.5),
+                  decoration: const BoxDecoration(
                     color: AppColors.white,
                     shape: BoxShape.circle,
                   ),
@@ -622,11 +620,12 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                                 widget.carouselAd.advertiserProfilePic)
                             : null,
                     child: widget.carouselAd.advertiserProfilePic.isEmpty
-                        ? Icon(Icons.business, size: 14, color: AppColors.textSecondary)
+                        ? const Icon(Icons.business,
+                            size: 14, color: AppColors.textSecondary)
                         : null,
                   ),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     widget.carouselAd.advertiserName,
@@ -641,7 +640,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                           color: Colors.black,
                         ),
                         Shadow(
-                          offset: Offset(0, 1),
+                          offset: const Offset(0, 1),
                           blurRadius: 8.0,
                           color: Colors.black.withValues(alpha: 0.5),
                         ),
@@ -651,7 +650,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 ),
               ],
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
 
             // Ad caption
             Text(
@@ -667,7 +666,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                     color: Colors.black,
                   ),
                   Shadow(
-                    offset: Offset(0, 1),
+                    offset: const Offset(0, 1),
                     blurRadius: 7.0,
                     color: Colors.black.withValues(alpha: 0.5),
                   ),
@@ -675,7 +674,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
               ),
             ),
             if (_getAdDescription().isNotEmpty) ...[
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
                 _getAdDescription(),
                 maxLines: 2,
@@ -690,7 +689,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                       color: Colors.black,
                     ),
                     Shadow(
-                      offset: Offset(0, 1),
+                      offset: const Offset(0, 1),
                       blurRadius: 7.0,
                       color: Colors.black.withValues(alpha: 0.5),
                     ),
@@ -698,13 +697,14 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                 ),
               ),
             ],
-            SizedBox(height: 18),
+            const SizedBox(height: 18),
 
             // CTA Button - Compact & Professional
             GestureDetector(
               onTap: _onAdTap,
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 decoration: BoxDecoration(
                   color: AppColors.white,
                   borderRadius: BorderRadius.circular(AppRadius.md),
@@ -712,12 +712,13 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
-                      offset: Offset(0, 4),
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Text(
-                  _getCleanedCtaLabel(widget.carouselAd.callToActionLabel).toUpperCase(),
+                  _getCleanedCtaLabel(widget.carouselAd.callToActionLabel)
+                      .toUpperCase(),
                   style: AppTypography.labelMedium.copyWith(
                     color: AppColors.textInverse,
                     fontWeight: FontWeight.w800,
@@ -745,7 +746,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
       child: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(10),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppColors.backgroundPrimary.withValues(alpha: 0.6),
               shape: BoxShape.circle,
@@ -758,7 +759,7 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
             ),
           ),
           if (count != null) ...[
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               _formatCount(count),
               style: AppTypography.labelSmall.copyWith(
@@ -864,7 +865,7 @@ class _CarouselVideoAdItemState extends State<_CarouselVideoAdItem> {
   // we should check if we can use a lighter video player controller here.
   // For now, we'll implement a placeholder that is "Video Ready" to match requirements
   // without adding heavy dependencies if not needed.
-  // 
+  //
   // TODO: Integrated full video player. For now using a high-quality placeholder
   // that indicates video content, as requested to fix the
 
@@ -877,31 +878,33 @@ class _CarouselVideoAdItemState extends State<_CarouselVideoAdItem> {
         children: [
           // Background (thumbnail or dark)
           Container(color: AppColors.backgroundPrimary.withValues(alpha: 0.9)),
-          
+
           // Play Button
           Container(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.backgroundPrimary.withValues(alpha: 0.5),
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.white.withValues(alpha: 0.8), width: 1.5),
+              border: Border.all(
+                  color: AppColors.white.withValues(alpha: 0.8), width: 1.5),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.play_arrow_rounded,
               color: AppColors.white,
               size: 54,
             ),
           ),
-          
+
           // Label
           Positioned(
             bottom: 40,
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.backgroundPrimary.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
+                border:
+                    Border.all(color: AppColors.white.withValues(alpha: 0.1)),
               ),
               child: Text(
                 'Video Ad Preview',

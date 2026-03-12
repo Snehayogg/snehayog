@@ -1,5 +1,4 @@
 import { Queue } from 'bullmq';
-import Redis from 'ioredis';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -58,10 +57,9 @@ class FeedQueueService {
      */
     async addRankCalculationJob() {
         try {
-            console.log('⏰ QueueService: Scheduling periodic rank calculation (repeatable every 2h)...');
             await videoQueue.add('recalculate-ranks', {}, {
                 repeat: {
-                    every: 2 * 60 * 60 * 1000 // Every 2 hours
+                    every: 2 * 60 * 60 * 1000
                 },
                 removeOnComplete: true
             });

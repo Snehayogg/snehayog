@@ -142,7 +142,7 @@ class _TopEarnersBottomSheetState extends State<TopEarnersBottomSheet> {
     } else if (earnings >= 1000) {
       return '${(earnings / 1000).toStringAsFixed(1)}K';
     }
-    return '${earnings.toStringAsFixed(0)}';
+    return earnings.toStringAsFixed(0);
   }
 
   @override

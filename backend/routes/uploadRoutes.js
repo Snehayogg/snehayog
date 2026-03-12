@@ -16,41 +16,6 @@ import Game from '../models/Game.js';
 
 const router = express.Router();
 
-// **UPDATE: Apply Upload Rate Limiter individually to sensitive routes instead of globally**
-// This ensures status polling (/video/:videoId/status) is not restricted.
-// router.use(uploadLimiter); 
-const RESUMABLE_CHUNK_SIZE_DEFAULT = 5 * 1024 * 1024; // 5MB
-const RESUMABLE_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24h
-const resumableSessions = new Map();
-
-function pruneExpiredResumableSessions() {
-  const now = Date.now();
-  for (const [sessionId, session] of resumableSessions.entries()) {
-    if (now - session.updatedAt > RESUMABLE_UPLOAD_TTL_MS) {
-      resumableSessions.delete(sessionId);
-    }
-  }
-}
-
-function buildResumableSessionKey(userId, fileFingerprint) {
-  const seed = `${userId}:${fileFingerprint}`;
-  return crypto.createHash('sha1').update(seed).digest('hex');
-}
-
-async function safeDeleteFile(filePath) {
-  if (!filePath) return;
-  try {
-    await fs.unlink(filePath);
-  } catch (_) {}
-}
-
-async function safeDeleteDir(dirPath) {
-  if (!dirPath) return;
-  try {
-    await fs.rm(dirPath, { recursive: true, force: true });
-  } catch (_) {}
-}
-
 /**
  * Calculate SHA256 hash of a file
  * @param {string} filePath - Path to the file
@@ -88,7 +53,7 @@ const imageStorage = multer.diskStorage({
 const imageUpload = multer({
   storage: imageStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for ad images
+    fileSize: 40 * 1024 * 1024, // 40MB limit for ad images
     files: 1
   },
   fileFilter: (req, file, cb) => {
@@ -142,7 +107,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 300 * 1024 * 1024, // 300MB limit (Updated to match videoRoutes)
+    fileSize: 700 * 1024 * 1024, // 700MB limit (Updated to match videoRoutes)
     files: 1
   },
   fileFilter: (req, file, cb) => {
@@ -168,16 +133,7 @@ const upload = multer({
   }
 });
 
-const chunkUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB per chunk
-    files: 1
-  }
-});
-
-// **NEW: Upload video with automatic quality processing**
-// **NEW: Direct Upload Routes**
+// **NEW: Direct-to-R2 Upload Routes (USED BY FRONTEND)**
 
 /**
  * @route POST /api/upload/video/presigned
@@ -198,13 +154,12 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
        return res.status(400).json({ error: 'Only video files are allowed' });
     }
     
-    // Max size check (400MB)
-    if (fileSize && fileSize > 400 * 1024 * 1024) {
-        return res.status(400).json({ error: 'File too large (Max 400MB)' });
+    // Max size check (700MB)
+    if (fileSize && fileSize > 700 * 1024 * 1024) {
+        return res.status(400).json({ error: 'File too large (Max 700MB)' });
     }
 
     // Generate unique R2 key
-    // We use a "raw" folder to distinguish from processed videos
     const timestamp = Date.now();
     const cleanFileName = fileName.replace(/[^a-zA-Z0-9]/g, '_');
     const key = `uploads/raw/${userId}/${timestamp}_${cleanFileName}`;
@@ -242,21 +197,20 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
 
     console.log('🚀 Direct Upload Complete received for:', key);
 
-    // **NEW: Find user by Google ID to get proper ObjectId**
+    // Find user by Google ID to get proper ObjectId
     const user = await User.findOne({ googleId: userId });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // 1. Create Video Record (Processing State)
-    // **FIX: Use correct model fields (videoName, uploader, videoUrl)**
     const newVideo = new Video({
       uploader: user._id,
       videoName: videoName,
       description: description || '',
       link: link || '',
-      videoUrl: cloudflareR2Service.getPublicUrl(key), // Proper initial URL
-      thumbnailUrl: '', // Will be updated after processing
+      videoUrl: cloudflareR2Service.getPublicUrl(key),
+      thumbnailUrl: '',
       processingStatus: 'processing',
       processingProgress: 0,
       processingError: null,
@@ -268,21 +222,15 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
 
     await newVideo.save();
 
-     // **NEW: Lazy load hybrid service**
+    // Lazy load hybrid service
     if (!hybridVideoService) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
     }
 
     // 2. Trigger Background Processing
-    // We pass the R2 Key as the "path". The service must handle downloading it.
-    // Construct a "virtual" path or URL that the service can recognize
     const r2Url = cloudflareR2Service.getPublicUrl(key);
-    
-    console.log('🔄 Triggering background processing (Wrapper) for Direct Upload...');
-    
-    // **FIX: Use the local processVideoHybrid wrapper instead of calling the service directly.**
-    // The wrapper handles updating the DB status to 'completed' and 'progress: 100'.
+        
     processVideoHybrid(newVideo._id, r2Url, videoName, userId).catch(err => {
         console.error('❌ Background processing failed for direct upload:', err);
     });
@@ -299,7 +247,7 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
   }
 });
 
-// Original Routes
+// Original Server-Side Upload Route (Keep as fallback)
 router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
@@ -396,7 +344,9 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       videoUrl: tempVideoUrl, // Proper URL format, will be updated after processing
       thumbnailUrl: '', // Will be generated during processing
       uploader: user._id, // Use user's ObjectId, not Google ID
-      videoType: aspectRatio < 0.8 ? 'yog' : 'vayu',
+      // **SOURCE OF TRUTH: Classify based on aspect ratio**
+      // Landscape (AR > 1.0) = Vayu, Portrait (AR <= 1.0) = Yog
+      videoType: aspectRatio > 1.0 ? 'vayu' : 'yog',
       aspectRatio: aspectRatio,
       duration: videoInfo.duration || 0,
       originalSize: videoValidation.size,
@@ -416,7 +366,6 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     // **NEW: Save video record first**
     await video.save();
 
-    // **NEW: Start hybrid processing in background (Cloudinary → R2)**
     // Start processing in background with proper error handling
     processVideoHybrid(video._id, videoPath, videoName, userId).catch(error => {
       console.error('❌ Background processing failed:', error);
@@ -455,338 +404,6 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
   }
 });
 
-
-// **NEW: Resumable Upload Init**
-router.post('/video/resumable/init', verifyToken, uploadLimiter, async (req, res) => {
-  try {
-    pruneExpiredResumableSessions();
-
-    const {
-      fileName,
-      fileSize,
-      chunkSize,
-      totalChunks,
-      fileFingerprint,
-      videoName,
-      description,
-      link,
-      category,
-      tags,
-      videoType,
-      seriesId,
-      episodeNumber
-    } = req.body || {};
-
-    if (!fileName || !fileSize || !totalChunks || !fileFingerprint) {
-      return res.status(400).json({ error: 'Missing resumable init fields' });
-    }
-
-    const userId = req.user.id;
-    const normalizedChunkSize = Number(chunkSize) > 0 ? Number(chunkSize) : RESUMABLE_CHUNK_SIZE_DEFAULT;
-    const normalizedTotalChunks = Number(totalChunks);
-    const normalizedFileSize = Number(fileSize);
-
-    if (!Number.isFinite(normalizedTotalChunks) || normalizedTotalChunks <= 0) {
-      return res.status(400).json({ error: 'Invalid totalChunks value' });
-    }
-
-    const sessionId = buildResumableSessionKey(userId, fileFingerprint);
-    const sessionRoot = path.join(process.cwd(), 'uploads', 'resumable', sessionId);
-    const chunkDir = path.join(sessionRoot, 'chunks');
-
-    let session = resumableSessions.get(sessionId);
-
-    if (!session) {
-      await fs.mkdir(chunkDir, { recursive: true });
-
-      session = {
-        sessionId,
-        userId,
-        fileName,
-        fileSize: normalizedFileSize,
-        chunkSize: normalizedChunkSize,
-        totalChunks: normalizedTotalChunks,
-        fileFingerprint,
-        sessionRoot,
-        chunkDir,
-        receivedChunks: new Set(),
-        metadata: {
-          videoName,
-          description,
-          link,
-          category,
-          tags,
-          videoType,
-          seriesId,
-          episodeNumber
-        },
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-
-      resumableSessions.set(sessionId, session);
-    } else {
-      session.updatedAt = Date.now();
-      session.metadata = {
-        ...session.metadata,
-        videoName,
-        description,
-        link,
-        category,
-        tags,
-        videoType,
-        seriesId,
-        episodeNumber
-      };
-
-      try {
-        const chunkFiles = await fs.readdir(session.chunkDir);
-        session.receivedChunks = new Set(
-          chunkFiles
-            .filter((name) => name.endsWith('.part'))
-            .map((name) => Number(path.basename(name, '.part')))
-            .filter((index) => Number.isFinite(index))
-        );
-      } catch (_) {}
-    }
-
-    const uploadedChunks = Array.from(session.receivedChunks).sort((a, b) => a - b);
-
-    return res.json({
-      success: true,
-      sessionId,
-      uploadedChunks,
-      totalChunks: session.totalChunks,
-      chunkSize: session.chunkSize
-    });
-  } catch (error) {
-    console.error('? Resumable init failed:', error);
-    return res.status(500).json({ error: 'Failed to initialize resumable upload' });
-  }
-});
-
-// **NEW: Resumable Upload Chunk**
-router.post('/video/resumable/:sessionId/chunk', verifyToken, uploadLimiter, chunkUpload.single('chunk'), async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const chunkIndex = Number(req.body?.chunkIndex);
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'Chunk file is required' });
-    }
-
-    if (!Number.isFinite(chunkIndex) || chunkIndex < 0) {
-      await safeDeleteFile(req.file.path);
-      return res.status(400).json({ error: 'Invalid chunkIndex' });
-    }
-
-    const session = resumableSessions.get(sessionId);
-    if (!session) {
-      await safeDeleteFile(req.file.path);
-      return res.status(404).json({ error: 'Resumable session not found or expired' });
-    }
-
-    if (session.userId !== req.user.id) {
-      await safeDeleteFile(req.file.path);
-      return res.status(403).json({ error: 'Not allowed for this resumable session' });
-    }
-
-    if (chunkIndex >= session.totalChunks) {
-      await safeDeleteFile(req.file.path);
-      return res.status(400).json({ error: 'chunkIndex out of range' });
-    }
-
-    await fs.mkdir(session.chunkDir, { recursive: true });
-
-    const chunkPath = path.join(session.chunkDir, `${chunkIndex}.part`);
-
-    if (fsSync.existsSync(chunkPath)) {
-      await safeDeleteFile(req.file.path);
-    } else {
-      await fs.rename(req.file.path, chunkPath);
-      session.receivedChunks.add(chunkIndex);
-    }
-
-    session.updatedAt = Date.now();
-
-    return res.json({
-      success: true,
-      sessionId,
-      chunkIndex,
-      uploadedChunks: session.receivedChunks.size,
-      totalChunks: session.totalChunks
-    });
-  } catch (error) {
-    console.error('? Resumable chunk upload failed:', error);
-    if (req.file?.path) {
-      await safeDeleteFile(req.file.path);
-    }
-    return res.status(500).json({ error: 'Failed to upload chunk' });
-  }
-});
-
-// **NEW: Resumable Upload Complete**
-router.post('/video/resumable/:sessionId/complete', verifyToken, uploadLimiter, async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const session = resumableSessions.get(sessionId);
-
-    if (!session) {
-      return res.status(404).json({ error: 'Resumable session not found or expired' });
-    }
-
-    if (session.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Not allowed for this resumable session' });
-    }
-
-    const missingChunks = [];
-    for (let index = 0; index < session.totalChunks; index++) {
-      if (!fsSync.existsSync(path.join(session.chunkDir, `${index}.part`))) {
-        missingChunks.push(index);
-      }
-    }
-
-    if (missingChunks.length > 0) {
-      return res.status(409).json({
-        error: 'Cannot complete upload, missing chunks',
-        missingChunks
-      });
-    }
-
-    const fileExt = path.extname(session.fileName) || '.mp4';
-    const assembledFilePath = path.join(process.cwd(), 'uploads', 'temp', `video-resumable-${Date.now()}-${Math.round(Math.random() * 1e9)}${fileExt}`);
-
-    await fs.mkdir(path.dirname(assembledFilePath), { recursive: true });
-
-    const writeStream = fsSync.createWriteStream(assembledFilePath);
-    for (let index = 0; index < session.totalChunks; index++) {
-      const partPath = path.join(session.chunkDir, `${index}.part`);
-      await new Promise((resolve, reject) => {
-        const readStream = fsSync.createReadStream(partPath);
-        readStream.on('error', reject);
-        readStream.on('end', resolve);
-        readStream.pipe(writeStream, { end: false });
-      });
-    }
-
-    await new Promise((resolve, reject) => {
-      writeStream.on('error', reject);
-      writeStream.end(resolve);
-    });
-
-    const uploadResponse = await createVideoFromUploadedFile({
-      userId: req.user.id,
-      filePath: assembledFilePath,
-      originalName: session.fileName,
-      metadata: session.metadata || {}
-    });
-
-    resumableSessions.delete(sessionId);
-    await safeDeleteDir(session.sessionRoot);
-
-    return res.status(201).json(uploadResponse);
-  } catch (error) {
-    console.error('? Resumable complete failed:', error);
-    if (error?.statusCode && error?.payload) {
-      return res.status(error.statusCode).json(error.payload);
-    }
-    return res.status(500).json({ error: 'Failed to finalize resumable upload', details: error.message });
-  }
-});
-
-async function createVideoFromUploadedFile({ userId, filePath, originalName, metadata = {} }) {
-  if (!hybridVideoService) {
-    const { default: service } = await import('../services/hybridVideoService.js');
-    hybridVideoService = service;
-  }
-
-  const videoValidation = await hybridVideoService.validateVideo(filePath);
-  if (!videoValidation.isValid) {
-    await safeDeleteFile(filePath);
-    throw new Error(videoValidation.error || 'Invalid video file');
-  }
-
-  const user = await User.findOne({ googleId: userId });
-  if (!user) {
-    await safeDeleteFile(filePath);
-    throw new Error('User not found');
-  }
-
-  const videoHash = await calculateFileHash(filePath);
-
-  const existingVideo = await Video.findOne({
-    uploader: user._id,
-    videoHash: videoHash,
-    processingStatus: { $ne: 'failed' }
-  });
-
-  if (existingVideo) {
-    await safeDeleteFile(filePath);
-    const duplicateErr = new Error('Duplicate video detected');
-    duplicateErr.statusCode = 409;
-    duplicateErr.payload = {
-      error: 'Duplicate video detected',
-      message: 'You have already uploaded this video',
-      existingVideo: {
-        id: existingVideo._id,
-        videoName: existingVideo.videoName,
-        uploadedAt: existingVideo.uploadedAt
-      }
-    };
-    throw duplicateErr;
-  }
-
-  const videoInfo = await hybridVideoService.getOriginalVideoInfo(filePath);
-  const aspectRatio = videoInfo.width && videoInfo.height ? videoInfo.width / videoInfo.height : 9 / 16;
-
-  const baseUrl = process.env.SERVER_URL || 'http://192.168.0.199:5001';
-  const relativePath = filePath.replace(/\\/g, '/').replace(process.cwd().replace(/\\/g, '/'), '');
-  const tempVideoUrl = `${baseUrl}${relativePath}`;
-
-  const finalVideoName = metadata.videoName || originalName;
-
-  const video = new Video({
-    videoName: finalVideoName,
-    description: metadata.description || '',
-    videoUrl: tempVideoUrl,
-    thumbnailUrl: '',
-    uploader: user._id,
-    videoType: aspectRatio < 0.8 ? 'yog' : 'vayu',
-    aspectRatio,
-    duration: videoInfo.duration || 0,
-    originalSize: videoValidation.size,
-    originalFormat: path.extname(originalName).substring(1),
-    originalResolution: {
-      width: videoInfo.width || 0,
-      height: videoInfo.height || 0
-    },
-    processingStatus: 'pending',
-    processingProgress: 0,
-    link: metadata.link || '',
-    videoHash,
-    seriesId: metadata.seriesId || null,
-    episodeNumber: metadata.episodeNumber ? parseInt(metadata.episodeNumber) : 0
-  });
-
-  await video.save();
-
-  processVideoHybrid(video._id, filePath, finalVideoName, userId).catch(error => {
-    console.error('? Background processing failed:', error);
-    console.error('? Error stack:', error.stack);
-  });
-
-  return {
-    success: true,
-    message: 'Video upload started successfully',
-    video: {
-      id: video._id,
-      videoName: video.videoName,
-      processingStatus: video.processingStatus,
-      processingProgress: video.processingProgress,
-      estimatedTime: '2-5 minutes depending on video length'
-    }
-  };
-}
 // **NEW: URL normalization function**
 function normalizeVideoUrl(url) {
   if (!url) return url;
@@ -797,7 +414,7 @@ function normalizeVideoUrl(url) {
   // **FIX: Ensure proper URL format**
   if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
     // If it's a relative path, make it absolute
-    const baseUrl = process.env.SERVER_URL || 'http://10.118.107.18:5001';
+    const baseUrl = process.env.SERVER_URL;
     normalizedUrl = `${baseUrl}/${normalizedUrl}`;
   }
 
@@ -820,7 +437,7 @@ function normalizeVideoUrl(url) {
 
 async function processVideoHybrid(videoId, videoPath, videoName, userId) {
   try {
-    // **FIX: Sanitize video name to remove invalid characters for Cloudinary**
+    // Sanitize video name for safe file storage in R2
     const sanitizedVideoName = videoName.replace(/[^a-zA-Z0-9\s_-]/g, '_').replace(/\s+/g, '_').substring(0, 50);
 
     // **NEW: Lazy load hybrid service to ensure env vars are loaded**
@@ -919,11 +536,15 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId) {
       generatedAt: new Date()
     }];
 
-    // **FIX: Update duration and videoType based on actual processed result**
     if (hybridResult.duration && hybridResult.duration > 0) {
       video.duration = hybridResult.duration;
-      // Recalculate videoType based on accurate duration (yug <= 60s, vayu > 60s)
-      video.videoType = video.duration > 60 ? 'vayu' : 'yog';
+    }
+    
+    // **SOURCE OF TRUTH: Always update videoType and aspectRatio based on actual processed result**
+    if (hybridResult.aspectRatio) {
+      video.aspectRatio = hybridResult.aspectRatio;
+      video.videoType = hybridResult.aspectRatio > 1.0 ? 'vayu' : 'yog';
+      console.log(`📏 Updated metadata for ${videoId}: AR=${video.aspectRatio}, Type=${video.videoType}`);
     }
 
     await video.save();

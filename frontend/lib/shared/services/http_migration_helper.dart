@@ -32,7 +32,6 @@
 /// SERVICES TO UPDATE:
 /// - authservices.dart ✅ (completed)
 /// - video_service.dart ✅ (completed) 
-/// - cloudinary_service.dart ✅ (completed)
 /// - cloudflare_r2_service.dart ✅ (completed)
 /// - ad_service.dart ✅ (completed)
 /// - user_service.dart ✅ (completed)

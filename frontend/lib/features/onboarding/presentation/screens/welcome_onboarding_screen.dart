@@ -48,8 +48,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
         setState(() {
           _heading = config.getText(
             'welcome_onboarding_heading',
-            fallback:
-                'World First Ad-free Video Streaming app',
+            fallback: 'World First Ad-free Video Streaming app',
           );
           _buttonText = config.getText(
             'welcome_onboarding_button',
@@ -96,7 +95,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
       backgroundColor: AppColors.backgroundPrimary,
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -104,22 +103,22 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
 
               // Icon
               Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
                   color: AppColors.backgroundSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.video_camera_front_rounded,
                   size: 64,
                   color: AppColors.textPrimary,
                 ),
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
 
               // Main heading text - Backend-driven
               if (_isLoading)
-                SizedBox(
+                const SizedBox(
                   height: 60,
                   child: Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
@@ -134,7 +133,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
 
               // Supporting text - Backend-driven
               if (!_isLoading && _subheading.isNotEmpty)
@@ -165,7 +164,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                 isFullWidth: true,
                 size: AppButtonSize.large,
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
               // Legal Disclosure
               RichText(
                 textAlign: TextAlign.center,
@@ -178,28 +177,30 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                     const TextSpan(text: 'By continuing, you agree to our '),
                     TextSpan(
                       text: 'Terms of Service',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppColors.primary,
                         decoration: TextDecoration.underline,
                       ),
                       recognizer: TapGestureRecognizer()
-                        ..onTap = () => _launchURL('https://snehayog.site/terms.html'),
+                        ..onTap = () =>
+                            _launchURL('https://snehayog.site/terms.html'),
                     ),
                     const TextSpan(text: ' and '),
                     TextSpan(
                       text: 'Privacy Policy',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppColors.primary,
                         decoration: TextDecoration.underline,
                       ),
                       recognizer: TapGestureRecognizer()
-                        ..onTap = () => _launchURL('https://snehayog.site/privacy.html'),
+                        ..onTap = () =>
+                            _launchURL('https://snehayog.site/privacy.html'),
                     ),
                     const TextSpan(text: '.'),
                   ],
                 ),
               ),
-              SizedBox(height: 32),
+              const SizedBox(height: 32),
             ],
           ),
         ),

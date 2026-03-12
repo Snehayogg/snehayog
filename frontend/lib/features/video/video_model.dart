@@ -82,6 +82,37 @@ class VideoModel {
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
     try {
+      final parsedAspectRatio = (json['aspectRatio'] is num)
+          ? (json['aspectRatio'] as num).toDouble()
+          : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
+              9 / 16;
+      final rawVideoType = (json['videoType'] ??
+              json['video_type'] ??
+              json['type'])
+          ?.toString()
+          .trim()
+          .toLowerCase();
+      final normalizedVideoType = () {
+        if (rawVideoType == null || rawVideoType.isEmpty) {
+          return parsedAspectRatio > 1.0 ? 'vayu' : 'yog';
+        }
+
+        switch (rawVideoType) {
+          case 'long':
+          case 'longform':
+          case 'long_form':
+          case 'long-form':
+            return 'vayu';
+          case 'short':
+          case 'shortform':
+          case 'short_form':
+          case 'short-form':
+          case 'reel':
+            return 'yog';
+          default:
+            return rawVideoType;
+        }
+      }();
 
       return VideoModel(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
@@ -217,11 +248,8 @@ class VideoModel {
             return <String>[];
           }
         }(),
-        videoType: json['videoType']?.toString() ?? 'reel',
-        aspectRatio: (json['aspectRatio'] is num)
-            ? json['aspectRatio'].toDouble()
-            : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
-                9 / 16,
+        videoType: normalizedVideoType,
+        aspectRatio: parsedAspectRatio,
         duration: Duration(
             seconds: (json['duration'] is num)
                 ? (json['duration'] as num).toInt()

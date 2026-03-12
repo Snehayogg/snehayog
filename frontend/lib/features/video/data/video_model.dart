@@ -78,6 +78,45 @@ class VideoModel {
 
   factory VideoModel.fromJson(Map<String, dynamic> json) {
     try {
+      final parsedAspectRatio = (json['aspectRatio'] is num)
+          ? (json['aspectRatio'] as num).toDouble()
+          : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
+              9 / 16;
+      final rawVideoType =
+          (json['videoType'] ?? json['video_type'] ?? json['type'])
+              ?.toString()
+              .trim()
+              .toLowerCase();
+
+      // **FIXED: Trust backend videoType completely - no frontend re-classification**
+      // Backend is the source of truth for video type classification
+      final normalizedVideoType = () {
+        if (rawVideoType == null || rawVideoType.isEmpty) {
+          // Only use aspectRatio as fallback if backend didn't provide videoType
+          return parsedAspectRatio > 1.0 ? 'vayu' : 'yog';
+        }
+
+        // Normalize legacy aliases to standard types
+        switch (rawVideoType) {
+          case 'long':
+          case 'longform':
+          case 'long_form':
+          case 'long-form':
+            return 'vayu';
+          case 'short':
+          case 'shortform':
+          case 'short_form':
+          case 'short-form':
+            return 'yog';
+          // Trust backend values directly
+          case 'vayu':
+          case 'yog':
+            return rawVideoType;
+          default:
+            // For any unknown values, use aspectRatio to determine
+            return parsedAspectRatio > 1.0 ? 'vayu' : 'yog';
+        }
+      }();
 
       return VideoModel(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
@@ -100,7 +139,6 @@ class VideoModel {
         description: json['description']?.toString(), // Parse description field
 
         uploader: () {
-
           Uploader uploader;
           if (json['uploader'] is Map<String, dynamic>) {
             final uploaderMap =
@@ -162,8 +200,7 @@ class VideoModel {
                   ? resolvedGoogleId
                   : uploader.googleId,
             );
-          } else {
-          }
+          } else {}
 
           return uploader;
         }(),
@@ -179,10 +216,10 @@ class VideoModel {
             if (json['likedBy'] is List) {
               final likedByList = json['likedBy'] as List;
               final List<String> parsedLikedBy = <String>[];
-              
+
               for (final dynamic item in likedByList) {
                 if (item == null) continue;
-                
+
                 String idStr = "";
                 if (item is String) {
                   idStr = item;
@@ -191,7 +228,7 @@ class VideoModel {
                 } else {
                   idStr = item.toString();
                 }
-                
+
                 // **ROBUSTNESS: Strip MongoDB ObjectId(...) wrapper if present**
                 if (idStr.contains('ObjectId("')) {
                   final start = idStr.indexOf('ObjectId("') + 10;
@@ -200,7 +237,7 @@ class VideoModel {
                     idStr = idStr.substring(start, end);
                   }
                 }
-                
+
                 if (idStr.isNotEmpty) {
                   parsedLikedBy.add(idStr);
                 }
@@ -213,17 +250,13 @@ class VideoModel {
             return <String>[];
           }
         }(),
-        videoType: json['videoType']?.toString() ?? 'reel',
-        aspectRatio: (json['aspectRatio'] is num)
-            ? json['aspectRatio'].toDouble()
-            : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
-                9 / 16,
+        videoType: normalizedVideoType,
+        aspectRatio: parsedAspectRatio,
         duration: Duration(
             seconds: (json['duration'] is num)
                 ? (json['duration'] as num).toInt()
                 : int.tryParse(json['duration']?.toString() ?? '0') ?? 0),
         link: () {
-
           // Try multiple possible field names for the link
           final possibleFields = ['link', 'externalLink', 'websiteUrl', 'url'];
 
@@ -232,10 +265,8 @@ class VideoModel {
               final linkValue = json[field]?.toString().trim();
               if (linkValue?.isNotEmpty == true) {
                 return linkValue;
-              } else {
-              }
-            } else {
-            }
+              } else {}
+            } else {}
           }
 
           return null;
@@ -265,8 +296,7 @@ class VideoModel {
               for (final dynamic variant in variantsList) {
                 if (variant is Map<String, dynamic>) {
                   parsedVariants.add(variant);
-                } else {
-                }
+                } else {}
               }
               return parsedVariants;
             }
@@ -328,10 +358,11 @@ class VideoModel {
         isLiked: json['isLiked'] == true,
       );
     } catch (e) {
-      
       // Return a minimal valid VideoModel instead of crashing the whole feed
       return VideoModel(
-        id: json['_id']?.toString() ?? json['id']?.toString() ?? 'error_${DateTime.now().millisecondsSinceEpoch}',
+        id: json['_id']?.toString() ??
+            json['id']?.toString() ??
+            'error_${DateTime.now().millisecondsSinceEpoch}',
         videoName: 'Content Unavailable',
         videoUrl: '',
         thumbnailUrl: '',
@@ -342,7 +373,7 @@ class VideoModel {
         uploadedAt: DateTime.now(),
         likedBy: [],
         videoType: 'yog',
-        aspectRatio: 9/16,
+        aspectRatio: 9 / 16,
         duration: Duration.zero,
       );
     }
@@ -555,7 +586,9 @@ class Uploader {
         profilePic: json['profilePic']?.toString() ?? '',
         googleId: resolvedGoogleId,
         mongoId: mongoId,
-        totalVideos: json['totalVideos'] is int ? json['totalVideos'] : int.tryParse(json['totalVideos']?.toString() ?? ''),
+        totalVideos: json['totalVideos'] is int
+            ? json['totalVideos']
+            : int.tryParse(json['totalVideos']?.toString() ?? ''),
         earnings: (json['earnings'] is num)
             ? json['earnings'].toDouble()
             : double.tryParse(json['earnings']?.toString() ?? '0.0') ?? 0.0,
@@ -597,6 +630,3 @@ class Uploader {
     };
   }
 }
-
-
-

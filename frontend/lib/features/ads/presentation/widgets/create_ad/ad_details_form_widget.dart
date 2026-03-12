@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 /// **AdDetailsFormWidget - Handles ad title, description, and link input**
 /// For banner ads, only shows link field (title/description not needed)
@@ -58,21 +55,27 @@ class AdDetailsFormWidget extends StatelessWidget {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isTitleValid == false) ? AppColors.error : AppColors.borderPrimary,
+                color: (isTitleValid == false)
+                    ? AppColors.error
+                    : AppColors.borderPrimary,
                 width: (isTitleValid == false) ? 2.0 : 1.0,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isTitleValid == false) ? AppColors.error : AppColors.borderPrimary,
+                color: (isTitleValid == false)
+                    ? AppColors.error
+                    : AppColors.borderPrimary,
                 width: (isTitleValid == false) ? 2.0 : 1.0,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isTitleValid == false) ? AppColors.error : AppColors.primary,
+                color: (isTitleValid == false)
+                    ? AppColors.error
+                    : AppColors.primary,
                 width: (isTitleValid == false) ? 2.0 : 2.0,
               ),
             ),
@@ -96,24 +99,27 @@ class AdDetailsFormWidget extends StatelessWidget {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color:
-                      (isDescriptionValid == false) ? AppColors.error : AppColors.borderPrimary,
+                  color: (isDescriptionValid == false)
+                      ? AppColors.error
+                      : AppColors.borderPrimary,
                   width: (isDescriptionValid == false) ? 2.0 : 1.0,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color:
-                      (isDescriptionValid == false) ? AppColors.error : AppColors.borderPrimary,
+                  color: (isDescriptionValid == false)
+                      ? AppColors.error
+                      : AppColors.borderPrimary,
                   width: (isDescriptionValid == false) ? 2.0 : 1.0,
                 ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color:
-                      (isDescriptionValid == false) ? AppColors.error : AppColors.primary,
+                  color: (isDescriptionValid == false)
+                      ? AppColors.error
+                      : AppColors.primary,
                   width: (isDescriptionValid == false) ? 2.0 : 2.0,
                 ),
               ),
@@ -140,21 +146,27 @@ class AdDetailsFormWidget extends StatelessWidget {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isLinkValid == false) ? AppColors.error : AppColors.borderPrimary,
+                color: (isLinkValid == false)
+                    ? AppColors.error
+                    : AppColors.borderPrimary,
                 width: (isLinkValid == false) ? 2.0 : 1.0,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isLinkValid == false) ? AppColors.error : AppColors.borderPrimary,
+                color: (isLinkValid == false)
+                    ? AppColors.error
+                    : AppColors.borderPrimary,
                 width: (isLinkValid == false) ? 2.0 : 1.0,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: (isLinkValid == false) ? AppColors.error : AppColors.primary,
+                color: (isLinkValid == false)
+                    ? AppColors.error
+                    : AppColors.primary,
                 width: (isLinkValid == false) ? 2.0 : 2.0,
               ),
             ),

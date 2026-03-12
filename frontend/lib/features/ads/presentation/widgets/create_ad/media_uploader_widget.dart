@@ -1,17 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:vayu/shared/utils/banner_image_processor.dart';
 
 /// **MediaUploaderWidget - Handles media file uploads for ads**
-class MediaUploaderWidget extends StatefulWidget {
+class MediaUploaderWidget extends ConsumerStatefulWidget {
   final String selectedAdType;
   final File? selectedImage;
   final File? selectedVideo;
@@ -26,7 +24,7 @@ class MediaUploaderWidget extends StatefulWidget {
   final String? mediaError;
 
   const MediaUploaderWidget({
-    Key? key,
+    super.key,
     required this.selectedAdType,
     required this.selectedImage,
     required this.selectedVideo,
@@ -38,18 +36,18 @@ class MediaUploaderWidget extends StatefulWidget {
     // **NEW: Optional validation parameters**
     this.isMediaValid,
     this.mediaError,
-  }) : super(key: key);
+  });
 
   @override
-  State<MediaUploaderWidget> createState() => _MediaUploaderWidgetState();
+  ConsumerState<MediaUploaderWidget> createState() => _MediaUploaderWidgetState();
 }
 
-class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
+class _MediaUploaderWidgetState extends ConsumerState<MediaUploaderWidget> {
   @override
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -60,7 +58,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                 color: AppColors.white,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -79,30 +77,31 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                 ),
                 if (widget.isMediaValid == false && widget.mediaError != null)
                   Padding(
-                    padding: EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       widget.mediaError!,
-                      style: TextStyle(color: AppColors.error, fontSize: 12),
+                      style:
+                          const TextStyle(color: AppColors.error, fontSize: 12),
                     ),
                   ),
               ],
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: AppButton(
                     onPressed: _pickImage,
-                    icon: Icon(Icons.image),
+                    icon: const Icon(Icons.image),
                     label: _getImageButtonLabel(),
                     variant: AppButtonVariant.primary,
                   ),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Expanded(
                   child: AppButton(
                     onPressed: _isVideoAllowed() ? _pickVideo : null,
-                    icon: Icon(Icons.video_library),
+                    icon: const Icon(Icons.video_library),
                     label: _getVideoButtonLabel(),
                     variant: AppButtonVariant.secondary,
                     isDisabled: !_isVideoAllowed(),
@@ -110,10 +109,10 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                 ),
               ],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               _getMediaHelpText(),
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
@@ -137,7 +136,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         itemBuilder: (context, index) {
           return Container(
             width: 150,
-            margin: EdgeInsets.all(8),
+            margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.borderPrimary),
@@ -159,12 +158,12 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                   child: GestureDetector(
                     onTap: () => _removeImageFromCarousel(index),
                     child: Container(
-                      padding: EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         color: AppColors.error.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.close,
                         color: AppColors.white,
                         size: 16,
@@ -177,14 +176,14 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                   left: 4,
                   child: Container(
                     padding:
-                        EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       '${index + 1}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppColors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -222,15 +221,16 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
                   ),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
-                child: Text(
+                child: const Text(
                   'Banner Preview (320x100)',
                   style: TextStyle(
                     fontSize: 12,
@@ -258,7 +258,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           color: AppColors.backgroundPrimary,
-          child: Center(
+          child: const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -285,15 +285,15 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
           ),
           Text(
             _getPlaceholderText(),
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.textTertiary,
               fontSize: 16,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             _getPlaceholderSubtext(),
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.error,
               fontSize: 12,
             ),
@@ -305,17 +305,17 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
   Widget _buildVideoTip() {
     return Container(
-      margin: EdgeInsets.only(top: 8),
-      padding: EdgeInsets.all(8),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppColors.success.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
       ),
-      child: Row(
+      child: const Row(
         children: [
           Icon(Icons.video_library, size: 16, color: AppColors.success),
-           SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               '🎬 Video Tip: For best results, use MP4 videos with H.264 encoding. Keep file size under 100MB for faster uploads.',
@@ -333,17 +333,17 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
   Widget _buildCarouselTip() {
     return Container(
-      margin: EdgeInsets.only(top: 8),
-      padding: EdgeInsets.all(8),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppColors.warning.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
       ),
-      child: Row(
+      child: const Row(
         children: [
           Icon(Icons.view_carousel, size: 16, color: AppColors.warning),
-           SizedBox(width: 8),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               '🎠 Carousel Tip: Choose either multiple images (up to 3) OR a single video for your carousel. This creates a cleaner, more focused ad experience.',
@@ -438,7 +438,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     final ImagePicker picker = ImagePicker();
     // prevent autoplay on resume
     if (mounted) {
-      Provider.of<MainController>(context, listen: false)
+      ref.read(mainControllerProvider)
           .setMediaPickerActive(true);
     }
     final XFile? image = await picker.pickImage(
@@ -448,7 +448,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       imageQuality: 85,
     );
     if (mounted) {
-      Provider.of<MainController>(context, listen: false)
+      ref.read(mainControllerProvider)
           .setMediaPickerActive(false);
     }
 
@@ -484,9 +484,10 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         builder: (context) => AlertDialog(
           title: Text(
             'Switch to Video?',
-            style: AppTypography.headlineSmall.copyWith(fontSize: 18, color: AppColors.white),
+            style: AppTypography.headlineSmall
+                .copyWith(fontSize: 18, color: AppColors.white),
           ),
-          content: Text(
+          content: const Text(
             'You currently have images selected. Would you like to switch to video? This will remove all selected images.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -532,9 +533,10 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
         builder: (context) => AlertDialog(
           title: Text(
             'Switch to Images?',
-            style: AppTypography.headlineSmall.copyWith(fontSize: 18, color: AppColors.white),
+            style: AppTypography.headlineSmall
+                .copyWith(fontSize: 18, color: AppColors.white),
           ),
-          content: Text(
+          content: const Text(
             'You currently have a video selected. Would you like to switch to images? This will remove the selected video.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -570,8 +572,8 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     choice = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Select Media Type'),
-        content: Text(
+        title: const Text('Select Media Type'),
+        content: const Text(
             'Carousel ads support either multiple images (up to 3) OR a single video. Choose one:'),
         actions: [
           AppButton(
@@ -608,7 +610,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
 
     final ImagePicker picker = ImagePicker();
     if (mounted) {
-      Provider.of<MainController>(context, listen: false)
+      ref.read(mainControllerProvider)
           .setMediaPickerActive(true);
     }
     final List<XFile> images = await picker.pickMultiImage(
@@ -617,7 +619,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       imageQuality: 85,
     );
     if (mounted) {
-      Provider.of<MainController>(context, listen: false)
+      ref.read(mainControllerProvider)
           .setMediaPickerActive(false);
     }
 
@@ -653,7 +655,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
     // Restrict to gallery videos only
     final ImagePicker picker = ImagePicker();
     if (mounted) {
-      Provider.of<MainController>(context, listen: false)
+      ref.read(mainControllerProvider)
           .setMediaPickerActive(true);
     }
     final XFile? picked = await picker.pickVideo(
@@ -661,7 +663,7 @@ class _MediaUploaderWidgetState extends State<MediaUploaderWidget> {
       maxDuration: const Duration(minutes: 5),
     );
     if (mounted) {
-      Provider.of<MainController>(context, listen: false)
+      ref.read(mainControllerProvider)
           .setMediaPickerActive(false);
     }
 

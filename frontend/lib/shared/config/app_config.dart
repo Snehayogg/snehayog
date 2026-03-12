@@ -6,10 +6,10 @@ import 'package:vayu/shared/services/http_client_service.dart';
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
   // **NEW: API Version (Date-Based)**
-  static const String kApiVersion = '2026-03-02';
+  static const String kApiVersion = '2026-03-12';
 
   // Set to true to force local development server, false for remote server (Fly/custom domain)
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   // Use the explicit flag instead of kReleaseMode
   static bool get _isDevelopment => isDevelopment;
@@ -19,7 +19,7 @@ class AppConfig {
 
   // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
   // Make sure your phone/emulator is on the same Wi‑Fi network
-  static const String _localIpBaseUrl = 'http://192.168.0.187:5001';
+  static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
 
   // Local development server (localhost) - for web
   static const String _localWebBaseUrl = 'http://localhost:5001';

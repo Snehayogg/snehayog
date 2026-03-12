@@ -35,11 +35,6 @@ class BannerImageProcessor {
       final processedFile =
           await _saveProcessedImage(processedImg, originalImage.path);
 
-      print('✅ BannerImageProcessor: Image processed successfully');
-      print(
-          '   Final dimensions: ${processedImg.width}x${processedImg.height}');
-      print('   Processed path: ${processedFile.path}');
-
       return processedFile;
     } catch (e) {
       print('❌ BannerImageProcessor: Error processing image: $e');
@@ -53,10 +48,6 @@ class BannerImageProcessor {
     final originalHeight = originalImg.height;
     final originalAspectRatio = originalWidth / originalHeight;
 
-    print(
-        '   Original aspect ratio: ${originalAspectRatio.toStringAsFixed(2)}:1');
-    print('   Target aspect ratio: $bannerAspectRatio:1');
-
     img.Image processedImg;
 
     if (originalAspectRatio > bannerAspectRatio) {
@@ -64,8 +55,6 @@ class BannerImageProcessor {
       final targetWidth = (originalHeight * bannerAspectRatio).round();
       final cropX = ((originalWidth - targetWidth) / 2).round();
 
-      print(
-          '   Cropping width: $originalWidth -> $targetWidth (crop from x=$cropX)');
 
       processedImg = img.copyCrop(
         originalImg,

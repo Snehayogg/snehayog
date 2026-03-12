@@ -6,10 +6,7 @@ import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/services/share_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;
@@ -94,7 +91,6 @@ class VideoActionsWidget extends StatelessWidget {
 
       // Use native share
       await _shareService.shareVideo(video);
-      
     } catch (e) {
       AppLogger.log('Failed to share video: $e');
     }

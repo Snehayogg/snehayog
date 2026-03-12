@@ -127,8 +127,21 @@ class FeedQueueService {
        const needed = count - videos.length;
        console.log(`❄️ FeedQueue: Queue exhausted (got ${videos.length}). Fetching ${needed} from Safety Net.`);
        
-       // Calculate exclusion list: Popped + all seen in history
+       // Calculate exclusion list:
+       // - Popped in THIS request
+       // - All seen in history
+       // - Everything still sitting in the Redis queue (prevents immediate duplicates)
+       // This is important under fast scrolling where multiple requests overlap.
        const initialExcludes = new Set(videos);
+
+       try {
+         const remainingQueued = await redisService.lRange(queueKey, 0, -1);
+         if (Array.isArray(remainingQueued) && remainingQueued.length > 0) {
+           remainingQueued.forEach(id => initialExcludes.add(id));
+         }
+       } catch (e) {
+         // ignore - fallback will still work, just less duplicate-safe
+       }
        
        if (userId !== 'anon' && userId !== 'undefined') {
           try {
@@ -162,6 +175,19 @@ class FeedQueueService {
           videos.push(...fallbackIds);
        }
        tFallback = Date.now() - t3;
+    }
+
+    // 5.5 Track recently served IDs (session buffer) to reduce duplication during overlaps
+    // generateAndPushFeed already consults this list.
+    try {
+      const recentKey = `user:recent_served:${userId}`;
+      if (videos.length > 0 && userId !== 'undefined') {
+        await redisService.lPush(recentKey, videos);
+        await redisService.lTrim(recentKey, 0, 199);
+        await redisService.expire(recentKey, 3600);
+      }
+    } catch (e) {
+      // non-fatal
     }
 
     // 6. Populate video details
@@ -366,8 +392,8 @@ class FeedQueueService {
       try {
           // Only fetch Recent for Yug (short videos) generally, or if specific constraint allows
           const recentQuery = { processingStatus: 'completed' };
-          if (videoType === 'vayu') recentQuery.duration = { $gt: 120 };
-          else recentQuery.duration = { $lte: 120 };
+          // **FIX: Use videoType field directly instead of duration**
+          recentQuery.videoType = videoType;
           
           // **FIX: Use ObjectId for uploader exclusion to prevent CastError**
           if (uploaderObjectId) {
@@ -417,9 +443,9 @@ class FeedQueueService {
       // **STEP B: Pagination Loop for Popular & Discovery**
       while ((freshVideos.length < POPULAR_TARGET || discoveryVideos.length < DISCOVERY_TARGET) && pageCount < MAX_PAGES) {
           const candidateQuery = { processingStatus: 'completed' };
-          if (videoType === 'vayu') candidateQuery.duration = { $gt: 120 };
-          else candidateQuery.duration = { $lte: 120 };
-
+          // **FIX: Use videoType field directly instead of duration**
+          candidateQuery.videoType = videoType;
+                
           // Exclude own videos from feed
           // **FIX: Use ObjectId for uploader exclusion to prevent CastError**
           if (uploaderObjectId) {
@@ -556,8 +582,8 @@ class FeedQueueService {
           }).filter(Boolean) }
         };
 
-        if (videoType === 'vayu') matchStage.duration = { $gt: 120 };
-        else matchStage.duration = { $lte: 120 };
+        if (videoType === 'vayu') matchStage.videoType = 'vayu';
+        else matchStage.videoType = 'yog';
 
         const discoveryVideos = await Video.find(matchStage)
           .sort({ finalScore: -1, createdAt: -1 }) // Prioritize High Score (which includes Discovery Bonus) + Newest
@@ -582,15 +608,14 @@ class FeedQueueService {
           const lruOldestIds = await FeedHistory.getLRUVideos(userId, 1000);
           
           if (lruOldestIds.length > 0) {
-             // 2. Fetch basic data to filter by duration/type
+             // 2. Fetch basic data to filter by videoType
              const rawVideos = await Video.find({
                 _id: { $in: lruOldestIds }
-             }).select('_id duration processingStatus').lean();
+             }).select('_id videoType processingStatus').lean();
              
              const candidates = rawVideos.filter(v => {
-                const isVayu = v.duration > 120;
-                const isYog = v.duration <= 120;
-                const typeMatch = (videoType === 'vayu' && isVayu) || (videoType !== 'vayu' && isYog);
+                // **FIX: Use videoType field instead of duration calculation**
+                const typeMatch = v.videoType === videoType;
                 // Exclude what's already in finalIds for this request
                 return v.processingStatus === 'completed' && typeMatch && !finalIds.includes(v._id.toString());
              }).map(v => v._id.toString());
@@ -619,8 +644,8 @@ class FeedQueueService {
             }).filter(Boolean) }
         };
 
-        if (videoType === 'vayu') matchStage.duration = { $gt: 120 };
-        else matchStage.duration = { $lte: 120 };
+        if (videoType === 'vayu') matchStage.videoType = 'vayu';
+        else matchStage.videoType = 'yog';
 
         const randomVideos = await Video.aggregate([
           { $match: matchStage },

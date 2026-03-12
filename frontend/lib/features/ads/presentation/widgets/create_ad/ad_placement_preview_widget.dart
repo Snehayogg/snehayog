@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'dart:io';
 
 /// Visual preview showing where ads appear in the app
@@ -38,11 +35,11 @@ class AdPlacementPreviewWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(Icons.phone_android, color: AppColors.primary),
-                const SizedBox(width: 8),
-                const Text(
+                SizedBox(width: 8),
+                Text(
                   'Ad Placement Preview',
                   style: TextStyle(
                     fontSize: 18,

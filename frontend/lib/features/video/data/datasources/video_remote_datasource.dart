@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/exceptions/app_exceptions.dart';
 import 'package:vayu/features/video/video_model.dart';
@@ -36,7 +35,7 @@ class VideoRemoteDataSource {
       try {
         final prefs = await SharedPreferences.getInstance();
         token = prefs.getString('jwt_token');
-        
+
         // If token null, try fallback_user to see if we have an ID at least
         if (token == null) {
           final fallback = prefs.getString('fallback_user');
@@ -46,7 +45,8 @@ class VideoRemoteDataSource {
           }
         }
       } catch (e) {
-        AppLogger.log('⚠️ VideoRemoteDataSource: Error getting cached token: $e');
+        AppLogger.log(
+            '⚠️ VideoRemoteDataSource: Error getting cached token: $e');
       }
 
       // Add platformId and videoType to query params
@@ -307,7 +307,6 @@ class VideoRemoteDataSource {
       return false;
     }
   }
-
 
   // _makeRequest method removed - using httpClientService which handles retries automatically
 

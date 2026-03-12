@@ -58,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         elevation: 0,
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : ListView.separated(
               padding: EdgeInsets.all(AppSpacing.spacing4),
               itemCount: 3,
@@ -197,7 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title,
         style: AppTypography.bodyMedium.copyWith(color: color),
       ),
-      trailing: Icon(Icons.chevron_right, color: AppColors.textTertiary),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary),
     );
   }
 }

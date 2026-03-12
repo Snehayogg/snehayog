@@ -78,7 +78,6 @@ class HLSEncodingService {
     const {
       segmentDuration = 3, // Optimized segment duration: 3 seconds for fast startup
       quality = 'medium', // low, medium, high (medium = 480p optimal)
-      resolution = '480p', // Fixed to 480p for cost optimization (single quality only)
       codec = 'h265', // 'h264' or 'h265' - H.265 for ~50% bandwidth savings
       copyVideo = false, // Instant packaging, skips video transcoding
       copyAudio = false  // Instant packaging, skips audio transcoding
@@ -339,45 +338,36 @@ class HLSEncodingService {
     // Quality variants optimized for INSTANT loading and fast startup
     // Segment duration: 2 seconds for fastest possible startup
     // CRF ~20 for better quality, ultrafast preset for speed
-    // **UPDATED: 9:16 aspect ratio for reels-style full screen videos**
     const variants = [
-      { 
-        name: '720p', 
-        crf: 24, 
-        width: 720, 
-        height: 1280, // 9:16 aspect ratio
-        audioBitrate: '96k', 
-        targetBitrate: '1200k',
-        segmentDuration: 2 // 2 seconds for instant startup
-      },
-      { 
-        name: '480p', 
-        crf: 26, 
-        width: 480, 
-        height: 854, // 9:16 aspect ratio
-        audioBitrate: '64k', 
-        targetBitrate: '550k',
-        segmentDuration: 2
-      },
-      { 
-        name: '360p', 
-        crf: 28, 
-        width: 360, 
-        height: 640, // 9:16 aspect ratio
-        audioBitrate: '48k', 
-        targetBitrate: '350k',
-        segmentDuration: 2
-      },
-      { 
-        name: '240p', 
-        crf: 30, 
-        width: 240, 
-        height: 426, // 9:16 aspect ratio
-        audioBitrate: '32k', 
-        targetBitrate: '150k',
-        segmentDuration: 2
-      }
-    ];
+  {
+    name: '720p',
+    height: 720,
+    crf: 24,
+    audioBitrate:'96k',
+    targetBitrate:'1200k'
+  },
+  {
+    name: '480p',
+    height: 480,
+    crf: 26,
+    audioBitrate:'64k',
+    targetBitrate:'550k'
+  },
+  {
+    name: '360p',
+    height: 360,
+    crf: 28,
+    audioBitrate:'48k',
+    targetBitrate:'350k'
+  },
+  {
+    name: '240p',
+    height: 240,
+    crf: 30,
+    audioBitrate:'32k',
+    targetBitrate:'150k'
+  }
+];
 
     let codec = options.codec || 'h264';
     if (codec === 'h265') {
@@ -428,67 +418,83 @@ class HLSEncodingService {
    */
   async encodeVariant(inputPath, outputDir, variant, segmentDuration, videoId, variantOptions = {}) {
     return new Promise((resolve, reject) => {
-      const playlistPath = path.join(outputDir, 'playlist.m3u8');
-      const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const codec = variantOptions.codec || 'h264';
-      const isH265 = codec === 'h265';
-      
-      console.log(`[HLS] ${videoId} | variant ${variant.name} | START | ${codec.toUpperCase()} ${variant.width}x${variant.height}`);
-      
-      let lastVariantProgress = 0;
-      const videoOpts = isH265
-        ? ['-c:v', 'libx265', '-tag:v', 'hvc1', '-preset', 'superfast', '-tune', 'fastdecode', '-crf', variant.crf.toString(),
-           '-maxrate', variant.targetBitrate, '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`,
-           '-x265-params', 'keyint=60:min-keyint=60:scenecut=0:superfast=1', '-threads', '0', '-pix_fmt', 'yuv420p']
-        : ['-c:v', 'libx264', '-preset', 'superfast', '-profile:v', 'baseline', '-level', '3.0',
-           '-crf', variant.crf.toString(), '-maxrate', variant.targetBitrate,
-           '-bufsize', `${parseInt(variant.targetBitrate) * 2}k`, '-threads', '0', '-pix_fmt', 'yuv420p'];
-      
-      ffmpeg(inputPath)
-        .inputOptions(['-y', '-hide_banner', '-loglevel error'])
-        .outputOptions([
-          ...videoOpts,
-          '-c:a', 'aac', '-b:a', variant.audioBitrate, '-ac', '2', '-ar', '44100',
-          '-f', 'hls', '-hls_time', segmentDuration.toString(), '-hls_list_size', '0',
-          '-hls_segment_filename', path.join(outputDir, 'segment_%03d.ts'),
-          '-hls_playlist_type', 'vod', '-hls_flags', 'independent_segments',
-          '-hls_segment_type', 'mpegts'
-        ])
-        // Respect original aspect; pad if required to target dimensions
-        .videoFilters(`scale='min(${variant.width},iw)':-2:force_original_aspect_ratio=decrease,pad=${variant.width}:${variant.height}:(ow-iw)/2:(oh-ih)/2:black`)
-        .size(`${variant.width}x${variant.height}`)
-        .output(playlistPath)
-        .on('progress', (progress) => {
-          const pct = Math.floor(parseFloat(progress.percent) || 0);
-          if (pct >= lastVariantProgress + 50 || pct >= 99) {
-            lastVariantProgress = pct;
-            console.log(`[HLS] ${videoId} | variant ${variant.name} | ${pct}%`);
-          }
-        })
-        .on('end', () => {
-          try {
-            const segments = fs.readdirSync(outputDir).filter(file => file.endsWith('.ts'));
-            console.log(`[HLS] ${videoId} | variant ${variant.name} | DONE | segments=${segments.length}`);
-            resolve({
-              name: variant.name,
-              playlistPath,
-              playlistUrl: `/uploads/hls/${cleanVideoId}/${variant.name}/playlist.m3u8`,
-              segments: segments.length,
-              resolution: `${variant.width}x${variant.height}`,
-              bitrate: variant.targetBitrate,
-              segmentDuration: segmentDuration
-            });
-          } catch (error) {
-            reject(new Error(`Failed to read output directory: ${error.message}`));
-          }
-        })
-        .on('error', (error) => {
-          console.error(`[HLS] ${videoId} | variant ${variant.name} | ERROR | ${error.message}`);
-          reject(new Error(`FFmpeg encoding failed: ${error.message}`));
-        })
-        .run();
-    });
-  }
+
+    const playlistPath = path.join(outputDir, 'playlist.m3u8');
+    const cleanVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    const codec = variantOptions.codec || 'h264';
+    const isH265 = codec === 'h265';
+
+    console.log(`[HLS] ${videoId} | variant ${variant.name} | START`);
+
+    const videoOpts = isH265
+      ? [
+          '-c:v','libx265',
+          '-tag:v','hvc1',
+          '-preset','superfast',
+          '-crf', variant.crf.toString(),
+          '-maxrate', variant.targetBitrate,
+          '-bufsize', `${parseInt(variant.targetBitrate)*2}k`,
+          '-pix_fmt','yuv420p'
+        ]
+      : [
+          '-c:v','libx264',
+          '-preset','superfast',
+          '-profile:v','baseline',
+          '-level','3.0',
+          '-crf', variant.crf.toString(),
+          '-maxrate', variant.targetBitrate,
+          '-bufsize', `${parseInt(variant.targetBitrate)*2}k`,
+          '-pix_fmt','yuv420p'
+        ];
+
+    // 🔥 ORIENTATION SAFE SCALE
+    const scaleFilter = `scale='if(gt(iw,ih),-2,${variant.height})':'if(gt(ih,iw),-2,${variant.height})'`;
+
+    ffmpeg(inputPath)
+      .inputOptions(['-y','-hide_banner','-loglevel error'])
+      .videoFilters(scaleFilter)
+      .outputOptions([
+        ...videoOpts,
+
+        '-c:a','aac',
+        '-b:a',variant.audioBitrate,
+        '-ac','2',
+        '-ar','44100',
+
+        '-f','hls',
+        '-hls_time',segmentDuration.toString(),
+        '-hls_list_size','0',
+        '-hls_segment_filename', path.join(outputDir,'segment_%03d.ts'),
+        '-hls_playlist_type','vod',
+        '-hls_flags','independent_segments',
+        '-hls_segment_type','mpegts'
+      ])
+      .output(playlistPath)
+
+      .on('end', () => {
+        const segments = fs.readdirSync(outputDir).filter(f => f.endsWith('.ts'));
+
+        console.log(`[HLS] ${videoId} | variant ${variant.name} | DONE segments=${segments.length}`);
+
+        resolve({
+          name: variant.name,
+          playlistPath,
+          playlistUrl:`/uploads/hls/${cleanVideoId}/${variant.name}/playlist.m3u8`,
+          segments:segments.length,
+          bitrate:variant.targetBitrate
+        });
+      })
+
+      .on('error',(err)=>{
+        console.error(`[HLS] ${videoId} | variant ${variant.name} ERROR`,err);
+        reject(err);
+      })
+
+      .run();
+
+  });
+}
 
   /**
    * Generate master playlist for adaptive streaming

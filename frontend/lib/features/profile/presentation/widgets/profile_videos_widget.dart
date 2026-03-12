@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
-import 'dart:ui';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 
@@ -74,6 +70,65 @@ class ProfileVideosWidget extends StatelessWidget {
     final progress = video.processingProgress.clamp(0, 100);
     return 'Processing $progress%';
   }
+
+  /// **FIXED: Keep normalization only for navigation routing (which player to use)**
+  /// But NOT for filtering - backend handles all filtering
+  String _normalizedVideoType(VideoModel video) {
+    // **PRIORITY 1: Physical Aspect Ratio (Source of Truth for Layout)**
+    if (video.aspectRatio > 1.1) return 'vayu'; // Landscape
+    if (video.aspectRatio < 0.9) return 'yog';  // Portrait
+
+    // **PRIORITY 2: Metadata (If roughly square, trust backend or previous inference)**
+    final normalized = video.videoType.trim().toLowerCase();
+    if (normalized == 'long' ||
+        normalized == 'longform' ||
+        normalized == 'long_form' ||
+        normalized == 'long-form') {
+      return 'vayu';
+    }
+    if (normalized == 'short' ||
+        normalized == 'shortform' ||
+        normalized == 'short_form' ||
+        normalized == 'short-form' ||
+        normalized == 'reel') {
+      return 'yog';
+    }
+    // Trust backend values directly if they are already normalized
+    if (normalized == 'vayu' || normalized == 'yog') {
+      return normalized;
+    }
+    return normalized;
+  }
+
+  bool _matchesFilter(VideoModel video) {
+    if (filterVideoType == null || filterVideoType!.isEmpty) return true;
+    
+    final normalizedType = _normalizedVideoType(video);
+    return normalizedType == filterVideoType!.toLowerCase();
+  }
+
+  String _emptyTitle() {
+    switch (filterVideoType?.trim().toLowerCase()) {
+      case 'yog':
+        return 'No Yug videos yet';
+      case 'vayu':
+        return 'No Vayu videos yet';
+      default:
+        return 'No videos yet';
+    }
+  }
+
+  String _emptySubtitle() {
+    switch (filterVideoType?.trim().toLowerCase()) {
+      case 'yog':
+        return 'Short-form Yug videos will appear here.';
+      case 'vayu':
+        return 'Long-form Vayu videos will appear here.';
+      default:
+        return 'Upload your first video to get started!';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // **OPTIMIZED: Preload video thumbnails for better performance**
@@ -81,7 +136,7 @@ class ProfileVideosWidget extends StatelessWidget {
       _preloadVideoThumbnails(context, stateManager.userVideos);
     }
 
-    return Consumer<ProfileStateManager>(
+    return provider.Consumer<ProfileStateManager>(
       builder: (context, manager, child) {
         if (manager.isVideosLoading) {
           final loadingWidget = RepaintBoundary(
@@ -123,10 +178,15 @@ class ProfileVideosWidget extends StatelessWidget {
               ),
             ),
           );
-          return isSliver ? SliverToBoxAdapter(child: loadingWidget) : loadingWidget;
+          return isSliver
+              ? SliverToBoxAdapter(child: loadingWidget)
+              : loadingWidget;
         }
 
-        if (manager.userVideos.isEmpty) {
+        final List<VideoModel> filteredVideos =
+            manager.userVideos.where(_matchesFilter).toList(growable: false);
+
+        if (manager.userVideos.isEmpty || filteredVideos.isEmpty) {
           final emptyWidget = RepaintBoundary(
             child: Container(
               padding: const EdgeInsets.all(48),
@@ -146,18 +206,18 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const Text(
-                    'No videos yet',
-                    style: TextStyle(
+                  Text(
+                    _emptyTitle(),
+                    style: const TextStyle(
                       color: Color(0xFF374151),
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Upload your first video to get started!',
-                    style: TextStyle(
+                  Text(
+                    _emptySubtitle(),
+                    style: const TextStyle(
                       color: Color(0xFF9CA3AF),
                       fontSize: 14,
                     ),
@@ -167,31 +227,16 @@ class ProfileVideosWidget extends StatelessWidget {
               ),
             ),
           );
-          return isSliver ? SliverToBoxAdapter(child: emptyWidget) : emptyWidget;
+          return isSliver
+              ? SliverToBoxAdapter(child: emptyWidget)
+              : emptyWidget;
         }
 
         // **PRE-PROCESSING: Group Series Videos**
         final List<VideoModel> displayVideos = [];
         final Set<String> processedSeriesIds = {};
 
-        for (final video in manager.userVideos) {
-          // **NEW: Filtering based on Verticality (Aspect Ratio)**
-          // Vertical videos (9:16) -> Yug tab
-          // All others (Landscape/Square) -> Vayu tab
-          final isVertical = (video.aspectRatio < 0.8) || 
-                             (video.aspectRatio <= 1.2 && video.videoType.toLowerCase() == 'yog');
-          
-          bool shouldShow = false;
-          if (filterVideoType == null) {
-            shouldShow = true;
-          } else if (filterVideoType!.toLowerCase() == 'yog') {
-            shouldShow = isVertical;
-          } else if (filterVideoType!.toLowerCase() == 'vayu') {
-            shouldShow = !isVertical;
-          }
-
-          if (!shouldShow) continue;
-
+        for (final video in filteredVideos) {
           if (video.seriesId != null) {
             if (!processedSeriesIds.contains(video.seriesId)) {
               processedSeriesIds.add(video.seriesId!);
@@ -215,7 +260,8 @@ class ProfileVideosWidget extends StatelessWidget {
           return SliverGrid.builder(
             gridDelegate: gridDelegate,
             itemCount: displayVideos.length,
-            itemBuilder: (context, index) => _buildVideoItem(context, manager, displayVideos[index], index),
+            itemBuilder: (context, index) => _buildVideoItem(
+                context, manager, displayVideos, displayVideos[index], index),
           );
         }
 
@@ -245,7 +291,8 @@ class ProfileVideosWidget extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: gridDelegate,
                   itemCount: displayVideos.length,
-                  itemBuilder: (context, index) => _buildVideoItem(context, manager, displayVideos[index], index),
+                  itemBuilder: (context, index) => _buildVideoItem(context,
+                      manager, displayVideos, displayVideos[index], index),
                 ),
               ),
             ],
@@ -255,11 +302,13 @@ class ProfileVideosWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildVideoItem(BuildContext context, ProfileStateManager manager, VideoModel video, int index) {
+  Widget _buildVideoItem(BuildContext context, ProfileStateManager manager,
+      List<VideoModel> displayVideos, VideoModel video, int index) {
     final isSelected = manager.selectedVideoIds.contains(video.id);
     final bool isSeries = video.seriesId != null;
     final bool isProcessing = _isVideoProcessing(video);
-    final canSelectVideo = manager.isSelecting && manager.isOwner && manager.userData != null;
+    final canSelectVideo =
+        manager.isSelecting && manager.isOwner && manager.userData != null;
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -267,7 +316,8 @@ class ProfileVideosWidget extends StatelessWidget {
           if (isProcessing && !manager.isSelecting) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Video is still processing. It will be playable shortly.'),
+                content: Text(
+                    'Video is still processing. It will be playable shortly.'),
                 duration: Duration(seconds: 2),
               ),
             );
@@ -283,17 +333,17 @@ class ProfileVideosWidget extends StatelessWidget {
             final sharedPool = SharedVideoControllerPool();
             // **FIX: Stop using clearAll() as it destroys controllers needed by Other tabs**
             // sharedPool.clearAll();
-            sharedPool.pauseAllControllers(); 
+            sharedPool.pauseAllControllers();
 
             // **NEW: Check video category and navigate accordingly**
-            if (video.videoType.toLowerCase() == 'vayu') {
+            if (_normalizedVideoType(video) == 'vayu') {
               // Navigate to Long Form Player for Vayu videos
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => VayuLongFormPlayerScreen(
                     video: video,
-                    relatedVideos: manager.userVideos,
+                    relatedVideos: displayVideos,
                   ),
                 ),
               );
@@ -303,7 +353,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => VideoScreen(
-                    initialVideos: manager.userVideos,
+                    initialVideos: displayVideos,
                     initialVideoId: video.id,
                   ),
                 ),
@@ -314,7 +364,9 @@ class ProfileVideosWidget extends StatelessWidget {
           }
         },
         onLongPress: () {
-          if (manager.isOwner && manager.userData != null && !manager.isSelecting) {
+          if (manager.isOwner &&
+              manager.userData != null &&
+              !manager.isSelecting) {
             manager.enterSelectionMode();
             manager.toggleVideoSelection(video.id);
           }
@@ -340,7 +392,9 @@ class ProfileVideosWidget extends StatelessWidget {
                   child: Container(
                     width: double.infinity,
                     height: double.infinity,
-                    color: isProcessing ? AppColors.backgroundSecondary : const Color(0xFFF3F4F6),
+                    color: isProcessing
+                        ? AppColors.backgroundSecondary
+                        : const Color(0xFFF3F4F6),
                     child: video.thumbnailUrl.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: video.thumbnailUrl,
@@ -374,11 +428,14 @@ class ProfileVideosWidget extends StatelessWidget {
                     top: 8,
                     right: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 0.5),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 0.5),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -403,7 +460,8 @@ class ProfileVideosWidget extends StatelessWidget {
                 if (isProcessing)
                   Positioned.fill(
                     child: Container(
-                      color: AppColors.backgroundPrimary.withValues(alpha: 0.72),
+                      color:
+                          AppColors.backgroundPrimary.withValues(alpha: 0.72),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -413,8 +471,10 @@ class ProfileVideosWidget extends StatelessWidget {
                               height: 28,
                               child: CircularProgressIndicator(
                                 strokeWidth: 3,
-                                value: video.processingProgress.clamp(0, 100) / 100.0,
-                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                value: video.processingProgress.clamp(0, 100) /
+                                    100.0,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                    AppColors.primary),
                                 backgroundColor: AppColors.borderPrimary,
                               ),
                             ),
@@ -437,7 +497,8 @@ class ProfileVideosWidget extends StatelessWidget {
                     top: 10,
                     left: 10,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppColors.warning.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(8),
@@ -459,7 +520,8 @@ class ProfileVideosWidget extends StatelessWidget {
                     bottom: 8,
                     left: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(6),
@@ -529,10 +591,14 @@ class ProfileVideosWidget extends StatelessWidget {
                         width: 24,
                         height: 24,
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFFEF4444) : Colors.white.withValues(alpha: 0.8),
+                          color: isSelected
+                              ? const Color(0xFFEF4444)
+                              : Colors.white.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isSelected ? const Color(0xFFEF4444) : Colors.white,
+                            color: isSelected
+                                ? const Color(0xFFEF4444)
+                                : Colors.white,
                             width: 2,
                           ),
                         ),
@@ -582,15 +648,36 @@ class ProfileVideosWidget extends StatelessWidget {
           return GestureDetector(
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VideoScreen(
-                    initialVideos: stateManager.userVideos,
-                    initialVideoId: episodeId,
+              final parentType = _normalizedVideoType(video);
+              final filteredVideos = stateManager.userVideos
+                  .where((item) => _normalizedVideoType(item) == parentType)
+                  .toList(growable: false);
+              if (parentType == 'vayu') {
+                final selectedEpisodeIndex =
+                    filteredVideos.indexWhere((item) => item.id == episodeId);
+                final selectedEpisode = selectedEpisodeIndex >= 0
+                    ? filteredVideos[selectedEpisodeIndex]
+                    : video;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VayuLongFormPlayerScreen(
+                      video: selectedEpisode,
+                      relatedVideos: filteredVideos,
+                    ),
                   ),
-                ),
-              );
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VideoScreen(
+                      initialVideos: filteredVideos,
+                      initialVideoId: episodeId,
+                    ),
+                  ),
+                );
+              }
               AppLogger.log('Selected episode $sequenceNumber: $episodeId');
             },
             child: Stack(
@@ -654,5 +741,3 @@ class ProfileVideosWidget extends StatelessWidget {
     );
   }
 }
-
-

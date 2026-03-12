@@ -395,9 +395,16 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                     if (mounted && _currentIndex == 0 && _videos.isNotEmpty) {
                       final String videoId = _videos[0].id;
                       // Check if video is already playing before retrying
-                      if (_controllerStates[videoId] != true ||
-                          (_controllerPool.containsKey(videoId) &&
-                              !_controllerPool[videoId]!.value.isPlaying)) {
+                      bool isPlayingSafe = false;
+                      if (_controllerPool.containsKey(videoId)) {
+                        try {
+                          isPlayingSafe = _controllerPool[videoId]?.value.isPlaying ?? false;
+                        } catch (_) {
+                          _controllerPool.remove(videoId);
+                        }
+                      }
+
+                      if (_controllerStates[videoId] != true || !isPlayingSafe) {
                         AppLogger.log(
                           '🎬 VideoFeedAdvanced: Second autoplay attempt for deep link video',
                         );
@@ -741,8 +748,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
   Future<void> _loadCurrentUserId() async {
     try {
-      final authController =
-          Provider.of<GoogleSignInController>(context, listen: false);
+      final authController = ref.read(googleSignInProvider);
       
       // 1. Try GoogleSignInController first
       if (authController.isSignedIn && authController.userData != null) {
@@ -839,7 +845,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     if (_currentUserId == null || _videos.isEmpty) return;
 
     try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final uProvider = ref.read(userProvider);
       final uniqueUploaders = _videos
           .map((video) => video.uploader.id.trim())
           .toSet()
@@ -853,7 +859,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       );
 
       // **OPTIMIZED: Single batch API call instead of N individual calls**
-      await userProvider.batchCheckFollowStatus(uniqueUploaders);
+      await uProvider.batchCheckFollowStatus(uniqueUploaders);
 
       AppLogger.log('✅ Batch follow status check complete for ${uniqueUploaders.length} users');
     } catch (e) {

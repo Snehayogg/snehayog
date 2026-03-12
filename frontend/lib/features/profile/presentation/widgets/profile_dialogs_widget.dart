@@ -8,14 +8,11 @@ import 'package:vayu/features/profile/presentation/screens/creator_revenue_scree
 import 'package:vayu/shared/widgets/feedback/feedback_dialog_widget.dart';
 import 'package:vayu/shared/widgets/report_dialog_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/top_earners_bottom_sheet.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
-
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -34,9 +31,8 @@ class ProfileDialogsWidget {
               context,
               listen: false,
             );
-            final loggedInUserId =
-                authController.userData?['id']?.toString() ??
-                    authController.userData?['googleId']?.toString();
+            final loggedInUserId = authController.userData?['id']?.toString() ??
+                authController.userData?['googleId']?.toString();
             final viewedUserId =
                 stateManager.userData?['googleId']?.toString() ??
                     stateManager.userData?['id']?.toString();
@@ -97,8 +93,7 @@ class ProfileDialogsWidget {
                       Navigator.pop(context);
                       Navigator.of(context, rootNavigator: true).push(
                         MaterialPageRoute(
-                          builder: (context) =>
-                              const CreatorRevenueScreen(),
+                          builder: (context) => const CreatorRevenueScreen(),
                         ),
                       );
                     },
@@ -123,7 +118,7 @@ class ProfileDialogsWidget {
                     showFeedbackDialog(context);
                   },
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
               ],
             );
           } else {
@@ -149,7 +144,7 @@ class ProfileDialogsWidget {
                     showHelpDialog(context);
                   },
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
               ],
             );
           }
@@ -168,7 +163,7 @@ class ProfileDialogsWidget {
   }) {
     return ListTile(
       leading: Container(
-        padding: EdgeInsets.all(8),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: (iconColor ?? AppColors.textTertiary).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -189,7 +184,7 @@ class ProfileDialogsWidget {
             ),
       ),
       onTap: onTap,
-      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
     );
   }
 
@@ -200,9 +195,10 @@ class ProfileDialogsWidget {
         backgroundColor: AppColors.surfacePrimary,
         title: Row(
           children: [
-            Icon(Icons.help_outline, color: AppColors.textPrimary),
-            SizedBox(width: 12),
-            Text('Help & Support', style: Theme.of(context).textTheme.headlineSmall),
+            const Icon(Icons.help_outline, color: AppColors.textPrimary),
+            const SizedBox(width: 12),
+            Text('Help & Support',
+                style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),
         content: Column(
@@ -213,7 +209,7 @@ class ProfileDialogsWidget {
               'Need help? Here are some common solutions:',
               style: AppTypography.bodyMedium,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               '• Profile Issues: Try refreshing your profile',
               style: AppTypography.bodySmall,
@@ -283,11 +279,11 @@ class ProfileDialogsWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Everything you need to know about Vayug',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Expanded(
             child: ListView(
               children: [
@@ -299,7 +295,8 @@ class ProfileDialogsWidget {
                   color: Colors.green,
                 ),
                 _buildFAQItem(
-                  question: "YouTube already has monetization. Why switch to Vayug?",
+                  question:
+                      "YouTube already has monetization. Why switch to Vayug?",
                   answer:
                       "YouTube has strict entry rules. On Vayug, there's no barrier — creators start building their engagement from the first upload. It's a platform that values your effort, not just your follower count.",
                   icon: Icons.video_library,
@@ -313,14 +310,16 @@ class ProfileDialogsWidget {
                   color: Colors.orange,
                 ),
                 _buildFAQItem(
-                  question: "What's the point of joining a new app if my followers are on Instagram and YouTube?",
+                  question:
+                      "What's the point of joining a new app if my followers are on Instagram and YouTube?",
                   answer:
                       "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayug, you're not lost in the crowd — your content actually gets discovered.",
                   icon: Icons.trending_up,
                   color: Colors.purple,
                 ),
                 _buildFAQItem(
-                  question: "How will I get views or reach on Vayug? New platforms usually have low traffic.",
+                  question:
+                      "How will I get views or reach on Vayug? New platforms usually have low traffic.",
                   answer:
                       "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
                   icon: Icons.visibility,
@@ -329,11 +328,11 @@ class ProfileDialogsWidget {
               ],
             ),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           AppButton(
             isFullWidth: true,
             onPressed: () => Navigator.pop(context),
-            icon: Icon(Icons.check_circle_outline),
+            icon: const Icon(Icons.check_circle_outline),
             label: 'Got it, thanks!',
             variant: AppButtonVariant.primary,
           ),
@@ -349,17 +348,17 @@ class ProfileDialogsWidget {
     required Color color,
   }) {
     return Container(
-      margin: EdgeInsets.only(bottom: 20),
-      padding: EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.backgroundSecondary,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.borderPrimary, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -371,14 +370,14 @@ class ProfileDialogsWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   question,
@@ -390,11 +389,11 @@ class ProfileDialogsWidget {
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Answer
           Container(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.backgroundPrimary,
               borderRadius: BorderRadius.circular(12),
@@ -418,16 +417,16 @@ class ProfileDialogsWidget {
     VayuBottomSheet.show(
       context: context,
       title: 'Legal & About',
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Policies and contact information',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           _buildLegalItem(
             context: context,
             title: 'Privacy Policy',
@@ -458,7 +457,7 @@ class ProfileDialogsWidget {
             icon: Icons.info_outline_rounded,
             onTap: () => _launchURL('https://snehayog.site/about.html'),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           Center(
             child: Text(
               'Version 1.0.0',
@@ -486,9 +485,9 @@ class ProfileDialogsWidget {
           color: AppColors.textPrimary,
         ),
       ),
-      trailing: Icon(Icons.chevron_right, color: AppColors.textTertiary),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary),
       onTap: onTap,
-      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
     );
   }
 
@@ -553,10 +552,10 @@ class ProfileDialogsWidget {
                           'To maintain a fair and secure platform, we use a Billing Alias (UPI ID) for identity verification. This prevents duplicate accounts and ensures that rewards are distributed correctly to verified, unique creators.',
                     ),
                     if (!showUpiField && currentUpi.isNotEmpty) ...[
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       Container(
                         width: double.infinity,
-                        padding: EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: AppColors.backgroundSecondary,
                           borderRadius: BorderRadius.circular(12),
@@ -565,17 +564,17 @@ class ProfileDialogsWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                             Text(
-                                'Saved UPI ID',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
+                            const Text(
+                              'Saved UPI ID',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
                               ),
-                            SizedBox(height: 6),
+                            ),
+                            const SizedBox(height: 6),
                             Text(
                               currentUpi,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 15,
                                 color: AppColors.textSecondary,
                               ),
@@ -599,10 +598,10 @@ class ProfileDialogsWidget {
                       ),
                     ],
                     if (showUpiField) ...[
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       TextField(
                         controller: upiController,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Enter your UPI ID',
                           hintText: 'example@bank',
                           border: OutlineInputBorder(),
@@ -610,7 +609,7 @@ class ProfileDialogsWidget {
                         textInputAction: TextInputAction.done,
                       ),
                       if (validationMessage != null) ...[
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
                           validationMessage!,
                           style: TextStyle(
@@ -621,7 +620,7 @@ class ProfileDialogsWidget {
                         ),
                       ],
                     ],
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     AppButton(
                       isFullWidth: true,
                       isDisabled: isSaving,
@@ -654,8 +653,7 @@ class ProfileDialogsWidget {
                           await stateManager.saveUpiIdQuick(upiId);
                           currentUpi = upiId;
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
+                            ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
                                   'Billing info updated successfully. Scores will be updated on the 1st of every month.',
@@ -673,9 +671,8 @@ class ProfileDialogsWidget {
                         } catch (e) {
                           setState(() {
                             isSaving = false;
-                            validationMessage = e
-                                .toString()
-                                .replaceFirst('Exception: ', '');
+                            validationMessage =
+                                e.toString().replaceFirst('Exception: ', '');
                           });
                         }
                       },
@@ -707,22 +704,22 @@ class ProfileDialogsWidget {
     required String body,
   }) {
     return Padding(
-      padding: EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             body,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,
               height: 1.35,
@@ -741,4 +738,3 @@ class ProfileDialogsWidget {
     );
   }
 }
-

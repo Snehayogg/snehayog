@@ -53,12 +53,34 @@ export const getVideoMetadata = (filePath) => {
         }
 
         // 4. Parse values safely
-        const width = parseInt(videoStream.width, 10) || 0;
-        const height = parseInt(videoStream.height, 10) || 0;
+        let width = parseInt(videoStream.width, 10) || 0;
+        let height = parseInt(videoStream.height, 10) || 0;
         const duration = parseFloat(metadata.format.duration) || parseFloat(videoStream.duration) || 0;
         const size = parseInt(metadata.format.size, 10) || 0;
         
-        // Calculate aspect ratio
+        // 5. Handle rotation metadata (critical for mobile videos)
+        let rotation = 0;
+        
+        // Check rotation in tags (older format - Android/legacy)
+        if (videoStream.tags?.rotate) {
+          rotation = parseInt(videoStream.tags.rotate, 10) || 0;
+        }
+        
+        // Check rotation in side_data_list (newer format - iPhone/iOS)
+        if (videoStream.side_data_list && videoStream.side_data_list.length > 0) {
+          const sideData = videoStream.side_data_list.find(sd => sd.side_data_type === 'Display Matrix');
+          if (sideData && sideData.rotation) {
+            rotation = parseInt(sideData.rotation, 10) || 0;
+          }
+        }
+        
+        // Apply rotation correction: swap width/height if video is rotated 90° or 270°
+        if (Math.abs(rotation) === 90 || Math.abs(rotation) === 270) {
+          console.log(`🔄 Rotation detected: ${rotation}°, swapping dimensions (${width}x${height} → ${height}x${width})`);
+          [width, height] = [height, width];
+        }
+        
+        // Calculate corrected aspect ratio
         let aspectRatio = 9/16; // Default
         if (width > 0 && height > 0) {
           aspectRatio = width / height;
@@ -74,7 +96,7 @@ export const getVideoMetadata = (filePath) => {
           format: metadata.format.format_name || 'unknown',
           isPortrait: aspectRatio < 1.0,
           isLandscape: aspectRatio >= 1.0,
-          // Include raw metadata if needed for advanced debugging
+          rotation, // Include rotation for debugging
           // raw: metadata 
         };
 

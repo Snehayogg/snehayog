@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
-import 'package:provider/provider.dart';
-import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/video/presentation/managers/video_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/profile_providers.dart';
+import 'package:vayu/core/providers/video_providers.dart';
 import 'dart:async';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
@@ -351,24 +351,22 @@ class MainController extends ChangeNotifier {
 
   /// **NEW: Optimized state refresh and pre-fetch after account switch**
   /// Call this after a successful login to coordinate parallel data loading.
-  Future<void> refreshAppStateAfterSwitch(BuildContext context) async {
+  Future<void> refreshAppStateAfterSwitch(WidgetRef ref) async {
     try {
       AppLogger.log('🚀 MainController: Starting parallel state refresh and pre-fetch...');
       
       // 1. Refresh all state providers (clears stale data)
-      await LogoutService.refreshAllState(context);
-
-      if (!context.mounted) return;
+      await LogoutService.refreshAllState(ref);
 
       // 2. Parallel pre-fetch for immediate UI readiness
       // We don't await individual loads to keep them truly parallel
-      unawaited(Future.wait([
+      unawaited(Future.wait<void>([
         // Pre-fetch own profile data
-        Provider.of<ProfileStateManager>(context, listen: false)
+        ref.read(profileStateManagerProvider)
             .loadUserData(null, forceRefresh: true, silent: true),
         
         // Pre-fetch initial video feed
-        Provider.of<VideoProvider>(context, listen: false).refreshVideos(),
+        ref.read(videoProvider).refreshVideos(),
       ]).then((_) {
         AppLogger.log('✅ MainController: Parallel pre-fetch completed');
       }).catchError((e) {

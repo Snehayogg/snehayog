@@ -265,8 +265,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         }
       }
 
-      if (controller != null && index != _currentIndex && controller.value.isPlaying) {
-        controller.pause();
+      if (controller != null && index != _currentIndex) {
+        try {
+          if (controller.value.isPlaying) {
+            controller.pause();
+          }
+        } catch (_) {
+          controller = null;
+        }
       }
 
       if (controller == null) {
@@ -321,8 +327,12 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
             );
           }
           
-          if (index != _currentIndex && controller.value.isPlaying) {
-             controller.pause();
+          if (index != _currentIndex) {
+            try {
+              if (controller.value.isPlaying) {
+                controller.pause();
+              }
+            } catch (_) {}
           }
         } finally {
           _initializingVideos.remove(videoId);

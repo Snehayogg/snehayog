@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:vayu/features/video/video_model.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'dart:async';
 import 'package:vayu/features/video/data/services/video_service.dart';
@@ -27,10 +26,7 @@ import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
-import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/video/presentation/screens/video_feed_advanced/widgets/banner_ad_section.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/shared/widgets/interactive_scale_button.dart';
 
 enum _AspectRatioMode {
@@ -40,7 +36,7 @@ enum _AspectRatioMode {
   ratio16x9,
 }
 
-class VayuLongFormPlayerScreen extends StatefulWidget {
+class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   final VideoModel video;
   final List<VideoModel> relatedVideos;
 
@@ -51,10 +47,12 @@ class VayuLongFormPlayerScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<VayuLongFormPlayerScreen> createState() => _VayuLongFormPlayerScreenState();
+  ConsumerState<VayuLongFormPlayerScreen> createState() =>
+      _VayuLongFormPlayerScreenState();
 }
 
-class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> with WidgetsBindingObserver {
+class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScreen>
+    with WidgetsBindingObserver {
   static const _controlTouchSize = 48.0;
   static const _controlIconSize = 24.0;
 
@@ -64,7 +62,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   int _currentIndex = 0;
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, ChewieController?> _chewieControllers = {};
-  
+
   bool _isLoadingMore = false;
   bool _hasMore = true;
   int _currentPage = 1;
@@ -72,14 +70,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   // Banner Ad State
   final ActiveAdsService _activeAdsService = ActiveAdsService();
-  final AdImpressionService _adImpressionService = AdImpressionService();
-  final AuthService _authService = AuthService();
   // Map of banner ad data per video index to ensure consistency when scrolling back
   final Map<int, Map<String, dynamic>> _bannerAdsByIndex = {};
-  final _isLoadingAd = false;
 
-  // Video getter
-  VideoModel get _currentVideo => _videos[_currentIndex];
 
   // Controls State
   bool _showControls = true;
@@ -96,9 +89,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   Timer? _overlayTimer;
   SharedPreferences? _prefs;
 
-  // Error state
-  bool _hasError = false;
-  String _errorMessage = '';
 
   bool _isSaving = false;
   double _playbackSpeed = 1.0;
@@ -126,20 +116,25 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     if (_isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
     try {
-      final response = await _videoService.getVideos(page: _currentPage, videoType: 'vayu');
+      final response =
+          await _videoService.getVideos(page: _currentPage, videoType: 'vayu');
       List<VideoModel> newVideos = [];
       if (response['videos'] != null) {
-         newVideos = (response['videos'] as List).map((v) => VideoModel.fromJson(v)).toList();
+        newVideos = (response['videos'] as List)
+            .map((v) => VideoModel.fromJson(v))
+            .toList();
       } else if (response.containsKey('data')) {
-         newVideos = (response['data'] as List).map((v) => VideoModel.fromJson(v)).toList();
+        newVideos = (response['data'] as List)
+            .map((v) => VideoModel.fromJson(v))
+            .toList();
       }
-      
+
       if (newVideos.isEmpty) {
         if (mounted) setState(() => _hasMore = false);
       } else {
         // Randomize the feed order as requested
         newVideos.shuffle();
-        
+
         // Remove any videos that are already in the feed to avoid duplicates
         final existingIds = _videos.map((v) => v.id).toSet();
         newVideos.removeWhere((v) => existingIds.contains(v.id));
@@ -149,7 +144,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
             _videos.addAll(newVideos);
             _currentPage++;
           });
-          
+
           // Preload upcoming videos dynamically if we just added more
           if (_currentIndex + 1 < _videos.length) {
             _initializePlayer(_currentIndex + 1);
@@ -173,20 +168,21 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
       DeviceOrientation.landscapeRight,
     ]);
     // Ensure system UI is visible in portrait initially
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
-    
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
+
     // Initialize feed with the starting video
     _videos.add(widget.video);
     if (widget.relatedVideos.isNotEmpty) {
       _videos.addAll(widget.relatedVideos);
     }
     _pageController = PageController(initialPage: 0);
-    
+
     _initPrefs();
-    
+
     // Initialize the first video player
     _initializePlayer(0);
-    
+
     // Load more videos immediately to fill the feed if we don't have enough
     if (_videos.length < 3) {
       _loadMoreVideos();
@@ -196,8 +192,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Provider.of<MainController>(context, listen: false)
-            .setBottomNavVisibility(false);
+        ref.read(mainControllerProvider).setBottomNavVisibility(false);
       }
     });
   }
@@ -214,8 +209,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   Future<void> _initPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    final hasSeenHint = prefs.getBool('has_seen_vayu_long_form_scroll_hint') ?? false;
-    
+    final hasSeenHint =
+        prefs.getBool('has_seen_vayu_long_form_scroll_hint') ?? false;
+
     if (mounted) {
       setState(() {
         _hasSeenScrollHint = hasSeenHint;
@@ -231,7 +227,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     // Wait for the first video to initialize and start playing
     await Future.delayed(const Duration(milliseconds: 2000));
     if (!mounted || _currentIndex != 0) return;
-    
+
     // Proceed only if there's more than 1 video available to scroll to
     if (_videos.length <= 1) return;
 
@@ -242,10 +238,10 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     // Wait a moment for the user to read the text before animating
     await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted || _currentIndex != 0 || !_pageController.hasClients) return;
-    
+
     final screenHeight = MediaQuery.of(context).size.height;
     final targetOffset = screenHeight * 0.30; // ~30% scroll
-    
+
     try {
       // Animate up
       await _pageController.animateTo(
@@ -253,12 +249,12 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
         duration: const Duration(milliseconds: 800),
         curve: Curves.easeInOut,
       );
-      
+
       // Pause slightly at the peak of the scroll
       await Future.delayed(const Duration(milliseconds: 150));
-      
+
       if (!mounted || _currentIndex != 0 || !_pageController.hasClients) return;
-      
+
       // Animate back down to original position
       await _pageController.animateTo(
         0,
@@ -290,164 +286,163 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   Future<void> _initializePlayer([int? requestedIndex]) async {
     final index = requestedIndex ?? _currentIndex;
-  if (mounted) {
-    setState(() {
-      _hasError = false;
-      _errorMessage = '';
-      _chewieControllers[index] = null;
-    });
-  }
-
-  _disableWakelock();
-
-  // **NEW: Force pause any other videos (e.g. from Yug tab) before starting long form**
-  try {
-    if (mounted) {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
-      mainController.forcePauseVideos();
-    }
-    AppLogger.log(
-        '🎬 VayuLongFormPlayer: Requested force pause of other videos');
-  } catch (e) {
-    AppLogger.log('⚠️ VayuLongFormPlayer: Error requesting video pause: $e');
-  }
-
-  // Proper disposal of existing controllers before re-initializing
-  try {
-    if (_chewieControllers[index] != null) {
-      _chewieControllers[index]!.dispose();
-      _chewieControllers[index] = null;
-    }
-    if (_controllers[index] != null) {
-      _controllers[index]!.dispose();
-      _controllers.remove(index);
-    }
-  } catch (e) {
-    AppLogger.log('⚠️ VayuLongFormPlayer: Error disposing controllers: $e');
-  }
-
-  try {
-    final videoToPlay = _videos[index];
-    // **ENHANCED: Use VideoControllerFactory for optimized controller creation**
-    AppLogger.log('🎬 VayuLongFormPlayer: Initializing for ${videoToPlay.videoName}');
-    AppLogger.log('🔗 URL: ${videoToPlay.videoUrl}');
-
-    _controllers[index] =
-        await VideoControllerFactory.createController(videoToPlay);
-
-    // **TIMEOUT PROTECTION**: Ensure initialization doesn't hang indefinitely
-    await _controllers[index]!.initialize().timeout(
-      const Duration(seconds: 15),
-      onTimeout: () {
-        throw TimeoutException(
-            'Video loading timed out. Please check your connection.');
-      },
-    );
-    
-    // Re-apply selected playback speed for newly initialized videos.
-    try {
-      await _controllers[index]!.setPlaybackSpeed(_playbackSpeed);
-    } catch (e) {
-      AppLogger.log('⚠️ VayuLongFormPlayer: Failed to apply saved speed: $e');
-    }
-
-    _chewieControllers[index] = ChewieController(
-      videoPlayerController: _controllers[index]!,
-      aspectRatio: _controllers[index]!.value.aspectRatio,
-      autoPlay: true,
-      looping: false,
-      allowFullScreen: true,
-      allowPlaybackSpeedChanging: true,
-      showControls: false, // Hide default controls
-      customControls: const SizedBox.shrink(), // Ensure no default controls are rendered
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppColors.primary,
-        handleColor: AppColors.primary,
-        backgroundColor: AppColors.borderPrimary,
-        bufferedColor: AppColors.textTertiary,
-      ),
-      placeholder: Container(
-        color: AppColors.backgroundPrimary,
-        child: const Center(
-            child: CircularProgressIndicator(color: AppColors.primary)),
-      ),
-      errorBuilder: (context, errorMessage) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const HugeIcon(
-                  icon: HugeIcons.strokeRoundedVideoOff,
-                  color: AppColors.textTertiary,
-                  size: 48,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  errorMessage.contains('TimeoutException') 
-                      ? 'Connection timed out' 
-                      : 'Video unavailable',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: AppTypography.weightSemiBold,
-                    fontSize: AppTypography.fontSizeLG,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Please try again later',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: AppTypography.fontSizeSM,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (mounted) setState(() {});
-
-    // Listen for position changes to save periodically
-    _controllers[index]!.addListener(_onPositionChanged);
-    _enableWakelock(); // **ENHANCED: Keep screen on as soon as player is ready**
-
-    // Resume playback logic
-    _resumePlayback(index);
-
-    // Fetch initial brightness and volume
-    try {
-      _brightnessValue = await ScreenBrightness().application;
-      final currentVolume = await FlutterVolumeController.getVolume();
-      if (currentVolume != null) {
-        _volumeValue = currentVolume;
-      }
-    } catch (e) {
-      AppLogger.log('⚠️ VayuLongFormPlayer: Error fetching system values: $e');
-    }
-  } catch (e) {
-    AppLogger.log('❌ VayuLongFormPlayer: Failed to initialize: $e', isError: true);
     if (mounted) {
       setState(() {
-        _hasError = true;
-        _errorMessage = e.toString().contains('TimeoutException')
-            ? 'Playback timed out. Check your connection.'
-            : 'Failed to play video. Please try again.';
+        _chewieControllers[index] = null;
       });
     }
-  }
-}
 
+    _disableWakelock();
+
+    // **NEW: Force pause any other videos (e.g. from Yug tab) before starting long form**
+    try {
+      if (mounted) {
+        final mainController = ref.read(mainControllerProvider);
+        mainController.forcePauseVideos();
+      }
+      AppLogger.log(
+          '🎬 VayuLongFormPlayer: Requested force pause of other videos');
+    } catch (e) {
+      AppLogger.log('⚠️ VayuLongFormPlayer: Error requesting video pause: $e');
+    }
+
+    // Proper disposal of existing controllers before re-initializing
+    try {
+      if (_chewieControllers[index] != null) {
+        _chewieControllers[index]!.dispose();
+        _chewieControllers[index] = null;
+      }
+      if (_controllers[index] != null) {
+        _controllers[index]!.dispose();
+        _controllers.remove(index);
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ VayuLongFormPlayer: Error disposing controllers: $e');
+    }
+
+    try {
+      final videoToPlay = _videos[index];
+      // **ENHANCED: Use VideoControllerFactory for optimized controller creation**
+      AppLogger.log(
+          '🎬 VayuLongFormPlayer: Initializing for ${videoToPlay.videoName}');
+      AppLogger.log('🔗 URL: ${videoToPlay.videoUrl}');
+
+      _controllers[index] =
+          await VideoControllerFactory.createController(videoToPlay);
+
+      // **TIMEOUT PROTECTION**: Ensure initialization doesn't hang indefinitely
+      await _controllers[index]!.initialize().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw TimeoutException(
+              'Video loading timed out. Please check your connection.');
+        },
+      );
+
+      // Re-apply selected playback speed for newly initialized videos.
+      try {
+        await _controllers[index]!.setPlaybackSpeed(_playbackSpeed);
+      } catch (e) {
+        AppLogger.log('⚠️ VayuLongFormPlayer: Failed to apply saved speed: $e');
+      }
+
+      _chewieControllers[index] = ChewieController(
+        videoPlayerController: _controllers[index]!,
+        aspectRatio: _controllers[index]!.value.aspectRatio,
+        autoPlay: true,
+        looping: false,
+        allowFullScreen: true,
+        allowPlaybackSpeedChanging: true,
+        showControls: false, // Hide default controls
+        customControls:
+            const SizedBox.shrink(), // Ensure no default controls are rendered
+        materialProgressColors: ChewieProgressColors(
+          playedColor: AppColors.primary,
+          handleColor: AppColors.primary,
+          backgroundColor: AppColors.borderPrimary,
+          bufferedColor: AppColors.textTertiary,
+        ),
+        placeholder: Container(
+          color: AppColors.backgroundPrimary,
+          child: const Center(
+              child: CircularProgressIndicator(color: AppColors.primary)),
+        ),
+        errorBuilder: (context, errorMessage) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const HugeIcon(
+                    icon: HugeIcons.strokeRoundedVideoOff,
+                    color: AppColors.textTertiary,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    errorMessage.contains('TimeoutException')
+                        ? 'Connection timed out'
+                        : 'Video unavailable',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: AppTypography.weightSemiBold,
+                      fontSize: AppTypography.fontSizeLG,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Please try again later',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: AppTypography.fontSizeSM,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      if (mounted) setState(() {});
+
+      // Listen for position changes to save periodically
+      _controllers[index]!.addListener(_onPositionChanged);
+      _enableWakelock(); // **ENHANCED: Keep screen on as soon as player is ready**
+
+      // Resume playback logic
+      _resumePlayback(index);
+
+      // Fetch initial brightness and volume
+      try {
+        _brightnessValue = await ScreenBrightness().application;
+        final currentVolume = await FlutterVolumeController.getVolume();
+        if (currentVolume != null) {
+          _volumeValue = currentVolume;
+        }
+      } catch (e) {
+        AppLogger.log(
+            '⚠️ VayuLongFormPlayer: Error fetching system values: $e');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VayuLongFormPlayer: Failed to initialize: $e',
+          isError: true);
+      if (mounted) {
+        setState(() {
+          // Error is handled by Chewie's errorBuilder or shown via logs
+        });
+      }
+    }
+  }
 
   // _onContentScroll REPLACED by PageView pagination
 
   Future<void> _loadBannerAd(int index) async {
-    if (_bannerAdsByIndex.containsKey(index)) return; // Already loaded for this index
-    
+    if (_bannerAdsByIndex.containsKey(index)) {
+      return; // Already loaded for this index
+    }
+
     try {
       AppLogger.log('🔍 VayuLongFormPlayer: Fetching ad for index $index');
       final ads = await _activeAdsService.fetchActiveAds();
@@ -472,32 +467,32 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   void dispose() {
     _disableWakelock();
     WidgetsBinding.instance.removeObserver(this);
-    
+
     // Save current positions
     _controllers.forEach((index, controller) {
       _savePlaybackPosition(index);
       controller.dispose();
     });
-    
+
     _chewieControllers.forEach((index, chewie) {
       chewie?.dispose();
     });
-    
+
     _pageController.dispose();
     _hideControlsTimer?.cancel();
     _overlayTimer?.cancel();
     _aspectRatioOverlayTimer?.cancel();
-    
+
     // Ensure Bottom Navigation Bar comes back when leaving
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
     _isFullScreenManual = false;
 
     // **NAVIGATION VISIBILITY: Restore bottom nav on dispose**
     Future.microtask(() {
       if (context.mounted) {
-        Provider.of<MainController>(context, listen: false)
-            .setBottomNavVisibility(true);
+        ref.read(mainControllerProvider).setBottomNavVisibility(true);
       }
     });
     super.dispose();
@@ -514,7 +509,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   }
 
   String _formatViews(int views) {
-    if (views >= 1000000) return '${(views / 1000000).toStringAsFixed(1)}M views';
+    if (views >= 1000000) {
+      return '${(views / 1000000).toStringAsFixed(1)}M views';
+    }
     if (views >= 1000) return '${(views / 1000).toStringAsFixed(1)}K views';
     return '$views views';
   }
@@ -532,15 +529,16 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
     if (_isControlsLocked) return;
     if (_chewieControllers[_currentIndex] == null) return;
-    
+
     _horizontalDragTotal += details.primaryDelta!;
     final currentPosition = _controllers[_currentIndex]!.value.position;
     final totalDuration = _controllers[_currentIndex]!.value.duration;
-    
+
     // Sensitivity: 1 pixel = 100ms (adjust as needed)
-    final seekOffset = Duration(milliseconds: (_horizontalDragTotal * 100).toInt());
+    final seekOffset =
+        Duration(milliseconds: (_horizontalDragTotal * 100).toInt());
     var targetPosition = currentPosition + seekOffset;
-    
+
     // Clamp target position
     if (targetPosition < Duration.zero) targetPosition = Duration.zero;
     if (targetPosition > totalDuration) targetPosition = totalDuration;
@@ -555,9 +553,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   void _handleHorizontalDragEnd() {
     if (_chewieControllers[_currentIndex] == null) return;
-    
+
     _controllers[_currentIndex]!.seekTo(_scrubbingTargetTime);
-    
+
     setState(() {
       _showScrubbingOverlay = false;
       _horizontalDragTotal = 0.0;
@@ -571,11 +569,11 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
     final size = MediaQuery.of(context).size;
     final isLeftSide = details.localPosition.dx < size.width / 2;
-    
+
     // Sensitivity: SWIPE_DISTANCE / SCREEN_HEIGHT
     // Increase sensitivity slightly (multiply by 1.2 or similar)
     final delta = details.primaryDelta! / size.height * 1.5;
-    
+
     if (isLeftSide) {
       // Brightness
       _brightnessValue -= delta;
@@ -633,11 +631,12 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     setState(() {
       _showControls = !_showControls;
     });
-    
+
     // Sync system UI in landscape
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
       if (_showControls) {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+            overlays: SystemUiOverlay.values);
       } else {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       }
@@ -676,12 +675,12 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   Future<void> _resumePlayback(int index) async {
     final controller = _controllers[index];
     if (controller == null) return;
-    
+
     _prefs ??= await SharedPreferences.getInstance();
     final video = _videos[index];
     final key = 'video_pos_${video.id}';
     final savedSeconds = _prefs!.getInt(key);
-    
+
     if (savedSeconds != null && savedSeconds > 0) {
       final duration = Duration(seconds: savedSeconds);
       if (duration < controller.value.duration) {
@@ -704,7 +703,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   void _hideControlsWithDelay() {
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _controllers[_currentIndex]!.value.isPlaying && _showControls) {
+      if (mounted &&
+          _controllers[_currentIndex]!.value.isPlaying &&
+          _showControls) {
         setState(() {
           _showControls = false;
         });
@@ -739,8 +740,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     WakelockPlus.disable();
     _wakelockEnabled = false;
   }
-
-
 
   void _handleDoubleTapToSeek(TapDownDetails details) {
     final controller = _controllers[_currentIndex];
@@ -786,7 +785,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   Future<void> _handleToggleSave([int? requestedIndex]) async {
     if (_isSaving) return;
-    
+
     final index = requestedIndex ?? _currentIndex;
     final video = _videos[index];
 
@@ -804,7 +803,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isSaved ? 'Video saved to bookmarks' : 'Video removed from bookmarks'),
+            content: Text(isSaved
+                ? 'Video saved to bookmarks'
+                : 'Video removed from bookmarks'),
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
           ),
@@ -837,12 +838,14 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
         _playbackSpeed = speed;
       }
     } catch (e) {
-      AppLogger.log('❌ VayuLongFormPlayer: Failed to change playback speed: $e');
+      AppLogger.log(
+          '❌ VayuLongFormPlayer: Failed to change playback speed: $e');
     }
   }
 
   void _toggleFullScreen() {
-    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+    final isPortrait =
+        MediaQuery.of(context).orientation == Orientation.portrait;
     final controller = _controllers[_currentIndex];
     final aspectRatio = (controller != null && controller.value.isInitialized)
         ? controller.value.aspectRatio
@@ -892,11 +895,13 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
           final isSelected = speed == _playbackSpeed;
           return ListTile(
             dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             leading: SizedBox(
               width: 20,
               child: isSelected
-                  ? const HugeIcon(icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                  ? const HugeIcon(
+                      icon: HugeIcons.strokeRoundedCheckmarkCircle01,
                       size: 18,
                       color: AppColors.primary,
                     )
@@ -905,8 +910,12 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
             title: Text(
               _formatPlaybackSpeed(speed),
               style: TextStyle(
-                color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
-                fontWeight: isSelected ? AppTypography.weightSemiBold : AppTypography.weightMedium,
+                color: isSelected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+                fontWeight: isSelected
+                    ? AppTypography.weightSemiBold
+                    : AppTypography.weightMedium,
               ),
             ),
             onTap: () async {
@@ -1040,7 +1049,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
         children: [
           // Semi-transparent backdrop for content
           Container(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing6, vertical: AppSpacing.spacing3),
+            padding: EdgeInsets.symmetric(
+                horizontal: AppSpacing.spacing6, vertical: AppSpacing.spacing3),
             decoration: BoxDecoration(
               color: AppColors.backgroundSecondary.withValues(alpha: 0.45),
               borderRadius: AppRadius.borderRadiusPill,
@@ -1049,7 +1059,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
               mainAxisSize: MainAxisSize.min,
               children: [
                 HugeIcon(
-                  icon: _isForward ? HugeIcons.strokeRoundedArrowRightDouble : HugeIcons.strokeRoundedArrowLeftDouble,
+                  icon: _isForward
+                      ? HugeIcons.strokeRoundedArrowRightDouble
+                      : HugeIcons.strokeRoundedArrowLeftDouble,
                   color: AppColors.textPrimary,
                   size: 32,
                 ),
@@ -1121,14 +1133,14 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     if (_videos.isEmpty) {
       return const Scaffold(
         backgroundColor: AppColors.backgroundPrimary,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       );
     }
 
@@ -1136,66 +1148,62 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
-          Provider.of<MainController>(context, listen: false)
-              .setBottomNavVisibility(true);
+          ref.read(mainControllerProvider).setBottomNavVisibility(true);
         }
       },
-      child: Consumer<GoogleSignInController>(
-        builder: (context, authController, _) {
-          return Scaffold(
-            backgroundColor: AppColors.backgroundPrimary,
-            body: Stack(
-              children: [
-                PageView.builder(
-                  controller: _pageController,
-                  scrollDirection: Axis.vertical,
-                  onPageChanged: _onPageChanged,
-                  itemCount: _videos.length,
-                  itemBuilder: (context, index) {
-                    return _buildFeedItem(index);
-                  },
-                ),
-                if (!_hasSeenScrollHint)
-                  Positioned(
-                    bottom: 140, // Positioned safely above bottom controls
-                    left: 0,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        opacity: _showScrollHintOverlay ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 500),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.65),
-                              borderRadius: BorderRadius.circular(30),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+      child: Scaffold(
+        backgroundColor: AppColors.backgroundPrimary,
+        body: Stack(
+          children: [
+            PageView.builder(
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              onPageChanged: _onPageChanged,
+              itemCount: _videos.length,
+              itemBuilder: (context, index) {
+                return _buildFeedItem(index);
+              },
+            ),
+            if (!_hasSeenScrollHint)
+              Positioned(
+                bottom: 140,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _showScrollHintOverlay ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 500),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
-                            child: const Text(
-                              'Swipe up to watch more',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
+                          ],
+                        ),
+                        child: const Text(
+                          'Swipe up to watch more',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                     ),
                   ),
-              ],
-            ),
-          );
-        },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1237,7 +1245,6 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     final video = _videos[index];
     final controller = _controllers[index];
     final chewie = _chewieControllers[index];
-    final hasError = false; // Simplified error handling per index
 
     if (isLandscape || _isFullScreenManual) {
       return Column(
@@ -1249,7 +1256,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
               width: size.width,
               child: Stack(
                 children: [
-                  if (chewie != null && controller != null && controller.value.isInitialized)
+                  if (chewie != null &&
+                      controller != null &&
+                      controller.value.isInitialized)
                     Hero(
                       tag: 'video_player_${video.id}',
                       child: _buildVideoPlayerWithAspectMode(chewie),
@@ -1257,11 +1266,15 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                   else
                     Container(
                       color: AppColors.backgroundPrimary,
-                      child: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                      child: const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary)),
                     ),
 
                   // Gesture Overlay
-                  if (chewie != null && controller != null && controller.value.isInitialized)
+                  if (chewie != null &&
+                      controller != null &&
+                      controller.value.isInitialized)
                     GestureDetector(
                       onTap: _handleTap,
                       onDoubleTapDown: _handleDoubleTapToSeek,
@@ -1291,14 +1304,19 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                       valueListenable: controller,
                       builder: (context, value, child) {
                         if (value.isBuffering) {
-                          return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                          return const Center(
+                              child: CircularProgressIndicator(
+                                  color: AppColors.primary));
                         }
                         return const SizedBox.shrink();
                       },
                     ),
 
                   // Controls
-                  if (chewie != null && controller != null && controller.value.isInitialized && index == _currentIndex)
+                  if (chewie != null &&
+                      controller != null &&
+                      controller.value.isInitialized &&
+                      index == _currentIndex)
                     AnimatedOpacity(
                       duration: const Duration(milliseconds: 200),
                       opacity: _showControls ? 1.0 : 0.0,
@@ -1317,13 +1335,14 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                         child: _buildScrubbingOverlay(),
                       ),
                     ),
-                    if (_aspectRatioOverlayText != null) _buildAspectRatioOverlay(),
+                    if (_aspectRatioOverlayText != null)
+                      _buildAspectRatioOverlay(),
                   ],
                 ],
               ),
             ),
           ),
-          
+
           // **NEW: Sleek Edge-to-Edge Progress Bar for Full Screen**
           if (controller != null && controller.value.isInitialized)
             Padding(
@@ -1338,7 +1357,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                 child: VideoProgressIndicator(
                   controller,
                   allowScrubbing: true,
-                  padding: EdgeInsets.zero, // Edge-to-edge relative to padded container
+                  padding: EdgeInsets
+                      .zero, // Edge-to-edge relative to padded container
                   colors: VideoProgressColors(
                     playedColor: AppColors.primary,
                     bufferedColor: AppColors.textPrimary.withValues(alpha: 0.2),
@@ -1364,7 +1384,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
             color: AppColors.backgroundPrimary,
             child: Stack(
               children: [
-                if (chewie != null && controller != null && controller.value.isInitialized)
+                if (chewie != null &&
+                    controller != null &&
+                    controller.value.isInitialized)
                   Hero(
                     tag: 'video_player_${video.id}',
                     child: _buildVideoPlayerWithAspectMode(chewie),
@@ -1372,11 +1394,15 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                 else
                   Container(
                     color: AppColors.backgroundPrimary,
-                    child: const Center(child: CircularProgressIndicator(color: AppColors.textPrimary)),
+                    child: const Center(
+                        child: CircularProgressIndicator(
+                            color: AppColors.textPrimary)),
                   ),
 
                 // Gesture detection
-                if (chewie != null && controller != null && controller.value.isInitialized)
+                if (chewie != null &&
+                    controller != null &&
+                    controller.value.isInitialized)
                   GestureDetector(
                     onTap: _handleTap,
                     onDoubleTapDown: _handleDoubleTapToSeek,
@@ -1400,7 +1426,10 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                     behavior: HitTestBehavior.translucent,
                   ),
 
-                if (chewie != null && controller != null && controller.value.isInitialized && index == _currentIndex)
+                if (chewie != null &&
+                    controller != null &&
+                    controller.value.isInitialized &&
+                    index == _currentIndex)
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 200),
                     opacity: _showControls ? 1.0 : 0.0,
@@ -1419,28 +1448,30 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                       child: _buildScrubbingOverlay(),
                     ),
                   ),
-                
+
                 if (controller != null)
                   ValueListenableBuilder<VideoPlayerValue>(
                     valueListenable: controller,
                     builder: (context, value, child) {
                       if (value.isBuffering) {
-                        return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                        return const Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.primary));
                       }
                       return const SizedBox.shrink();
                     },
                   ),
 
-                if (_aspectRatioOverlayText != null && index == _currentIndex) 
+                if (_aspectRatioOverlayText != null && index == _currentIndex)
                   _buildAspectRatioOverlay(),
               ],
             ),
           ),
         ),
-        
+
         // **NEW: Sleek Edge-to-Edge Progress Bar Divider**
         if (controller != null && controller.value.isInitialized)
-          Container(
+          SizedBox(
             height: 3.0, // Minimalist thin line
             width: size.width,
             child: VideoProgressIndicator(
@@ -1470,7 +1501,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     final double landscapeRightInset = isPortrait ? 0.0 : viewPadding.right;
     final double landscapeTopInset = isPortrait ? 0.0 : viewPadding.top;
     final double landscapeBottomInset = isPortrait ? 0.0 : viewPadding.bottom;
-    
+
     final controller = _controllers[index];
     if (controller == null) return const SizedBox.shrink();
 
@@ -1487,7 +1518,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                 _showControls = false;
               });
             },
-            onHorizontalDragUpdate: (details) => _handleHorizontalDragUpdate(details),
+            onHorizontalDragUpdate: (details) =>
+                _handleHorizontalDragUpdate(details),
             onHorizontalDragEnd: (details) => _handleHorizontalDragEnd(),
             onVerticalDragUpdate: _handleVerticalDragUpdate,
             onVerticalDragEnd: (details) => _handleVerticalDragEnd(),
@@ -1521,7 +1553,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                     return GestureDetector(
                       onTap: _togglePlay,
                       child: Icon(
-                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
                         color: Colors.white.withValues(alpha: 0.9),
                         size: isPortrait ? 48 : 64,
                         shadows: [
@@ -1553,7 +1587,10 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [AppColors.backgroundPrimary.withValues(alpha:0.7), Colors.transparent],
+                    colors: [
+                      AppColors.backgroundPrimary.withValues(alpha: 0.7),
+                      Colors.transparent
+                    ],
                   ),
                 ),
                 padding: EdgeInsets.fromLTRB(
@@ -1567,21 +1604,25 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                   children: [
                     PopupMenuButton<String>(
                       tooltip: 'More options',
-                      color: AppColors.backgroundSecondary.withValues(alpha: 0.95),
+                      color:
+                          AppColors.backgroundSecondary.withValues(alpha: 0.95),
                       onSelected: (value) {
                         if (value == 'playback_speed') {
                           _showPlaybackSpeedOptions();
                         }
                       },
                       iconSize: _controlIconSize,
-                      icon: const HugeIcon(icon: HugeIcons.strokeRoundedMoreVertical, color: AppColors.iconPrimary),
+                      icon: const HugeIcon(
+                          icon: HugeIcons.strokeRoundedMoreVertical,
+                          color: AppColors.iconPrimary),
                       itemBuilder: (context) {
                         return [
                           PopupMenuItem<String>(
                             value: 'playback_speed',
                             child: Row(
                               children: [
-                                const HugeIcon(icon: HugeIcons.strokeRoundedDashboardCircle,
+                                const HugeIcon(
+                                  icon: HugeIcons.strokeRoundedDashboardCircle,
                                   size: 18,
                                   color: AppColors.iconPrimary,
                                 ),
@@ -1589,7 +1630,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                                 const Expanded(
                                   child: Text(
                                     'Playback speed',
-                                    style: TextStyle(color: AppColors.textPrimary),
+                                    style:
+                                        TextStyle(color: AppColors.textPrimary),
                                   ),
                                 ),
                                 Text(
@@ -1627,7 +1669,10 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
-                    colors: [AppColors.backgroundPrimary.withValues(alpha: 0.8), Colors.transparent],
+                    colors: [
+                      AppColors.backgroundPrimary.withValues(alpha: 0.8),
+                      Colors.transparent
+                    ],
                   ),
                 ),
                 padding: EdgeInsets.only(
@@ -1681,7 +1726,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                         ],
                       ),
                     ),
-                      // REMOVED Progress Indicator from here. It is now a divider below the video frame.
+                    // REMOVED Progress Indicator from here. It is now a divider below the video frame.
                   ],
                 ),
               ),
@@ -1729,7 +1774,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
         Vibration.vibrate(duration: 50, amplitude: 128);
       },
       icon: Container(
-        padding:  const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppColors.primary.withValues(alpha: 0.7),
           shape: BoxShape.circle,
@@ -1772,10 +1817,12 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
         _controllers[index]?.dispose();
         _controllers.remove(index);
-        
-        AppLogger.log('🧹 VayuLongFormPlayer: Strict disposal for off-screen video at index $index');
+
+        AppLogger.log(
+            '🧹 VayuLongFormPlayer: Strict disposal for off-screen video at index $index');
       } catch (e) {
-        AppLogger.log('⚠️ VayuLongFormPlayer: Error disposing controller for index $index: $e');
+        AppLogger.log(
+            '⚠️ VayuLongFormPlayer: Error disposing controller for index $index: $e');
       }
     }
   }
@@ -1798,7 +1845,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
     } else {
       _controllers[index]?.play();
     }
-    
+
     _startHideControlsTimer();
 
     // STRICT MEMORY MODE: Dispose all non-current videos so 100% bandwidth goes to current video
@@ -1817,7 +1864,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AppSpacing.vSpace12, // Reduced padding above banner ad
-          _buildAdSection(index), 
+          _buildAdSection(index),
           AppSpacing.vSpace12, // Minimal spacing
           _buildVideoInfo(index),
           AppSpacing.vSpace8, // Tight spacing between info and channel
@@ -1830,11 +1877,12 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
 
   Widget _buildVideoInfo(int index) {
     final video = _videos[index];
-    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+    final isPortrait =
+        MediaQuery.of(context).orientation == Orientation.portrait;
     return Padding(
       // Minimalist padding: less top/bottom, strong horizontal
-      padding: isPortrait 
-          ? const EdgeInsets.fromLTRB(16, 0, 16, 4) 
+      padding: isPortrait
+          ? const EdgeInsets.fromLTRB(16, 0, 16, 4)
           : const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1847,7 +1895,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                   _compactTitle(video.videoName, maxChars: 80),
                   style: AppTypography.bodyLarge.copyWith(
                     color: AppColors.textPrimary,
-                    fontWeight: AppTypography.weightSemiBold, // Slightly bolder but tighter
+                    fontWeight: AppTypography
+                        .weightSemiBold, // Slightly bolder but tighter
                     height: 1.2, // Tighter line height
                   ),
                   maxLines: 2,
@@ -1861,12 +1910,17 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                 child: IconButton(
                   onPressed: () => _handleToggleSave(index),
                   icon: HugeIcon(
-                    icon: video.isSaved ? HugeIcons.strokeRoundedBookmark01 : HugeIcons.strokeRoundedBookmark01,
-                    color: video.isSaved ? AppColors.primary : AppColors.textSecondary, // Softer unselected color
+                    icon: video.isSaved
+                        ? HugeIcons.strokeRoundedBookmark01
+                        : HugeIcons.strokeRoundedBookmark01,
+                    color: video.isSaved
+                        ? AppColors.primary
+                        : AppColors.textSecondary, // Softer unselected color
                     size: 24, // Slightly smaller icon
                   ),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  constraints:
+                      const BoxConstraints(minWidth: 40, minHeight: 40),
                 ),
               ),
             ],
@@ -1890,7 +1944,7 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   Widget _buildAdSection(int index) {
     final adData = _bannerAdsByIndex[index];
     if (adData == null) return const SizedBox.shrink();
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: BannerAdSection(
@@ -1907,7 +1961,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
   Widget _buildChannelRow(int index) {
     final video = _videos[index];
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0), // Removed vertical padding
+      padding: const EdgeInsets.symmetric(
+          horizontal: 16.0), // Removed vertical padding
       child: Row(
         children: [
           InteractiveScaleButton(
@@ -1915,7 +1970,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ProfileScreen(userId: video.uploader.id),
+                  builder: (context) =>
+                      ProfileScreen(userId: video.uploader.id),
                 ),
               );
             },
@@ -1927,7 +1983,9 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                   : null,
               backgroundColor: AppColors.backgroundSecondary,
               child: video.uploader.profilePic.isEmpty
-                  ? const HugeIcon(icon: HugeIcons.strokeRoundedUser, color: AppColors.textPrimary)
+                  ? const HugeIcon(
+                      icon: HugeIcons.strokeRoundedUser,
+                      color: AppColors.textPrimary)
                   : null,
             ),
           ),
@@ -1938,7 +1996,8 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ProfileScreen(userId: video.uploader.id),
+                    builder: (context) =>
+                        ProfileScreen(userId: video.uploader.id),
                   ),
                 );
               },
@@ -1948,14 +2007,18 @@ class _VayuLongFormPlayerScreenState extends State<VayuLongFormPlayerScreen> wit
                 children: [
                   Text(
                     video.uploader.name,
-                    style: AppTypography.bodyLarge.copyWith(color: AppColors.textPrimary, fontWeight: AppTypography.weightBold),
+                    style: AppTypography.bodyLarge.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: AppTypography.weightBold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (video.uploader.totalVideos != null && video.uploader.totalVideos! > 0)
+                  if (video.uploader.totalVideos != null &&
+                      video.uploader.totalVideos! > 0)
                     Text(
-                      '${video.uploader.totalVideos} videos', 
-                      style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                      '${video.uploader.totalVideos} videos',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                 ],
               ),

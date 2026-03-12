@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 /// **CampaignPreviewWidget - Shows campaign metrics and preview**
 class CampaignPreviewWidget extends StatelessWidget {
@@ -22,25 +20,25 @@ class CampaignPreviewWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (startDate == null || endDate == null || budgetText.isEmpty) {
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
 
     final metrics = _getCampaignMetrics();
     if (metrics.isEmpty) {
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
 
     return Card(
-      margin: EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.analytics, color: AppColors.primary),
-                SizedBox(width: 8),
+                const Icon(Icons.analytics, color: AppColors.primary),
+                const SizedBox(width: 8),
                 Text(
                   'Campaign Preview',
                   style: AppTypography.headlineSmall.copyWith(
@@ -50,20 +48,20 @@ class CampaignPreviewWidget extends StatelessWidget {
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             ..._buildCampaignMetricsDisplay(metrics),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Container(
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
+                border:
+                    Border.all(color: AppColors.success.withValues(alpha: 0.2)),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  Icon(Icons.check_circle,
-                      size: 16, color: AppColors.success),
+                  Icon(Icons.check_circle, size: 16, color: AppColors.success),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -127,17 +125,17 @@ class CampaignPreviewWidget extends StatelessWidget {
 
   Widget _buildMetricRow(String label, String value) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           ),
           Text(
             value,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
               color: AppColors.primary,

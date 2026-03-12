@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:vayu/core/design/spacing.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/widgets/interactive_scale_button.dart';
 
 enum AppButtonVariant {
@@ -47,7 +45,7 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     // Determine dimensions based on size
     double height;
     double fontSize;
@@ -167,7 +165,8 @@ class AppButton extends StatelessWidget {
         ),
         child: content,
       );
-    } else if (variant == AppButtonVariant.outline || variant == AppButtonVariant.secondary) {
+    } else if (variant == AppButtonVariant.outline ||
+        variant == AppButtonVariant.secondary) {
       buttonWidget = OutlinedButton(
         onPressed: effectiveDisabled ? null : onPressed,
         style: OutlinedButton.styleFrom(
@@ -208,7 +207,7 @@ class AppButton extends StatelessWidget {
           ? buttonWidget
           : InteractiveScaleButton(
               onTap: onPressed,
-              // We don't want the InteractiveScaleButton to actually fire the onTap callback 
+              // We don't want the InteractiveScaleButton to actually fire the onTap callback
               // because the underlying Material button (ElevatedButton, etc) already handles it.
               // So we pass a dummy callback if it's not disabled just so the scale effect works.
               // The actual logic is handled by the inner `buttonWidget`'s `onPressed`.

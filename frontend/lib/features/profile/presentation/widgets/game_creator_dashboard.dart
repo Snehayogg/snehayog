@@ -23,7 +23,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     return Consumer<GameCreatorManager>(
       builder: (context, gameManager, child) {
         if (gameManager.isCreatorGamesLoading) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
 
         return Stack(
@@ -47,7 +47,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                     children: [
                       const CircularProgressIndicator(color: AppColors.primary),
                       SizedBox(height: AppSpacing.spacing4),
-                      Text(
+                      const Text(
                         'Processing...',
                         style: TextStyle(
                           color: Colors.white,
@@ -82,7 +82,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
               ),
               IconButton(
                 onPressed: () => gameManager.loadCreatorGames(),
-                icon: Icon(Icons.refresh, color: AppColors.primary),
+                icon: const Icon(Icons.refresh, color: AppColors.primary),
               ),
             ],
           ),
@@ -106,18 +106,21 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
         children: [
           Row(
             children: [
-              Icon(Icons.cloud_upload_outlined, color: AppColors.primary),
+              const Icon(Icons.cloud_upload_outlined, color: AppColors.primary),
               SizedBox(width: AppSpacing.spacing2),
               Text(
                 'Upload New Content via Web',
-                style: AppTypography.titleMedium.copyWith(color: AppColors.primary, fontWeight: AppTypography.weightBold),
+                style: AppTypography.titleMedium.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: AppTypography.weightBold),
               ),
             ],
           ),
           SizedBox(height: AppSpacing.spacing2),
           Text(
             'To ensure the best deployment experience, arcade content uploads are now handled through our dedicated web portal.',
-            style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+            style: AppTypography.bodySmall
+                .copyWith(color: AppColors.textSecondary),
           ),
           SizedBox(height: AppSpacing.spacing3),
           AppButton(
@@ -127,14 +130,16 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                 context: context,
                 backgroundColor: AppColors.backgroundSecondary,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
                 ),
                 builder: (context) => Padding(
                   padding: EdgeInsets.all(AppSpacing.spacing6),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Deploy from Computer', style: AppTypography.headlineSmall),
+                      Text('Deploy from Computer',
+                          style: AppTypography.headlineSmall),
                       SizedBox(height: AppSpacing.spacing4),
                       Text(
                         '1. Visit snehayog.site/creator.html\n2. Log in with your developer token\n3. Upload your Content ZIP',
@@ -143,7 +148,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                       SizedBox(height: AppSpacing.spacing6),
                       Text(
                         'Your Developer Token:',
-                        style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
+                        style: AppTypography.labelSmall
+                            .copyWith(color: AppColors.textTertiary),
                       ),
                       SizedBox(height: AppSpacing.spacing2),
                       Container(
@@ -154,7 +160,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                         ),
                         child: const SelectableText(
                           'Copy your token from Profile > Settings',
-                          style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                          style:
+                              TextStyle(fontFamily: 'monospace', fontSize: 12),
                         ),
                       ),
                       SizedBox(height: AppSpacing.spacing6),
@@ -200,13 +207,15 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
             SizedBox(height: AppSpacing.spacing6),
             Text(
               'Your Arcade Content',
-              style: AppTypography.headlineSmall.copyWith(color: AppColors.textPrimary),
+              style: AppTypography.headlineSmall
+                  .copyWith(color: AppColors.textPrimary),
             ),
             SizedBox(height: AppSpacing.spacing2),
             Text(
               'Begin your journey by uploading high-quality interactive arcade content.',
               textAlign: TextAlign.center,
-              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+              style: AppTypography.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -216,7 +225,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
   Widget _buildGamesList(GameCreatorManager gameManager) {
     return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: gameManager.creatorGames.length,
       itemBuilder: (context, index) {
         final game = gameManager.creatorGames[index];
@@ -227,7 +236,7 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
 
   Widget _buildGameCard(GameModel game, GameCreatorManager gameManager) {
     final isPending = game.status == 'pending';
-    
+
     return Container(
       margin: EdgeInsets.only(bottom: AppSpacing.spacing4),
       decoration: AppTheme.createCardDecoration(
@@ -250,9 +259,11 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadius.md),
-                    child: game.thumbnailUrl != null && game.thumbnailUrl!.isNotEmpty
+                    child: game.thumbnailUrl != null &&
+                            game.thumbnailUrl!.isNotEmpty
                         ? Image.network(game.thumbnailUrl!, fit: BoxFit.cover)
-                        : Icon(Icons.sports_esports_outlined, color: AppColors.primary),
+                        : const Icon(Icons.sports_esports_outlined,
+                            color: AppColors.primary),
                   ),
                 ),
                 SizedBox(width: AppSpacing.spacing4),
@@ -262,7 +273,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                     children: [
                       Text(
                         game.title,
-                        style: AppTypography.titleLarge.copyWith(fontWeight: AppTypography.weightBold),
+                        style: AppTypography.titleLarge
+                            .copyWith(fontWeight: AppTypography.weightBold),
                       ),
                       SizedBox(height: AppSpacing.spacing1),
                       Row(
@@ -273,34 +285,40 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                               vertical: AppSpacing.spacing1 * 0.5,
                             ),
                             decoration: BoxDecoration(
-                              color: isPending 
-                                  ? AppColors.warning.withValues(alpha: 0.1) 
+                              color: isPending
+                                  ? AppColors.warning.withValues(alpha: 0.1)
                                   : AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
                             ),
                             child: Text(
                               (game.status ?? 'active').toUpperCase(),
                               style: AppTypography.labelSmall.copyWith(
-                                color: isPending ? AppColors.warning : AppColors.success,
+                                color: isPending
+                                    ? AppColors.warning
+                                    : AppColors.success,
                                 fontWeight: AppTypography.weightBold,
                               ),
                             ),
                           ),
                           SizedBox(width: AppSpacing.spacing4),
-                          Icon(Icons.play_arrow_outlined, size: 16, color: AppColors.primary),
-                          SizedBox(width: 4),
+                          const Icon(Icons.play_arrow_outlined,
+                              size: 16, color: AppColors.primary),
+                          const SizedBox(width: 4),
                           Text(
                             '${game.plays} plays',
-                            style: AppTypography.bodySmall.copyWith(fontWeight: AppTypography.weightBold),
+                            style: AppTypography.bodySmall
+                                .copyWith(fontWeight: AppTypography.weightBold),
                           ),
                           if (game.totalTimeSpent > 0) ...[
-                             SizedBox(width: AppSpacing.spacing4),
-                            Icon(Icons.timer_outlined, size: 14, color: AppColors.warning),
-                             SizedBox(width: 4),
-                             Text(
-                               '${(game.totalTimeSpent / 60).toStringAsFixed(1)}m',
-                               style: AppTypography.bodySmall,
-                             ),
+                            SizedBox(width: AppSpacing.spacing4),
+                            const Icon(Icons.timer_outlined,
+                                size: 14, color: AppColors.warning),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${(game.totalTimeSpent / 60).toStringAsFixed(1)}m',
+                              style: AppTypography.bodySmall,
+                            ),
                           ],
                         ],
                       ),
@@ -309,7 +327,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                 ),
                 if (isPending)
                   AppButton(
-                    onPressed: () => _confirmPublish(context, game, gameManager),
+                    onPressed: () =>
+                        _confirmPublish(context, game, gameManager),
                     label: 'PUBLISH',
                     variant: AppButtonVariant.text,
                   ),
@@ -321,7 +340,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
                 game.description,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                style: AppTypography.bodySmall
+                    .copyWith(color: AppColors.textSecondary),
               ),
             ],
           ],
@@ -330,8 +350,8 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     );
   }
 
-
-  Future<void> _confirmPublish(BuildContext context, GameModel game, GameCreatorManager gameManager) async {
+  Future<void> _confirmPublish(BuildContext context, GameModel game,
+      GameCreatorManager gameManager) async {
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -360,7 +380,9 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Content published successfully!' : 'Failed to publish content'),
+            content: Text(success
+                ? 'Content published successfully!'
+                : 'Failed to publish content'),
             backgroundColor: success ? AppColors.success : AppColors.error,
           ),
         );
@@ -368,4 +390,3 @@ class _GameCreatorDashboardState extends State<GameCreatorDashboard> {
     }
   }
 }
-

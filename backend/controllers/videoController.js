@@ -275,7 +275,7 @@ export const uploadVideo = async (req, res) => {
       });
     }
 
-    // 6. Determine video type based on duration
+    // 6. Determine video type based on aspect ratio (landscape vs portrait)
     if (!hybridVideoService) {
       const { default: service } = await import('../services/hybridVideoService.js');
       hybridVideoService = service;
@@ -294,11 +294,20 @@ export const uploadVideo = async (req, res) => {
       console.warn('⚠️ Upload: Failed to get video info:', infoError.message);
     }
 
+    // **SOURCE OF TRUTH: Classify based on aspect ratio ONLY**
     let finalVideoType = videoType || 'yog';
-    if (detectedDuration > 120) {
-      finalVideoType = 'vayu';
-    } else if (detectedDuration > 0) {
-      finalVideoType = 'yog';
+    if (detectedWidth > 0 && detectedHeight > 0) {
+      const aspectRatio = detectedWidth / detectedHeight;
+      if (aspectRatio > 1.0) {
+        // Landscape/Horizontal video (e.g., 16:9 = 1.778)
+        finalVideoType = 'vayu';
+      } else {
+        // Portrait/Vertical video (e.g., 9:16 = 0.5625)
+        finalVideoType = 'yog';
+      }
+    } else {
+      // Fallback to default if dimensions not detected
+      finalVideoType = videoType || 'yog';
     }
 
     // 7. Create initial video record
@@ -319,7 +328,7 @@ export const uploadVideo = async (req, res) => {
       uploader: user._id,
       videoType: finalVideoType,
       mediaType: 'video',
-      aspectRatio: (detectedWidth && detectedHeight) ? detectedWidth / detectedHeight : 9 / 16,
+      aspectRatio: (detectedWidth && detectedHeight) ? detectedWidth / detectedHeight : undefined,
       duration: detectedDuration || 0,
       originalResolution: { width: detectedWidth || 0, height: detectedHeight || 0 },
       processingStatus: 'pending',
@@ -691,7 +700,8 @@ export const getFeed = async (req, res) => {
     const userIdentifier = userId || deviceId || 'anon';
     
     const requestedType = (videoType || 'yog').toLowerCase();
-    const type = requestedType === 'vayug' ? 'vayu' : requestedType;
+    const type = requestedType; // Only 'yog' or 'vayu'
+    console.log('🔍 Video Feed Request - type:', type, 'videoType param:', videoType);
     
     let finalVideos = [];
     let hasMore = false;
@@ -707,14 +717,35 @@ export const getFeed = async (req, res) => {
         processingStatus: 'completed'
       };
 
+      // Check if there are ANY vayu videos in the database
+      const totalVayuCount = await Video.countDocuments({ videoType: 'vayu', processingStatus: 'completed' });
+      console.log('📊 Total Vayu videos in DB:', totalVayuCount);
+      
+      // Also check landscape videos that might be misclassified
+      const landscapeVideos = await Video.find({ 
+        processingStatus: 'completed',
+        aspectRatio: { $gt: 1.0 }
+      }).select('videoName videoType aspectRatio duration').limit(5).lean();
+      
+      console.log('🎬 Landscape videos (AR > 1.0):', landscapeVideos.length);
+      if (landscapeVideos.length > 0) {
+        landscapeVideos.forEach((v, i) => {
+          console.log(`  ${i+1}. ${v.videoName} | Type: ${v.videoType} | AR: ${v.aspectRatio?.toFixed(2)} | Duration: ${v.duration}s`);
+        });
+      }
+
       // Exclude own videos from feed if user is logged in
       if (userId && userId !== 'anon' && userId !== 'undefined') {
         const user = await User.findOne({ googleId: userId }).select('_id').lean();
         if (user) {
+          console.log('👤 User found, excluding own videos from feed:', user._id);
           query.uploader = { $ne: user._id };
         }
+      } else {
+        console.log('ℹ️ No valid user, showing all videos');
       }
 
+      console.log('📊 Vayu Query:', JSON.stringify(query));
       [finalVideos, total] = await Promise.all([
         Video.find(query)
           .populate('uploader', 'name profilePic googleId')
@@ -725,15 +756,33 @@ export const getFeed = async (req, res) => {
         Video.countDocuments(query)
       ]);
 
+      console.log(`✅ Vayu Results: ${finalVideos.length} videos, Total: ${total}`);
+      if (finalVideos.length > 0) {
+        finalVideos.forEach((v, i) => {
+          console.log(`  ${i+1}. ${v.videoName} | Type: ${v.videoType} | AR: ${v.aspectRatio?.toFixed(2)} | Duration: ${v.duration}s`);
+        });
+      }
+
       hasMore = skip + finalVideos.length < total;
     } else {
       // **DISCOVERY FEED: Use Queue-based system for Yog (Short-form)**
+      console.log('🧘 Yog Feed Request - type:', type, 'userIdentifier:', userIdentifier, 'limit:', limitNum);
+      
       // Clear queue if requested (pull-to-refresh)
       if (clearSession === 'true') {
+        console.log('🧹 Clearing Yog queue for refresh');
         await FeedQueueService.clearQueue(userIdentifier, type);
       }
       
       finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
+      console.log(`✅ Yog Queue Results: ${finalVideos.length} videos`);
+      if (finalVideos.length > 0) {
+        finalVideos.forEach((v, i) => {
+          console.log(`  ${i+1}. ${v.videoName} | Type: ${v.videoType} | AR: ${v.aspectRatio?.toFixed(2)} | Duration: ${v.duration}s`);
+        });
+      } else {
+        console.log('⚠️ Yog Queue returned NO videos!');
+      }
       hasMore = finalVideos.length > 0;
       total = 9999;
     }
@@ -1492,38 +1541,6 @@ export const cleanupTempHLS = async (req, res) => {
   } catch (error) {
     console.error('❌ Cleanup error:', error);
     res.status(500).json({ error: 'Failed to cleanup temp HLS' });
-  }
-};
-
-/**
- * Generate a presigned URL for direct R2 upload
- */
-export const generateR2PresignedUrl = async (req, res) => {
-  try {
-    const { fileName, contentType, type = 'video' } = req.body;
-    const userId = req.user.googleId;
-
-    if (!fileName || !contentType) {
-      return res.status(400).json({ error: 'fileName and contentType are required' });
-    }
-
-    // Generate a unique path for the raw upload
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000);
-    const extension = path.extname(fileName) || (type === 'video' ? '.mp4' : '.jpg');
-    const key = `uploads/raw/${userId}/${timestamp}_${random}${extension}`;
-
-    const signedUrl = await cloudflareR2Service.getPresignedUploadUrl(key, contentType);
-
-    res.json({
-      success: true,
-      uploadUrl: signedUrl,
-      key: key,
-      publicUrl: cloudflareR2Service.getPublicUrl(key)
-    });
-  } catch (error) {
-    console.error('❌ Error generating R2 presigned URL:', error);
-    res.status(500).json({ error: 'Failed to generate upload URL' });
   }
 };
 

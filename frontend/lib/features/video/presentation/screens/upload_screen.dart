@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
+import 'package:vayu/core/providers/profile_providers.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
-import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
@@ -28,18 +29,16 @@ import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/video/presentation/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/features/video/presentation/screens/make_episode_screen.dart';
 
-
-
-class UploadScreen extends StatefulWidget {
+class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
 
   const UploadScreen({super.key, this.onVideoUploaded});
 
   @override
-  State<UploadScreen> createState() => _UploadScreenState();
+  ConsumerState<UploadScreen> createState() => _UploadScreenState();
 }
 
-class _UploadScreenState extends State<UploadScreen> {
+class _UploadScreenState extends ConsumerState<UploadScreen> {
   // **OPTIMIZED: Use ValueNotifiers for granular updates (no setState)**
   final ValueNotifier<File?> _selectedVideo = ValueNotifier<File?>(null);
   final ValueNotifier<bool> _isUploading = ValueNotifier<bool>(false);
@@ -68,20 +67,21 @@ class _UploadScreenState extends State<UploadScreen> {
   /// Cancel current upload
   void _cancelUpload() {
     if (_uploadCancelToken != null && !_isUploading.value) return;
-    
+
     _uploadCancelToken?.cancel('User cancelled upload');
     _isUploading.value = false;
     _stopUnifiedProgress();
-    
+
     // Clear activity from disk
     ActivityRecoveryManager().clearActivity();
-    
+
     // Clear selection so user starts fresh
     _deselectVideo();
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(AppText.get('upload_cancelled', fallback: 'Upload cancelled')),
+        content:
+            Text(AppText.get('upload_cancelled', fallback: 'Upload cancelled')),
         backgroundColor: AppColors.backgroundSecondary,
       ),
     );
@@ -188,8 +188,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
   /// Get current phase icon
 
-
-
   // Professional helper to render a notice bullet point
   Widget _buildNoticePoint({required String title, required String body}) {
     return Padding(
@@ -257,7 +255,8 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                        icon: const Icon(Icons.close,
+                            color: AppColors.textSecondary),
                         onPressed: () => Navigator.pop(context),
                       )
                     ],
@@ -329,7 +328,6 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
-
   @override
   void initState() {
     _selectedCategory.value = _defaultCategory;
@@ -394,7 +392,8 @@ class _UploadScreenState extends State<UploadScreen> {
       'tags': _tags.value,
     };
 
-    await ActivityRecoveryManager().saveActivity(ActivityType.videoUpload, data);
+    await ActivityRecoveryManager()
+        .saveActivity(ActivityType.videoUpload, data);
   }
 
   Future<void> _checkSavedActivity() async {
@@ -404,8 +403,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final data = activity.data;
       final videoPath = data['videoPath'] as String?;
-      
-      AppLogger.log('🚀 UploadScreen: Automatically resuming saved upload activity');
+
+      AppLogger.log(
+          '🚀 UploadScreen: Automatically resuming saved upload activity');
 
       if (videoPath != null && videoPath.isNotEmpty) {
         _selectedVideo.value = File(videoPath);
@@ -417,11 +417,12 @@ class _UploadScreenState extends State<UploadScreen> {
         _tags.value = List<String>.from(data['tags']);
       }
       _showUploadForm.value = true;
-      
+
       // Notify user via a small snackbar instead of a disruptive dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppText.get('upload_resumed', fallback: 'Upload progress restored')),
+          content: Text(AppText.get('upload_resumed',
+              fallback: 'Upload progress restored')),
           backgroundColor: AppColors.success.withValues(alpha: 0.8),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -482,15 +483,6 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     try {
-      AppLogger.log('🚀 Starting HLS video upload...');
-      AppLogger.log('📁 Video path: ${_selectedVideo.value?.path}');
-      AppLogger.log('📝 Title: ${_titleController.text}');
-      AppLogger.log(
-        '🔗 Link: ${_linkController.text.isNotEmpty ? _linkController.text : 'None'}',
-      );
-      AppLogger.log(
-        '🎬 Note: Video will be converted to HLS (.m3u8) format for optimal streaming',
-      );
 
       // Start unified progress tracking
       _startUnifiedProgress();
@@ -547,16 +539,16 @@ class _UploadScreenState extends State<UploadScreen> {
           '', // description
           _linkController.text.isNotEmpty ? _linkController.text : '', // link
           (progress) {
-             // Handle precise progress from Dio
-             // We map Dio progress (0.0 to 1.0) into the 'upload' phase window
-             // upload phase is from 0.1 to 0.4 in _progressPhases
-             if (_currentPhase.value == 'upload') {
-               final normalizedProgress = progress.clamp(0.0, 1.0).toDouble();
-               if (normalizedProgress > _lastUploadNetworkProgress) {
-                 _lastUploadNetworkProgress = normalizedProgress;
-               }
-               _unifiedProgress.value = 0.1 + (_lastUploadNetworkProgress * 0.3);
-             }
+            // Handle precise progress from Dio
+            // We map Dio progress (0.0 to 1.0) into the 'upload' phase window
+            // upload phase is from 0.1 to 0.4 in _progressPhases
+            if (_currentPhase.value == 'upload') {
+              final normalizedProgress = progress.clamp(0.0, 1.0).toDouble();
+              if (normalizedProgress > _lastUploadNetworkProgress) {
+                _lastUploadNetworkProgress = normalizedProgress;
+              }
+              _unifiedProgress.value = 0.1 + (_lastUploadNetworkProgress * 0.3);
+            }
           },
           _uploadCancelToken,
         ),
@@ -587,11 +579,11 @@ class _UploadScreenState extends State<UploadScreen> {
           : uploadedVideo;
 
       // **FIX: Robustly extract ID (handle \'id\' vs \'_id\' and nesting)**
-      final String? videoId = videoDetails['id']?.toString() ?? 
-                            videoDetails['_id']?.toString();
-      
+      final String? videoId =
+          videoDetails['id']?.toString() ?? videoDetails['_id']?.toString();
+
       AppLogger.log('🆔 Resolved Video ID: $videoId');
-      
+
       if (videoId == null) {
         AppLogger.log('❌ Error: Video ID not found in: $videoDetails');
         throw Exception('Video ID not found in upload response');
@@ -603,7 +595,7 @@ class _UploadScreenState extends State<UploadScreen> {
       // **NEW: Handle Immediate Queue Success**
       // The backend returns processingStatus: 'queued'
       // We should NOT wait here. We should close the screen and let the user know.
-      
+
       // Update to processing phase
       _updateProgressPhase('processing');
 
@@ -615,15 +607,19 @@ class _UploadScreenState extends State<UploadScreen> {
         final optimisticVideoPayload = Map<String, dynamic>.from(videoDetails);
         // Ensure ID is present as \'id\' for VideoModel/Manager compatibility
         optimisticVideoPayload['id'] ??= videoId;
-        final uploaderId =
-            userData['googleId']?.toString() ?? userData['id']?.toString() ?? '';
+        final uploaderId = userData['googleId']?.toString() ??
+            userData['id']?.toString() ??
+            '';
         optimisticVideoPayload['processingStatus'] =
             processingStatus.isEmpty ? 'pending' : processingStatus;
         optimisticVideoPayload['processingProgress'] =
-            (optimisticVideoPayload['processingProgress'] as num?)?.toInt() ?? 0;
-        optimisticVideoPayload['uploadedAt'] ??= DateTime.now().toIso8601String();
+            (optimisticVideoPayload['processingProgress'] as num?)?.toInt() ??
+                0;
+        optimisticVideoPayload['uploadedAt'] ??=
+            DateTime.now().toIso8601String();
         optimisticVideoPayload['videoName'] =
-            optimisticVideoPayload['videoName']?.toString().trim().isNotEmpty == true
+            optimisticVideoPayload['videoName']?.toString().trim().isNotEmpty ==
+                    true
                 ? optimisticVideoPayload['videoName']
                 : _titleController.text.trim();
 
@@ -637,7 +633,7 @@ class _UploadScreenState extends State<UploadScreen> {
           };
         }
 
-        Provider.of<ProfileStateManager>(context, listen: false)
+        ref.read(profileStateManagerProvider)
             .addVideoOptimistically(optimisticVideoPayload);
       } catch (e) {
         AppLogger.log('⚠️ UploadScreen: Error injecting optimistic video: $e');
@@ -658,7 +654,8 @@ class _UploadScreenState extends State<UploadScreen> {
         // **MINIMIZING EARLY EXIT: User tapped "Run in BG" during the processing wait**
         // The optimistic video is already in ProfileStateManager. Just reset the screen.
         if (completedVideo['processingStatus'] == 'minimizing') {
-          AppLogger.log('🏃 UploadScreen: User minimized — resetting upload screen without clearing optimistic profile entry');
+          AppLogger.log(
+              '🏃 UploadScreen: User minimized — resetting upload screen without clearing optimistic profile entry');
           _selectedVideo.value = null;
           _titleController.clear();
           _linkController.clear();
@@ -692,7 +689,7 @@ class _UploadScreenState extends State<UploadScreen> {
         _titleController.clear();
         _linkController.clear();
         _selectedCategory.value = null;
-        
+
         // Clear activity after successful completion
         ActivityRecoveryManager().clearActivity();
         _tags.value = [];
@@ -777,7 +774,8 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<Map<String, dynamic>?> _waitForProcessingCompletion(
       String videoId) async {
     const maxWaitTime = Duration(minutes: 30); // Maximum wait time (30m)
-    const checkInterval = Duration(seconds: 5); // Polling slower to reduce server load
+    const checkInterval =
+        Duration(seconds: 5); // Polling slower to reduce server load
     final startTime = DateTime.now();
 
     AppLogger.log('🔄 Waiting for video processing to complete...');
@@ -800,7 +798,7 @@ class _UploadScreenState extends State<UploadScreen> {
           AppLogger.log(
               '🔄 Processing status: $processingStatus ($processingProgress%)');
           if (errorMsg.isNotEmpty) {
-             AppLogger.log('⚠️ Processing error reported: $errorMsg');
+            AppLogger.log('⚠️ Processing error reported: $errorMsg');
           }
 
           // **NO setState: Update progress using ValueNotifier**
@@ -831,8 +829,7 @@ class _UploadScreenState extends State<UploadScreen> {
               'processingProgress': 100,
             };
           } else if (processingStatus == 'failed') {
-            AppLogger.log(
-                '❌ Video processing failed: $errorMsg');
+            AppLogger.log('❌ Video processing failed: $errorMsg');
             throw Exception('Processing failed: $errorMsg');
           }
         } else {
@@ -909,8 +906,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 Text(
                   AppText.get('upload_success_title'),
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontWeight: AppTypography.weightBold,
-                  ),
+                        fontWeight: AppTypography.weightBold,
+                      ),
                   textAlign: TextAlign.center,
                 ),
                 AppSpacing.vSpace16,
@@ -919,8 +916,8 @@ class _UploadScreenState extends State<UploadScreen> {
                 Text(
                   AppText.get('upload_success_message'),
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                        color: AppColors.textSecondary,
+                      ),
                   textAlign: TextAlign.center,
                 ),
                 AppSpacing.vSpace24,
@@ -930,10 +927,10 @@ class _UploadScreenState extends State<UploadScreen> {
                   padding: AppSpacing.edgeInsetsAll16,
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Row(
-                    children:  [
+                    children: [
                       const Icon(Icons.check_circle_outline,
                           color: AppColors.success, size: 20),
                       AppSpacing.hSpace12,
@@ -959,13 +956,15 @@ class _UploadScreenState extends State<UploadScreen> {
                       child: AppButton(
                         onPressed: () {
                           Navigator.of(context).pop(); // Close dialog
-                          
+
                           // Switch to Vayu (Feed) tab - index 1
                           try {
-                            Provider.of<MainController>(context, listen: false).changeIndex(1);
+                            ref.read(mainControllerProvider)
+                                .changeIndex(1);
                             // Navigator.of(context).pop(); // REMOVED: Pops MainScreen as UploadScreen is a tab
                           } catch (e) {
-                            AppLogger.log('❌ UploadScreen: Error switching to feed: $e');
+                            AppLogger.log(
+                                '❌ UploadScreen: Error switching to feed: $e');
                             // Navigator.of(context).pop(); // REMOVED: Safety pop
                           }
                         },
@@ -998,14 +997,11 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
           AppButton(
             onPressed: () async {
-              final authController = Provider.of<GoogleSignInController>(
-                context,
-                listen: false,
-              );
+              final authController = ref.read(googleSignInProvider);
               Navigator.pop(context);
               final user = await authController.signIn();
               if (user != null && mounted) {
-                await LogoutService.refreshAllState(this.context);
+                await LogoutService.refreshAllState(ref);
               }
             },
             label: AppText.get('btn_sign_in'),
@@ -1025,7 +1021,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
     try {
       if (mounted) {
-        Provider.of<MainController>(context, listen: false)
+        ref.read(mainControllerProvider)
             .setMediaPickerActive(true);
       }
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -1041,7 +1037,7 @@ class _UploadScreenState extends State<UploadScreen> {
         ],
       );
       if (mounted) {
-        Provider.of<MainController>(context, listen: false)
+        ref.read(mainControllerProvider)
             .setMediaPickerActive(false);
       }
 
@@ -1162,7 +1158,7 @@ class _UploadScreenState extends State<UploadScreen> {
         _titleController.text = _deriveTitleFromFile(pickedFile);
         _selectedCategory.value ??= _defaultCategory;
         _isProcessing.value = false;
-        
+
         // **AUTO-TRIGGER REMOVED** - User now clicks "Start Upload"
         // _uploadVideo();
 
@@ -1208,8 +1204,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GoogleSignInController>(
-      builder: (context, authController, _) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final authController = ref.watch(googleSignInProvider);
         final isSignedIn = authController.isSignedIn;
 
         return Scaffold(
@@ -1249,7 +1246,8 @@ class _UploadScreenState extends State<UploadScreen> {
                     builder: (context, selectedVideo, _) {
                       // State 1: Nothing selected yet → show choice cards
                       if (!isUploading && selectedVideo == null) {
-                        return _buildInitialChoiceView(context, isSignedIn, authController);
+                        return _buildInitialChoiceView(
+                            context, isSignedIn, authController);
                       }
                       // State 2: Upload progress dashboard
                       return _buildUploadProgressDashboard(context);
@@ -1283,13 +1281,15 @@ class _UploadScreenState extends State<UploadScreen> {
             const SizedBox(height: 32),
             Text(
               'Analyzing Video...',
-              style: AppTypography.headlineSmall.copyWith(fontWeight: FontWeight.bold),
+              style: AppTypography.headlineSmall
+                  .copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Text(
               'Checking for duplicates and validating your video. Please wait.',
               textAlign: TextAlign.center,
-              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+              style: AppTypography.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -1297,7 +1297,8 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 
-  Widget _buildInitialChoiceView(BuildContext context, bool isSignedIn, GoogleSignInController authController) {
+  Widget _buildInitialChoiceView(BuildContext context, bool isSignedIn,
+      GoogleSignInController authController) {
     if (!isSignedIn) {
       return Center(
         child: Padding(
@@ -1305,24 +1306,29 @@ class _UploadScreenState extends State<UploadScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lock_outline, size: 64, color: AppColors.textTertiary),
+              const Icon(Icons.lock_outline,
+                  size: 64, color: AppColors.textTertiary),
               const SizedBox(height: 24),
               Text(
-                AppText.get('upload_login_required_title', fallback: 'Login Required'),
+                AppText.get('upload_login_required_title',
+                    fallback: 'Login Required'),
                 style: AppTypography.headlineSmall,
               ),
               const SizedBox(height: 12),
               Text(
-                AppText.get('upload_login_required_desc', fallback: 'Please login to share your creativity with the world.'),
+                AppText.get('upload_login_required_desc',
+                    fallback:
+                        'Please login to share your creativity with the world.'),
                 textAlign: TextAlign.center,
-                style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                style: AppTypography.bodyMedium
+                    .copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 32),
               AppButton(
                 onPressed: () async {
                   final user = await authController.signIn();
                   if (user != null) {
-                    await LogoutService.refreshAllState(context);
+                    await LogoutService.refreshAllState(ref);
                   }
                 },
                 label: AppText.get('btn_login', fallback: 'Login with Google'),
@@ -1342,11 +1348,12 @@ class _UploadScreenState extends State<UploadScreen> {
           children: [
             Text(
               AppText.get('upload_choose_what_create'),
-              style: AppTypography.headlineLarge.copyWith(fontWeight: FontWeight.bold),
+              style: AppTypography.headlineLarge
+                  .copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-           const SizedBox(height: 48),
-            
+            const SizedBox(height: 48),
+
             // Visual Choice: Video
             _buildChoiceCard(
               context: context,
@@ -1356,9 +1363,9 @@ class _UploadScreenState extends State<UploadScreen> {
               color: AppColors.primary,
               onTap: _pickVideo,
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Visual Choice: Ad
             _buildChoiceCard(
               context: context,
@@ -1369,20 +1376,23 @@ class _UploadScreenState extends State<UploadScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const CreateAdScreenRefactored()),
+                  MaterialPageRoute(
+                      builder: (context) => const CreateAdScreenRefactored()),
                 );
               },
             ),
-            
-           const SizedBox(height: 40),
-            
+
+            const SizedBox(height: 40),
+
             // Policy Note
             TextButton.icon(
               onPressed: _showWhatToUploadDialog,
               icon: const Icon(Icons.help_outline, size: 16),
               label: Text(
                 AppText.get('upload_what_to_upload'),
-                style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary, decoration: TextDecoration.underline),
+                style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                    decoration: TextDecoration.underline),
               ),
             ),
           ],
@@ -1427,12 +1437,14 @@ class _UploadScreenState extends State<UploadScreen> {
                 children: [
                   Text(
                     title,
-                    style: AppTypography.headlineSmall.copyWith(fontWeight: FontWeight.bold),
+                    style: AppTypography.headlineSmall
+                        .copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     desc,
-                    style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppTypography.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -1464,7 +1476,8 @@ class _UploadScreenState extends State<UploadScreen> {
                         value: progress,
                         strokeWidth: 8,
                         backgroundColor: AppColors.borderPrimary,
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppColors.primary),
                       ),
                     );
                   },
@@ -1472,17 +1485,18 @@ class _UploadScreenState extends State<UploadScreen> {
                 Container(
                   width: 156,
                   height: 156,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.backgroundSecondary,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.movie_outlined, size: 72, color: AppColors.primary),
+                  child: const Icon(Icons.movie_outlined,
+                      size: 72, color: AppColors.primary),
                 ),
                 // Done indicator
                 ValueListenableBuilder<String>(
                   valueListenable: _currentPhase,
                   builder: (context, phase, _) {
-                    if (phase != 'completed') return SizedBox.shrink();
+                    if (phase != 'completed') return const SizedBox.shrink();
                     return Container(
                       width: 180,
                       height: 180,
@@ -1490,42 +1504,45 @@ class _UploadScreenState extends State<UploadScreen> {
                         color: AppColors.success.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.check_circle, size: 80, color: AppColors.success),
+                      child: const Icon(Icons.check_circle,
+                          size: 80, color: AppColors.success),
                     );
                   },
                 ),
               ],
             ),
           ),
-          
-          SizedBox(height: 32),
-          
+
+          const SizedBox(height: 32),
+
           // Current Status
           ValueListenableBuilder<String>(
             valueListenable: _currentPhase,
             builder: (context, phase, _) {
               return Text(
                 _progressPhases[phase]?['name'] ?? 'Processing...',
-                style: AppTypography.headlineSmall.copyWith(fontWeight: FontWeight.bold),
+                style: AppTypography.headlineSmall
+                    .copyWith(fontWeight: FontWeight.bold),
               );
             },
           ),
-          
+
           ValueListenableBuilder<String>(
             valueListenable: _phaseDescription,
             builder: (context, desc, _) {
               return Padding(
-                padding: EdgeInsets.only(top: 8.0),
+                padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   desc,
                   textAlign: TextAlign.center,
-                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  style: AppTypography.bodyMedium
+                      .copyWith(color: AppColors.textSecondary),
                 ),
               );
             },
           ),
 
-          SizedBox(height: 48),
+          const SizedBox(height: 48),
 
           // Advanced Settings Section (Integrated)
           UploadAdvancedSettingsSection(
@@ -1542,27 +1559,30 @@ class _UploadScreenState extends State<UploadScreen> {
             onRemoveTag: _handleRemoveTag,
             onMakeEpisode: _handleMakeEpisode,
           ),
-          
-          SizedBox(height: 48),
+
+          const SizedBox(height: 48),
 
           // Error Message Display
           ValueListenableBuilder<String?>(
             valueListenable: _errorMessage,
             builder: (context, error, _) {
-              if (error == null) return SizedBox.shrink();
+              if (error == null) return const SizedBox.shrink();
               return Container(
-                margin: EdgeInsets.only(bottom: 24),
-                padding: EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                  color: AppColors.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(24),
+                  border:
+                      Border.all(color: AppColors.error.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.error_outline, color: AppColors.error),
-                    SizedBox(width: 12),
-                    Expanded(child: Text(error, style: TextStyle(color: AppColors.error))),
+                    const Icon(Icons.error_outline, color: AppColors.error),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Text(error,
+                            style: const TextStyle(color: AppColors.error))),
                   ],
                 ),
               );
@@ -1624,18 +1644,19 @@ class _UploadScreenState extends State<UploadScreen> {
                             variant: AppButtonVariant.outline,
                           ),
                         ),
-                        SizedBox(width: 16),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: AppButton(
                             onPressed: () {
                               _isMinimizing.value = true;
                               // Navigate to Profile/Account tab (index 4) so user can track upload status
-                              Provider.of<MainController>(context, listen: false).changeIndex(4);
+                               ref.read(mainControllerProvider)
+                                  .changeIndex(4);
                               // Re-notify listeners so the Consumer in ProfileVideosWidget
                               // immediately rebuilds and shows the optimistic video already
                               // injected by addVideoOptimistically().
                               try {
-                                Provider.of<ProfileStateManager>(context, listen: false)
+                                ref.read(profileStateManagerProvider)
                                     .notifyListenersSafe();
                               } catch (_) {}
                             },
@@ -1664,5 +1685,3 @@ class _UploadScreenState extends State<UploadScreen> {
     );
   }
 }
-
-

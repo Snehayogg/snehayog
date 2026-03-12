@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/shared/services/feedback_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 
 class FeedbackFormWidget extends StatefulWidget {

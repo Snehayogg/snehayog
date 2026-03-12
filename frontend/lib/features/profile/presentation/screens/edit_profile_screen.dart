@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/core/design/elevation.dart';
@@ -77,20 +76,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: Icon(Icons.camera_alt, color: AppColors.textPrimary),
+                  leading: const Icon(Icons.camera_alt,
+                      color: AppColors.textPrimary),
                   title: Text(
                       AppText.get('profile_take_photo', fallback: 'Take Photo'),
                       style: AppTypography.bodyMedium),
                   onTap: () async {
-                    final XFile? photo =
-                        await _imagePicker.pickImage(source: ImageSource.camera);
+                    final XFile? photo = await _imagePicker.pickImage(
+                        source: ImageSource.camera);
                     if (context.mounted) Navigator.pop(context, photo);
                   },
                 ),
                 ListTile(
-                  leading: Icon(Icons.photo_library, color: AppColors.textPrimary),
-                  title: Text(AppText.get('profile_choose_gallery',
-                      fallback: 'Choose from Gallery'),
+                  leading: const Icon(Icons.photo_library,
+                      color: AppColors.textPrimary),
+                  title: Text(
+                      AppText.get('profile_choose_gallery',
+                          fallback: 'Choose from Gallery'),
                       style: AppTypography.bodyMedium),
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
@@ -130,7 +132,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           surfaceTintColor: Colors.transparent,
           centerTitle: true,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+            icon: const Icon(Icons.arrow_back_ios_new,
+                color: AppColors.textPrimary, size: 20),
             onPressed: () {
               widget.stateManager.cancelEditing();
               Navigator.pop(context);
@@ -147,7 +150,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             Consumer<ProfileStateManager>(
               builder: (context, manager, child) {
                 if (manager.isLoading) {
-                  return Center(
+                  return const Center(
                     child: Padding(
                       padding: EdgeInsets.only(right: 16.0),
                       child: SizedBox(
@@ -155,14 +158,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(AppColors.primary),
                         ),
                       ),
                     ),
                   );
                 }
                 return Padding(
-                  padding: EdgeInsets.only(right: 8.0),
+                  padding: const EdgeInsets.only(right: 8.0),
                   child: AppButton(
                     onPressed: _handleSave,
                     label: 'Save',
@@ -183,7 +187,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             if (context.mounted) Navigator.pop(context);
           },
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(24.0),
             child: Form(
               key: _formKey,
               child: Column(
@@ -206,7 +210,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             return Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.borderPrimary, width: 4),
+                                border: Border.all(
+                                    color: AppColors.borderPrimary, width: 4),
                                 boxShadow: AppElevation.shadowMd,
                               ),
                               child: Stack(
@@ -214,7 +219,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 70,
-                                    backgroundColor: AppColors.backgroundTertiary,
+                                    backgroundColor:
+                                        AppColors.backgroundTertiary,
                                     backgroundImage: imageProvider,
                                     child: imageProvider == null
                                         ? Opacity(
@@ -223,8 +229,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                               'assets/images/placeholder_profile.png',
                                               width: 140,
                                               height: 140,
-                                              errorBuilder: (context, error, stackTrace) =>
-                                                  Icon(Icons.person, size: 70, color: AppColors.textSecondary),
+                                              errorBuilder: (context, error,
+                                                      stackTrace) =>
+                                                  const Icon(Icons.person,
+                                                      size: 70,
+                                                      color: AppColors
+                                                          .textSecondary),
                                             ),
                                           )
                                         : null,
@@ -233,13 +243,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     Container(
                                       width: 140,
                                       height: 140,
-                                      decoration: BoxDecoration(
+                                      decoration: const BoxDecoration(
                                         color: AppColors.overlayDark,
                                         shape: BoxShape.circle,
                                       ),
-                                      child: Center(
+                                      child: const Center(
                                         child: CircularProgressIndicator(
-                                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  AppColors.textPrimary),
                                           strokeWidth: 3,
                                         ),
                                       ),
@@ -255,14 +267,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: GestureDetector(
                             onTap: _pickImage,
                             child: Container(
-                              padding: EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.backgroundPrimary, width: 3),
+                                border: Border.all(
+                                    color: AppColors.backgroundPrimary,
+                                    width: 3),
                                 boxShadow: AppElevation.shadowSm,
                               ),
-                              child: Icon(
+                              child: const Icon(
                                 Icons.camera_alt_rounded,
                                 color: AppColors.textPrimary,
                                 size: 22,
@@ -273,14 +287,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                   ),
-                  SizedBox(height: 48),
+                  const SizedBox(height: 48),
                   Consumer<ProfileStateManager>(
                     builder: (context, manager, _) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
-                            padding: EdgeInsets.only(left: 4.0, bottom: 8.0),
+                            padding:
+                                const EdgeInsets.only(left: 4.0, bottom: 8.0),
                             child: Text(
                               'Display Name',
                               style: AppTypography.labelSmall.copyWith(
@@ -297,26 +312,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                             decoration: InputDecoration(
                               hintText: 'Enter your name',
-                              hintStyle: TextStyle(color: AppColors.textTertiary),
-                              prefixIcon: Icon(Icons.person_rounded, color: AppColors.primary.withValues(alpha: 0.7)),
+                              hintStyle: const TextStyle(
+                                  color: AppColors.textTertiary),
+                              prefixIcon: Icon(Icons.person_rounded,
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.7)),
                               filled: true,
                               fillColor: AppColors.backgroundSecondary,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 16),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(AppRadius.xl),
-                                borderSide: const BorderSide(color: AppColors.borderPrimary),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.xl),
+                                borderSide: const BorderSide(
+                                    color: AppColors.borderPrimary),
                               ),
                               focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(AppRadius.xl),
-                                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.xl),
+                                borderSide: const BorderSide(
+                                    color: AppColors.primary, width: 1.5),
                               ),
                               errorBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(AppRadius.xl),
-                                borderSide: const BorderSide(color: AppColors.error, width: 1),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.xl),
+                                borderSide: const BorderSide(
+                                    color: AppColors.error, width: 1),
                               ),
                               focusedErrorBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(AppRadius.xl),
-                                borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.xl),
+                                borderSide: const BorderSide(
+                                    color: AppColors.error, width: 1.5),
                               ),
                             ),
                             validator: (value) {

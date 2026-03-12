@@ -11,12 +11,16 @@ void main(List<String> args) {
   if (args.isEmpty || (args[0] != 'enable' && args[0] != 'disable')) {
     print('Usage: dart tool/toggle_fast_profile.dart [enable|disable]');
     print('  enable:  Restores full dependencies and real files for dubbing.');
-    print('  disable: Comments out heavy dependencies and uses stubs (Fast Profile).');
+    print(
+        '  disable: Comments out heavy dependencies and uses stubs (Fast Profile).');
     exit(1);
   }
 
-  final disable = args[0] == 'disable'; // disable = true means "Enable fast profile"
-  print(disable ? "🚀 Enabling Fast Profile (Removing Heavy Dependencies)..." : "📦 Restoring Full Profile (Adding Heavy Dependencies)...");
+  final disable =
+      args[0] == 'disable'; // disable = true means "Enable fast profile"
+  print(disable
+      ? "🚀 Enabling Fast Profile (Removing Heavy Dependencies)..."
+      : "📦 Restoring Full Profile (Adding Heavy Dependencies)...");
 
   final pubspecFile = File('pubspec.yaml');
   if (!pubspecFile.existsSync()) {
@@ -27,7 +31,7 @@ void main(List<String> args) {
   // 1. Update pubspec.yaml
   var lines = pubspecFile.readAsLinesSync();
   bool pubspecModified = false;
-  
+
   for (int i = 0; i < lines.length; i++) {
     final line = lines[i];
     for (final pkg in dubbingPackages) {
@@ -41,17 +45,18 @@ void main(List<String> args) {
         } else {
           // Disable: Add comment
           if (!line.trimLeft().startsWith('#')) {
-             final textIndex = line.indexOf(pkg);
-             lines[i] = line.substring(0, textIndex) + '#' + line.substring(textIndex);
-             pubspecModified = true;
+            final textIndex = line.indexOf(pkg);
+            lines[i] =
+                '${line.substring(0, textIndex)}#${line.substring(textIndex)}';
+            pubspecModified = true;
           }
         }
       }
     }
   }
-  
+
   if (pubspecModified) {
-    pubspecFile.writeAsStringSync(lines.join('\n') + '\n');
+    pubspecFile.writeAsStringSync('${lines.join('\n')}\n');
     print('✅ Updated pubspec.yaml');
   } else {
     print('ℹ️ pubspec.yaml is already up to date.');
@@ -59,7 +64,8 @@ void main(List<String> args) {
 
   // 2. Toggle dart files
   _toggleDartFile('lib/shared/services/local_dubbing_service.dart', disable);
-  _toggleDartFile('lib/shared/services/local_ai_inference_service.dart', disable);
+  _toggleDartFile(
+      'lib/shared/services/local_ai_inference_service.dart', disable);
 
   print('✅ Done. Please run `flutter pub get` now to apply dependencies.');
 }
@@ -67,7 +73,7 @@ void main(List<String> args) {
 void _toggleDartFile(String targetFile, bool disable) {
   final file = File(targetFile);
   final realFile = File('$targetFile.real');
-  final stubFile = File('${targetFile.replaceAll(".dart", "_stub.dart")}');
+  final stubFile = File(targetFile.replaceAll(".dart", "_stub.dart"));
 
   if (disable) {
     if (realFile.existsSync()) {

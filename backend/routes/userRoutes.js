@@ -60,8 +60,6 @@ const invalidateProfileCache = async (userIds) => {
 // ✅ Route to register/create user (for Google OAuth)
 router.post('/register', async (req, res) => {
   try {
-    console.log('🔍 User registration API: Request received');
-    console.log('🔍 User registration API: Body:', req.body);
     
     const { googleId, name, email, profilePicture, profilePic } = req.body;
     const profilePictureUrl = profilePicture || profilePic || '';

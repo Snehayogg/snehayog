@@ -4,12 +4,6 @@ import path from 'path';
 import fs from 'fs';
 
 class HybridVideoService {
-  constructor() {
-    // HybridVideoService: Using Local FFmpeg (FREE HLS Encoding) → R2 (FREE Bandwidth)
-    console.log('☁️ HybridVideoService: Initialized');
-    console.log('   Primary: Local FFmpeg HLS encoding (100% FREE)');
-    console.log('   Storage: Cloudflare R2 (FREE Bandwidth)');
-  }
 
   /**
    * Process video using Local FFmpeg → R2 (Storage + FREE Bandwidth)
@@ -17,12 +11,6 @@ class HybridVideoService {
    */
   async processVideoHybrid(videoId, videoPath, videoName, userId) {
     try {
-      console.log('🚀 Starting HLS Processing (FFmpeg → R2)...');
-      console.log('🆔 Video ID:', videoId);
-      console.log('💰 100% FREE transcoding with local FFmpeg!');
-      console.log('📁 Video path:', videoPath);
-      console.log('📝 Video name:', videoName);
-      console.log('👤 User ID:', userId);
       
       let absoluteVideoPath;
       let isRemoteFile = false;
@@ -317,10 +305,7 @@ class HybridVideoService {
         videoId,
         userId
       );
-      
-      console.log(`✅ Uploaded ${r2HLSResult.totalFiles} HLS files to R2`);
-      console.log(`   Playlist URL: ${r2HLSResult.playlistUrl}`);
-      console.log(`   Segments: ${r2HLSResult.segments}`);
+
       
       // Step 4: Generate thumbnail using FFmpeg (optional)
       console.log('📸 Generating thumbnail...');
@@ -343,14 +328,6 @@ class HybridVideoService {
       // Step 6: Cleanup local files
       console.log('🧹 Cleaning up local files...');
       await this.cleanupLocalFiles(videoPath, hlsResult.outputDir, thumbnailPath);
-      
-      console.log('🎉 Pure HLS processing completed successfully!');
-      console.log('📊 Cost breakdown:');
-      console.log('   - FFmpeg processing: $0 (local, FREE!)');
-      console.log('   - R2 storage: ~$0.015/GB/month');
-      console.log('   - R2 bandwidth: $0 (FREE forever!)');
-      console.log('   - Total: 100% FREE processing!');
-      
       return {
         success: true,
         videoUrl: r2HLSResult.playlistUrl,

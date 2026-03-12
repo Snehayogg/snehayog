@@ -48,6 +48,8 @@ dependencies:
   cached_network_image: ^3.3.0
   google_sign_in: ^6.1.6
   provider: ^6.1.2
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
   flutter_screenutil: ^5.9.3 
   image_picker: ^1.0.4
   video_compress: ^3.1.4
@@ -99,10 +101,10 @@ dependencies:
   talker_flutter: ^4.5.0
   system_info2: ^4.1.0
   flutter_tts: ^4.2.5
-  sherpa_onnx: ^1.12.25
-  ffmpeg_kit_flutter_new_https_gpl: ^2.1.0
-  whisper_flutter_new: ^1.0.1
-  google_mlkit_translation: ^0.13.1
+  #sherpa_onnx: ^1.12.25
+  #ffmpeg_kit_flutter_new_https_gpl: ^2.1.0
+  #whisper_flutter_new: ^1.0.1
+  #google_mlkit_translation: ^0.13.1
   hugeicons: ^1.1.2
   vibration: ^3.1.7
   firebase_crashlytics: ^4.3.10
@@ -111,6 +113,9 @@ dependencies:
 dev_dependencies:
   flutter_launcher_icons: ^0.14.3
   flutter_lints: ^2.0.0
+  riverpod_generator: ^2.4.0
+  build_runner: ^2.4.9
+  riverpod_lint: ^2.3.10
   flutter_test:
     sdk: flutter
 

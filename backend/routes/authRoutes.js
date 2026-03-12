@@ -1,7 +1,6 @@
 import express from 'express';
 import { 
   googleSignIn, 
-  deviceLogin, 
   refreshAccessToken, 
   logout, 
   logoutAllDevices, 

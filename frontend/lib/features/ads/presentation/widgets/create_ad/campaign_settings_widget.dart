@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 /// **CampaignSettingsWidget - Handles budget and date selection**
 class CampaignSettingsWidget extends StatelessWidget {
@@ -55,25 +52,32 @@ class CampaignSettingsWidget extends StatelessWidget {
                 hintText: '100',
                 border: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: (isBudgetValid == false) ? AppColors.error : AppColors.borderPrimary,
+                    color: (isBudgetValid == false)
+                        ? AppColors.error
+                        : AppColors.borderPrimary,
                     width: (isBudgetValid == false) ? 2.0 : 1.0,
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: (isBudgetValid == false) ? AppColors.error : AppColors.borderPrimary,
+                    color: (isBudgetValid == false)
+                        ? AppColors.error
+                        : AppColors.borderPrimary,
                     width: (isBudgetValid == false) ? 2.0 : 1.0,
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(
-                    color: (isBudgetValid == false) ? AppColors.error : AppColors.primary,
+                    color: (isBudgetValid == false)
+                        ? AppColors.error
+                        : AppColors.primary,
                     width: (isBudgetValid == false) ? 2.0 : 2.0,
                   ),
                 ),
                 prefixIcon: const Icon(Icons.attach_money),
                 errorText: (isBudgetValid == false) ? budgetError : null,
-                errorStyle: const TextStyle(color: AppColors.error, fontSize: 12),
+                errorStyle:
+                    const TextStyle(color: AppColors.error, fontSize: 12),
               ),
               keyboardType: TextInputType.number,
               onChanged: (_) {
@@ -89,7 +93,9 @@ class CampaignSettingsWidget extends StatelessWidget {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: (isDateValid == false) ? AppColors.error : AppColors.borderPrimary,
+                      color: (isDateValid == false)
+                          ? AppColors.error
+                          : AppColors.borderPrimary,
                       width: (isDateValid == false) ? 2.0 : 1.0,
                     ),
                     borderRadius: BorderRadius.circular(4),
@@ -106,8 +112,9 @@ class CampaignSettingsWidget extends StatelessWidget {
                       backgroundColor: (isDateValid == false)
                           ? AppColors.error.withValues(alpha: 0.1)
                           : AppColors.warning,
-                      foregroundColor:
-                          (isDateValid == false) ? AppColors.error : AppColors.white,
+                      foregroundColor: (isDateValid == false)
+                          ? AppColors.error
+                          : AppColors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4),
@@ -120,7 +127,8 @@ class CampaignSettingsWidget extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       dateError!,
-                      style: const TextStyle(color: AppColors.error, fontSize: 12),
+                      style:
+                          const TextStyle(color: AppColors.error, fontSize: 12),
                     ),
                   ),
               ],
@@ -130,15 +138,15 @@ class CampaignSettingsWidget extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Campaign will run for ${endDate!.difference(startDate!).inDays + 1} days',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
                 ),
               ),
             if (startDate == null || endDate == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
                 child: Text(
                   'Please select start and end dates for your campaign',
                   style: TextStyle(

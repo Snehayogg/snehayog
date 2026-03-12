@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
-import 'package:vayu/shared/providers/user_provider.dart';
-import 'package:vayu/features/video/presentation/managers/video_provider.dart';
-import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
+import 'package:vayu/core/providers/user_data_providers.dart';
+import 'package:vayu/core/providers/video_providers.dart';
+import 'package:vayu/core/providers/profile_providers.dart';
 
 /// **FIXED: Centralized logout service to coordinate all state managers**
 class LogoutService {
@@ -13,68 +11,52 @@ class LogoutService {
   factory LogoutService() => _instance;
   LogoutService._internal();
 
-  static T? _readProvider<T>(BuildContext context) {
-    try {
-      return Provider.of<T>(context, listen: false);
-    } catch (_) {
-      return null;
-    }
-  }
+  // Removed static _readProvider as we use ref now
 
   /// **FIXED: Perform complete logout across all state managers**
-  static Future<void> performCompleteLogout(BuildContext context) async {
+  static Future<void> performCompleteLogout(WidgetRef ref) async {
     try {
       print('🚪 LogoutService: Starting complete logout process...');
 
-      final authController = _readProvider<GoogleSignInController>(context);
-      final mainController = _readProvider<MainController>(context);
-      final userProvider = _readProvider<UserProvider>(context);
-      final videoProvider = _readProvider<VideoProvider>(context);
-      final profileStateManager = _readProvider<ProfileStateManager>(context);
+      final authController = ref.read(googleSignInProvider);
+      final mainController = ref.read(mainControllerProvider);
+      final userProv = ref.read(userProvider);
+      final videoProv = ref.read(videoProvider);
+      final profileStateManager = ref.read(profileStateManagerProvider);
 
       // **OPTIMIZED: parallelized logout for speed**
       await Future.wait([
-        // Step 1: Sign out via controller (falls back to direct service if unavailable)
+        // Step 1: Sign out via controller
         (() async {
           print('🚪 LogoutService: Signing out via GoogleSignInController...');
-          if (authController != null) {
-            await authController.signOut();
-          } else {
-            print('⚠️ LogoutService: Falling back to AuthService directly');
-            await AuthService().signOut();
-          }
+          await authController.signOut();
         })(),
 
         // Step 2: Reset MainController navigation state
         (() async {
-          if (mainController != null) {
-            print('🚪 LogoutService: Clearing MainController...');
-            await mainController.performLogout(resetIndex: false);
-          }
+          print('🚪 LogoutService: Clearing MainController...');
+          await mainController.performLogout(resetIndex: false);
         })(),
 
-        // Providers are synchronous but we wrap them for consistency in parallel flow
         Future.microtask(() {
-          if (userProvider != null) {
-            print('🚪 LogoutService: Clearing UserProvider...');
-            userProvider.clearAllCaches();
-          }
+          print('🚪 LogoutService: Clearing UserProvider...');
+          userProv.clearAllCaches();
         }),
 
         Future.microtask(() {
-          if (videoProvider != null) {
-            print('🚪 LogoutService: Clearing VideoProvider...');
-            videoProvider.clearAllVideos();
-          }
+          print('🚪 LogoutService: Clearing VideoProvider...');
+          videoProv.clearAllVideos();
         }),
 
         Future.microtask(() {
-          if (profileStateManager != null) {
-            print('🚪 LogoutService: Clearing ProfileStateManager...');
-            profileStateManager.clearData();
-          }
+          print('🚪 LogoutService: Clearing ProfileStateManager...');
+          profileStateManager.clearData();
         }),
       ]);
+
+      // **NEW: Invalidate pure providers to ensure fresh state everywhere**
+      ref.invalidate(authServiceProvider);
+      // ref.invalidate(...) other state if needed
 
       print('✅ LogoutService: Complete logout successful - All state cleared');
     } catch (e) {
@@ -84,43 +66,35 @@ class LogoutService {
   }
 
   /// **FIXED: Force refresh all state after account switch**
-  static Future<void> refreshAllState(BuildContext context) async {
+  static Future<void> refreshAllState(WidgetRef ref) async {
     try {
       print('🔄 LogoutService: Refreshing all state after account switch...');
 
-      final authController = _readProvider<GoogleSignInController>(context);
-      final userProvider = _readProvider<UserProvider>(context);
-      final videoProvider = _readProvider<VideoProvider>(context);
-      final profileStateManager = _readProvider<ProfileStateManager>(context);
+      final authController = ref.read(googleSignInProvider);
+      final userProv = ref.read(userProvider);
+      final videoProv = ref.read(videoProvider);
+      final profileStateManager = ref.read(profileStateManagerProvider);
 
       // **OPTIMIZED: parallelized refresh for speed**
       await Future.wait([
         (() async {
-          if (authController != null) {
-            print('🔄 LogoutService: Refreshing authentication state...');
-            await authController.refreshAuthState();
-          }
+          print('🔄 LogoutService: Refreshing authentication state...');
+          await authController.refreshAuthState();
         })(),
 
         Future.microtask(() {
-          if (userProvider != null) {
-            print('🔄 LogoutService: Refreshing user caches...');
-            userProvider.clearAllCaches();
-          }
+          print('🔄 LogoutService: Refreshing user caches...');
+          userProv.clearAllCaches();
         }),
 
         Future.microtask(() {
-          if (videoProvider != null) {
-            print('🔄 LogoutService: Refreshing video state...');
-            videoProvider.clearAllVideos();
-          }
+          print('🔄 LogoutService: Refreshing video state...');
+          videoProv.clearAllVideos();
         }),
 
         Future.microtask(() {
-          if (profileStateManager != null) {
-            print('🔄 LogoutService: Resetting ProfileStateManager cached data...');
-            profileStateManager.clearData();
-          }
+          print('🔄 LogoutService: Resetting ProfileStateManager cached data...');
+          profileStateManager.clearData();
         }),
       ]);
 

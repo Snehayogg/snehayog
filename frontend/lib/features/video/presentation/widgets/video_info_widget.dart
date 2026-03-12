@@ -7,10 +7,7 @@ import 'package:vayu/features/profile/data/services/profile_preloader.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 
 class VideoInfoWidget extends StatefulWidget {
@@ -53,9 +50,9 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
                 Text(
                   widget.video.videoName,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textInverse,
-                    fontWeight: FontWeight.w600,
-                  ),
+                        color: AppColors.textInverse,
+                        fontWeight: FontWeight.w600,
+                      ),
                   maxLines: _isExpanded ? null : 1,
                   overflow: _isExpanded
                       ? TextOverflow.visible
@@ -68,11 +65,12 @@ class _VideoInfoWidgetState extends State<VideoInfoWidget> {
                     child: Text(
                       _isExpanded ? 'view less' : 'view more',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.textInverse.withValues(alpha: 0.9),
-                        fontWeight: FontWeight.w500,
-                        decoration: TextDecoration.underline,
-                        decorationColor: AppColors.textInverse.withValues(alpha: 0.9),
-                      ),
+                            color: AppColors.textInverse.withValues(alpha: 0.9),
+                            fontWeight: FontWeight.w500,
+                            decoration: TextDecoration.underline,
+                            decorationColor:
+                                AppColors.textInverse.withValues(alpha: 0.9),
+                          ),
                     ),
                   ),
               ],
@@ -162,9 +160,9 @@ class _UploaderInfoSection extends StatelessWidget {
                   child: Text(
                     video.uploader.name,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textInverse,
-                      fontWeight: FontWeight.w500,
-                    ),
+                          color: AppColors.textInverse,
+                          fontWeight: FontWeight.w500,
+                        ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -253,9 +251,9 @@ class _UploaderAvatar extends StatelessWidget {
         child: Text(
           initials,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppColors.textInverse,
-            fontWeight: FontWeight.bold,
-          ),
+                color: AppColors.textInverse,
+                fontWeight: FontWeight.bold,
+              ),
         ),
       ),
     );

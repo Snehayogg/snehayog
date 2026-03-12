@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 class CarouselAdPage extends StatelessWidget {
   final List<CarouselAdModel> carouselAds;
@@ -28,7 +26,8 @@ class CarouselAdPage extends StatelessWidget {
         child: Center(
           child: Text(
             'No carousel ads available',
-            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+            style: AppTypography.bodyMedium
+                .copyWith(color: AppColors.textSecondary),
           ),
         ),
       );

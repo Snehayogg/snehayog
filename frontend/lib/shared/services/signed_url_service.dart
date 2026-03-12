@@ -11,44 +11,6 @@ class SignedUrlService {
 
   final AuthService _authService = AuthService();
 
-  /// Normalize Cloudinary HLS/MP4 URLs to a canonical public_id-based URL
-  String _normalizeCloudinaryUrl(String videoUrl) {
-    try {
-      if (!videoUrl.contains('res.cloudinary.com')) return videoUrl;
-      final uri = Uri.parse(videoUrl);
-      final segments = uri.pathSegments.toList();
-
-      print('🔍 SignedUrlService: Original URL segments: $segments');
-
-      // Find 'upload' index
-      final uploadIdx = segments.indexOf('upload');
-      if (uploadIdx == -1) return videoUrl;
-
-      // **FIXED: Extract everything after 'upload' as the public_id path**
-      // This handles both simple public_ids and folder-based public_ids
-      final pathSegments = segments.sublist(uploadIdx + 1);
-      if (pathSegments.isEmpty) return videoUrl;
-
-      // Join all segments after 'upload' to get the full public_id path
-      final fullPath = pathSegments.join('/');
-
-      // Remove file extension to get the public_id
-      final publicId = fullPath.replaceAll(
-          RegExp(r'\.(m3u8|mp4)$', caseSensitive: false), '');
-      print('🔍 SignedUrlService: Extracted public_id: $publicId');
-
-      // Build clean canonical HLS URL
-      const cloud = AppConfig.cloudinaryCloudName;
-      final canonical =
-          'https://res.cloudinary.com/$cloud/video/upload/$publicId.m3u8';
-      print('🔍 SignedUrlService: Canonical URL: $canonical');
-      return canonical;
-    } catch (e) {
-      print('❌ SignedUrlService: Error normalizing URL: $e');
-      return videoUrl;
-    }
-  }
-
   /// Generate signed URL for HLS video stream
   Future<String?> generateSignedUrl(String videoUrl,
       {String quality = 'hd'}) async {
@@ -63,10 +25,6 @@ class SignedUrlService {
             '⚡ SignedUrlService: Skipping signing for Cloudflare/R2/backend HLS URL');
         return videoUrl;
       }
-
-      final normalizedUrl = _normalizeCloudinaryUrl(videoUrl);
-      print('🔐 SignedUrlService: Generating signed URL for $normalizedUrl');
-      print('📊 Quality: $quality');
 
       // Get user authentication token
       final userData = await _authService.getUserData();
@@ -85,7 +43,7 @@ class SignedUrlService {
           'Authorization': 'Bearer ${userData['token']}',
         },
         body: json.encode({
-          'videoUrl': normalizedUrl,
+          'videoUrl': videoUrl,
           'quality': quality,
         }),
         timeout: const Duration(seconds: 5), // Shorter timeout

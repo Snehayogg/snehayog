@@ -18,11 +18,18 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       } catch (_) {}
 
       if (idx == null || idx < start || idx > end) {
-        if (controller.value.isInitialized && controller.value.isPlaying) {
-          try {
+        try {
+          final value = controller.value;
+          if (value.isInitialized && value.isPlaying) {
             controller.pause();
             _controllerStates[videoId] = false;
-          } catch (_) {}
+          }
+        } catch (e) {
+          AppLogger.log(
+            '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _reprimeWindowIfNeeded, cleaning up: $e',
+          );
+          _controllerPool.remove(videoId);
+          _controllerStates.remove(videoId);
         }
       }
     });
@@ -32,13 +39,20 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
   void _pauseAllOtherVideos(String? currentVideoId) {
     _controllerPool.forEach((videoId, controller) {
-      if (videoId != currentVideoId &&
-          controller.value.isInitialized &&
-          controller.value.isPlaying) {
-        try {
+      if (videoId == currentVideoId) return;
+
+      try {
+        final value = controller.value;
+        if (value.isInitialized && value.isPlaying) {
           controller.pause();
           _controllerStates[videoId] = false;
-        } catch (_) {}
+        }
+      } catch (e) {
+        AppLogger.log(
+          '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _pauseAllOtherVideos, cleaning up: $e',
+        );
+        _controllerPool.remove(videoId);
+        _controllerStates.remove(videoId);
       }
     });
 
@@ -60,7 +74,17 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     final videoId = video.id;
     final controller = _controllerPool[videoId];
 
-    if (controller != null && controller.value.isInitialized) {
+    bool isInitializedSafe = false;
+    if (controller != null) {
+      try {
+        isInitializedSafe = controller.value.isInitialized;
+      } catch (_) {
+        _controllerPool.remove(videoId);
+        _controllerStates.remove(videoId);
+      }
+    }
+
+    if (controller != null && isInitializedSafe) {
       _pauseAllOtherVideos(videoId);
       _lifecyclePaused = false;
       controller.play();
@@ -78,7 +102,16 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     _preloadVideo(_currentIndex).then((_) {
       if (!mounted) return;
       final c = _controllerPool[videoId];
-      if (c != null && c.value.isInitialized) {
+      bool cInit = false;
+      if (c != null) {
+        try {
+          cInit = c.value.isInitialized;
+        } catch (_) {
+          _controllerPool.remove(videoId);
+          _controllerStates.remove(videoId);
+        }
+      }
+      if (c != null && cInit) {
         _pauseAllOtherVideos(videoId);
         _lifecyclePaused = false;
         c.play();
@@ -103,11 +136,20 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       if (_controllerPool.containsKey(videoId)) {
         final controller = _controllerPool[videoId];
 
-        if (controller != null &&
-            controller.value.isInitialized &&
-            controller.value.isPlaying) {
-          controller.pause();
-          _controllerStates[videoId] = false;
+        if (controller != null) {
+          try {
+            final value = controller.value;
+            if (value.isInitialized && value.isPlaying) {
+              controller.pause();
+              _controllerStates[videoId] = false;
+            }
+          } catch (e) {
+            AppLogger.log(
+              '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _pauseCurrentVideo, cleaning up: $e',
+            );
+            _controllerPool.remove(videoId);
+            _controllerStates.remove(videoId);
+          }
         }
       }
     }
@@ -117,9 +159,18 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
   void _pauseAllVideosOnTabSwitch() {
     _controllerPool.forEach((videoId, controller) {
-      if (controller.value.isInitialized && controller.value.isPlaying) {
-        controller.pause();
-        _controllerStates[videoId] = false;
+      try {
+        final value = controller.value;
+        if (value.isInitialized && value.isPlaying) {
+          controller.pause();
+          _controllerStates[videoId] = false;
+        }
+      } catch (e) {
+        AppLogger.log(
+          '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _pauseAllVideosOnTabSwitch, cleaning up: $e',
+        );
+        _controllerPool.remove(videoId);
+        _controllerStates.remove(videoId);
       }
     });
 

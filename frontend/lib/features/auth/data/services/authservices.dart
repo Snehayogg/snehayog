@@ -844,6 +844,7 @@ class AuthService {
             AppLogger.log(
                 '❌ AuthService: Token is expired and refresh failed, clearing token');
             await prefs.remove('jwt_token');
+            await prefs.setBool('auth_needs_login', true);
           } else {
             AppLogger.log(
                 'ℹ️ AuthService: Token validation failed but token appears valid, keeping it (may be network issue)');
@@ -946,6 +947,7 @@ class AuthService {
 
       // If we reach here, no valid data is available
       AppLogger.log('⚠️ No valid user data available, returning null');
+      await prefs.setBool('auth_needs_login', true);
       return null;
     } catch (e) {
       AppLogger.log('❌ Error getting user data: $e');
@@ -1112,6 +1114,8 @@ class AuthService {
               if (newRefreshToken != null) {
                 await prefs.setString('refresh_token', newRefreshToken);
               }
+              // Session recovered: do not show "Sign in" CTA
+              await prefs.setBool('auth_needs_login', false);
               await _markSlidingRefreshActivity(prefs);
               AppLogger.log('✅ Access token refreshed successfully via refresh_token');
               return newToken;
@@ -1150,11 +1154,13 @@ class AuthService {
       final googleToken = await _reauthenticateWithGoogle();
       if (googleToken != null) {
         AppLogger.log('✅ Access token refreshed via Google Silent Sign-In');
+        await prefs.setBool('auth_needs_login', false);
         return googleToken;
       }
 
       AppLogger.log('❌ All automatic refresh methods failed');
-      
+      // Mark that user action is required to restore session.
+      await prefs.setBool('auth_needs_login', true);
       return null;
     } catch (e) {
       AppLogger.log('❌ Error during token refresh sequence: $e');

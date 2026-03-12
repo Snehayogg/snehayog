@@ -196,6 +196,12 @@ class HttpClientService {
                 return handler.resolve(response);
               } else {
                 AppLogger.log('🔐 HttpClientService: Token refresh returned null, user must re-authenticate');
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('auth_needs_login', true);
+                  // Remove JWT to stop auto-injection/401 loops; keep fallback_user for UI.
+                  await prefs.remove('jwt_token');
+                } catch (_) {}
               }
             } catch (e) {
               _isRefreshing = false;

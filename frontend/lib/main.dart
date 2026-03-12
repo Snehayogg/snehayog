@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart'; // Ensure Firebase is imported
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:async';
-import 'package:provider/provider.dart';
 import 'package:vayu/features/video/presentation/screens/homescreen.dart';
 import 'package:vayu/features/onboarding/presentation/screens/splash_screen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
-import 'package:vayu/features/video/presentation/managers/video_provider.dart';
-import 'package:vayu/shared/providers/user_provider.dart';
 import 'package:vayu/features/video/presentation/screens/video_screen.dart';
 import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
 import 'package:vayu/core/design/theme.dart';
@@ -23,12 +19,12 @@ import 'package:vayu/features/onboarding/data/services/welcome_onboarding_servic
 import 'package:vayu/features/onboarding/data/services/gallery_permission_service.dart';
 import 'package:vayu/features/onboarding/presentation/screens/welcome_onboarding_screen.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
-import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
-
+import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
+import 'package:vayu/core/providers/video_providers.dart';
 import 'package:vayu/shared/services/error_logging_service.dart';
 
 void main() async {
@@ -81,16 +77,7 @@ void main() async {
 
   // **OPTIMIZED: Start app immediately**
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => GoogleSignInController()),
-        ChangeNotifierProvider(create: (_) => MainController()),
-        ChangeNotifierProvider(create: (_) => VideoProvider()),
-        ChangeNotifierProvider(create: (_) => UserProvider()),
-        ChangeNotifierProvider(create: (_) => ProfileStateManager()),
-        ChangeNotifierProvider(create: (_) => GameCreatorManager()),
-        Provider(create: (_) => AuthService()),
-      ],
+    ProviderScope(
       child: ScreenUtilInit(
         designSize: const Size(375, 812),
         minTextAdapt: true,
@@ -104,14 +91,14 @@ void main() async {
 
 // _splashPrefetch removed (logic moved to AppInitializationManager)
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   StreamSubscription? _sub;
 
   @override
@@ -130,7 +117,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final mainController = Provider.of<MainController>(context, listen: false);
+    final mainController = ref.read(mainControllerProvider);
     final hotUIManager = HotUIStateManager();
 
     switch (state) {
@@ -155,7 +142,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // **NEW: Pause all videos when app becomes inactive**
         _pauseAllVideosGlobally();
         // **AGGRESSIVE CACHING: Save stale videos for next cold start**
-        Provider.of<VideoProvider>(context, listen: false).saveStaleVideos();
+        ref.read(videoProvider).saveStaleVideos();
         hotUIManager.handleAppLifecycleChange(state);
         break;
       case AppLifecycleState.paused:
@@ -166,7 +153,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // **NEW: Pause all videos when app is paused (minimized)**
         _pauseAllVideosGlobally();
         // **AGGRESSIVE CACHING: Save stale videos for next cold start**
-        Provider.of<VideoProvider>(context, listen: false).saveStaleVideos();
+        ref.read(videoProvider).saveStaleVideos();
         // **HOT UI: Preserve state when app goes to background**
         hotUIManager.handleAppLifecycleChange(state);
         break;
@@ -177,7 +164,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // **AGGRESSIVE CACHING: Save stale videos for next cold start**
         // Note: Context might be unstable here, but worth a try
         try {
-           Provider.of<VideoProvider>(context, listen: false).saveStaleVideos();
+           ref.read(videoProvider).saveStaleVideos();
         } catch (_) {}
         hotUIManager.handleAppLifecycleChange(state);
         break;
@@ -196,8 +183,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       // 1. Pause videos from MainController
       try {
-        final mainController =
-            Provider.of<MainController>(context, listen: false);
+        final mainController = ref.read(mainControllerProvider);
         mainController.forcePauseVideos();
         AppLogger.log('✅ MyApp: Paused videos via MainController');
       } catch (e) {
@@ -260,21 +246,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
-class AuthWrapper extends StatefulWidget {
+class AuthWrapper extends ConsumerStatefulWidget {
   const AuthWrapper({super.key});
 
   @override
-  State<AuthWrapper> createState() => _AuthWrapperState();
+  ConsumerState<AuthWrapper> createState() => _AuthWrapperState();
 }
 
-class _AuthWrapperState extends State<AuthWrapper> {
+class _AuthWrapperState extends ConsumerState<AuthWrapper> {
   @override
   void initState() {
     super.initState();
     // Start auth check in background (non-blocking)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authController =
-          Provider.of<GoogleSignInController>(context, listen: false);
+      final authController = ref.read(googleSignInProvider);
       authController.checkAuthStatus();
 
       // **BACKGROUND PRELOADING: Preload profile data after authentication check**
@@ -309,16 +294,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
 }
 
 /// **NEW: MainScreen with background location check**
-class MainScreenWithLocationCheck extends StatefulWidget {
+class MainScreenWithLocationCheck extends ConsumerStatefulWidget {
   const MainScreenWithLocationCheck({super.key});
 
   @override
-  State<MainScreenWithLocationCheck> createState() =>
+  ConsumerState<MainScreenWithLocationCheck> createState() =>
       _MainScreenWithLocationCheckState();
 }
 
 class _MainScreenWithLocationCheckState
-    extends State<MainScreenWithLocationCheck> {
+    extends ConsumerState<MainScreenWithLocationCheck> {
   bool _hasCheckedLocation = false;
   bool _hasCheckedGallery = false;
   bool _hasCheckedWelcome = false;

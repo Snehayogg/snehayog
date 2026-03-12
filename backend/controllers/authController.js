@@ -16,7 +16,7 @@ export const googleSignIn = async (req, res) => {
 
     // Verify Google ID Token
     const userData = await verifyGoogleToken(idToken);
-    console.log('🔐 Google Sign-In: Verified user:', userData.email);
+    console.log('🔐 Google Sign-In: Verified user');
 
     // Find or create user
     let user = await User.findOne({ googleId: userData.sub })

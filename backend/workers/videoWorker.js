@@ -18,7 +18,7 @@ dotenv.config();
 // Connect to MongoDB (Worker needs its own connection)
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    await mongoose.connect(process.env.MONGO_URI);
     console.log('📦 Worker MongoDB Connected');
     
     // Connect to Redis for cache invalidation
@@ -46,10 +46,7 @@ async function handleVideoProcessing(job) {
         processingProgress: 10 
     });
 
-    console.log(`⬇️ Worker: Downloading raw video from R2 key: ${rawVideoKey}`);
     await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
-    
-    console.log('🎬 Worker: Starting FFmpeg encoding...');
     await Video.findByIdAndUpdate(videoId, { processingProgress: 30 });
 
     const hlsResult = await hybridVideoService.processVideoToHLS(
@@ -73,7 +70,13 @@ async function handleVideoProcessing(job) {
         
         if (hlsResult.duration) {
             video.duration = hlsResult.duration;
-            video.videoType = hlsResult.duration > 120 ? 'vayu' : 'yog';
+        }
+
+        // **SOURCE OF TRUTH: Always update videoType and aspectRatio based on actual processed result**
+        if (hlsResult.aspectRatio) {
+            video.aspectRatio = hlsResult.aspectRatio;
+            video.videoType = hlsResult.aspectRatio > 1.0 ? 'vayu' : 'yog';
+            console.log(`👷 Worker: Updated metadata for ${videoId}: AR=${video.aspectRatio}, Type=${video.videoType}`);
         }
 
         video.finalScore = RecommendationService.calculateFinalScore({
@@ -89,7 +92,6 @@ async function handleVideoProcessing(job) {
         await video.save();
 
         try {
-            console.log(`🛡️ Worker: Starting local moderation for ${videoId}...`);
             const moderationResult = await localModerationService.moderateVideo(localRawPath);
             const updatedVideo = await Video.findById(videoId);
             if (updatedVideo) {
@@ -142,7 +144,6 @@ async function handleVideoProcessing(job) {
 
 // **OPTIMIZED: Multi-Job Type Dispatcher**
 const videoWorker = new Worker('video-processing', async (job) => {
-  console.log(`👷 Worker: Received job ${job.id} [${job.name}]`);
   
   try {
     switch (job.name) {

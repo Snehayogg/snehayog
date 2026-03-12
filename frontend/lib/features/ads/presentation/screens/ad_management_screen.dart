@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayu/core/design/radius.dart';
-import 'package:provider/provider.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
@@ -15,17 +14,16 @@ import 'package:vayu/features/profile/presentation/widgets/profile_static_views.
 
 /// **ENHANCED AD MANAGEMENT SCREEN**
 /// Complete ad management with advanced targeting, performance analytics, and bulk operations
-class AdManagementScreen extends StatefulWidget {
+class AdManagementScreen extends ConsumerStatefulWidget {
   const AdManagementScreen({super.key});
 
   @override
-  State<AdManagementScreen> createState() => _AdManagementScreenState();
+  ConsumerState<AdManagementScreen> createState() => _AdManagementScreenState();
 }
 
-class _AdManagementScreenState extends State<AdManagementScreen>
+class _AdManagementScreenState extends ConsumerState<AdManagementScreen>
     with TickerProviderStateMixin {
   final AdService _adService = AdService();
-  final AuthService _authService = AuthService();
 
   List<AdModel> _ads = [];
   bool _isLoading = true;
@@ -327,7 +325,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       ),
                     ),
                   ),
-                 const SizedBox(height: 16),
+                  const SizedBox(height: 16),
                 ],
 
                 // Performance metrics tabs
@@ -383,15 +381,15 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   AppColors.success),
               _buildMetricCard(
                   'CTR', ad.formattedCtr, Icons.trending_up, AppColors.warning),
-              _buildMetricCard(
-                  'Spend', ad.formattedSpend, Icons.attach_money, AppColors.error),
+              _buildMetricCard('Spend', ad.formattedSpend, Icons.attach_money,
+                  AppColors.error),
               _buildMetricCard('Conversions', ad.conversions.toString(),
                   Icons.star, AppColors.primaryLight),
-              _buildMetricCard(
-                  'CPC', ad.formattedCpc, Icons.monetization_on, AppColors.primaryDark),
+              _buildMetricCard('CPC', ad.formattedCpc, Icons.monetization_on,
+                  AppColors.primaryDark),
             ],
           ),
-         const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Budget pacing
           Card(
@@ -400,9 +398,9 @@ class _AdManagementScreenState extends State<AdManagementScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                 const Text('Budget Pacing',
+                  const Text('Budget Pacing',
                       style: TextStyle(fontWeight: FontWeight.bold)),
-                 const SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   LinearProgressIndicator(
                     value: ad.budgetPacing.clamp(0.0, 1.0),
                     backgroundColor: AppColors.backgroundTertiary,
@@ -414,7 +412,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                               : AppColors.warning,
                     ),
                   ),
-                 const SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(ad.budgetPacingStatus),
                 ],
               ),
@@ -477,7 +475,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: color, size: 24),
-           const SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               value,
               style: TextStyle(
@@ -657,7 +655,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: [
+          tabs: const [
             Tab(text: 'All Ads'),
             Tab(text: 'Analytics'),
             Tab(text: 'Insights'),
@@ -665,8 +663,9 @@ class _AdManagementScreenState extends State<AdManagementScreen>
           ],
         ),
       ),
-      body: Consumer<GoogleSignInController>(
-        builder: (context, authController, _) {
+      body: Consumer(
+        builder: (context, ref, _) {
+          final authController = ref.watch(googleSignInProvider);
           final isSignedIn = authController.isSignedIn;
 
           // **SYNC: Trigger reload when user signs in**
@@ -683,7 +682,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
               onGoogleSignIn: () async {
                 final user = await authController.signIn();
                 if (user != null) {
-                  await LogoutService.refreshAllState(context);
+                  await LogoutService.refreshAllState(ref);
                 }
               },
             );
@@ -708,7 +707,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       children: [
         // Search and filters
         Container(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               // Search bar
@@ -736,7 +735,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   });
                 },
               ),
-             const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
               // Filter and sort row
               Row(
@@ -747,7 +746,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       initialValue: _selectedFilter,
                       decoration: const InputDecoration(
                         labelText: 'Status',
-                        border:  OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                         contentPadding:
                             EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                       ),
@@ -789,7 +788,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       },
                     ),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
@@ -805,7 +804,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                             value: 'created_desc',
                             child: Text('Newest first',
                                 overflow: TextOverflow.ellipsis,
-                                style:  TextStyle(fontSize: 13))),
+                                style: TextStyle(fontSize: 13))),
                         DropdownMenuItem(
                             value: 'created_asc',
                             child: Text('Oldest first',
@@ -848,7 +847,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
               Expanded(
                   child: _buildStatCard('Total Ads', _ads.length.toString(),
                       Icons.campaign, AppColors.primary)),
-             const SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                   child: _buildStatCard(
                       'Active',
@@ -866,7 +865,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
           ),
         ),
 
-       const SizedBox(height: 16),
+        const SizedBox(height: 16),
 
         // Ads list
         Expanded(
@@ -877,15 +876,15 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                         const Icon(Icons.error_outline,
+                          const Icon(Icons.error_outline,
                               size: 64, color: AppColors.error),
-                         const SizedBox(height: 16),
+                          const SizedBox(height: 16),
                           Text(
                             _errorMessage!,
                             style: const TextStyle(color: AppColors.error),
                             textAlign: TextAlign.center,
                           ),
-                         const SizedBox(height: 16),
+                          const SizedBox(height: 16),
                           AppButton(
                             onPressed: _loadAds,
                             label: 'Retry',
@@ -907,9 +906,10 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                                     ? 'No advertisements found'
                                     : 'No $_selectedFilter advertisements found',
                                 style: const TextStyle(
-                                    color: AppColors.textSecondary, fontSize: 18),
+                                    color: AppColors.textSecondary,
+                                    fontSize: 18),
                               ),
-                             const SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               const Text(
                                 'Create your first advertisement to get started',
                                 style: TextStyle(color: AppColors.textTertiary),
@@ -971,7 +971,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                         });
                       },
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                   ],
                   Expanded(
                     child: Column(
@@ -1021,7 +1021,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                           color: ad.performanceColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                              color: ad.performanceColor.withValues(alpha: 0.3)),
+                              color:
+                                  ad.performanceColor.withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           ad.performanceStatus,
@@ -1079,12 +1080,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     Expanded(
                       child: AppButton(
                         onPressed: () => _showAdDetails(ad),
-                        icon: Icon(Icons.analytics, size: 16),
+                        icon: const Icon(Icons.analytics, size: 16),
                         label: 'Analytics',
                         variant: AppButtonVariant.outline,
                       ),
                     ),
-                   const SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     if (ad.isDraft || ad.isPaused)
                       Expanded(
                         child: AppButton(
@@ -1098,15 +1099,15 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                       Expanded(
                         child: AppButton(
                           onPressed: () => _updateAdStatus(ad, 'paused'),
-                          icon: Icon(Icons.pause, size: 16),
+                          icon: const Icon(Icons.pause, size: 16),
                           label: 'Pause',
                           variant: AppButtonVariant.secondary,
                         ),
                       ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     AppButton(
                       onPressed: () => _deleteAd(ad),
-                      icon: Icon(Icons.delete_outline, size: 16),
+                      icon: const Icon(Icons.delete_outline, size: 16),
                       label: '',
                       variant: AppButtonVariant.outline,
                     ),
@@ -1123,10 +1124,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     return Column(
       children: [
         Icon(icon, size: 16, color: AppColors.textSecondary),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
           value,
-          style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.bold),
+          style:
+              AppTypography.labelMedium.copyWith(fontWeight: FontWeight.bold),
         ),
         Text(
           label,
@@ -1138,7 +1140,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildTargetingChip(String text, IconData icon) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -1148,7 +1150,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 12, color: AppColors.primary),
-          SizedBox(width: 4),
+          const SizedBox(width: 4),
           Text(
             text,
             style: AppTypography.labelSmall.copyWith(color: AppColors.primary),
@@ -1160,11 +1162,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildAnalyticsTab() {
     if (_ads.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.analytics_outlined, size: 64, color: AppColors.textTertiary),
+            Icon(Icons.analytics_outlined,
+                size: 64, color: AppColors.textTertiary),
             SizedBox(height: 16),
             Text(
               'No ads to analyze',
@@ -1184,7 +1187,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       future: _fetchAllAdsAnalytics(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.hasError) {
@@ -1192,14 +1195,15 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, size: 64, color: AppColors.error),
-                SizedBox(height: 16),
+                const Icon(Icons.error_outline,
+                    size: 64, color: AppColors.error),
+                const SizedBox(height: 16),
                 Text(
                   'Error loading analytics: ${snapshot.error}',
-                  style: TextStyle(color: AppColors.error),
+                  style: const TextStyle(color: AppColors.error),
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 AppButton(
                   onPressed: () => setState(() {}),
                   label: 'Retry',
@@ -1213,7 +1217,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
         final analyticsData = snapshot.data ?? [];
 
         return SingleChildScrollView(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1221,11 +1225,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
               Card(
                 elevation: 2,
                 child: Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      const Row(
                         children: [
                           Icon(Icons.dashboard, color: AppColors.primary),
                           SizedBox(width: 8),
@@ -1241,7 +1245,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                           ),
                         ],
                       ),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
                       // Key Metrics Grid
                       GridView.count(
                         shrinkWrap: true,
@@ -1249,7 +1253,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                         crossAxisCount: 2,
                         mainAxisSpacing: 16,
                         crossAxisSpacing: 16,
-                        childAspectRatio: 0.9, // Further decreased to give even more height
+                        childAspectRatio:
+                            0.9, // Further decreased to give even more height
                         children: [
                           _buildAnalyticsMetricCard(
                             'Total Impressions',
@@ -1295,7 +1300,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                 ),
               ),
 
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
 
               // Individual Ad Performance
               const Text(
@@ -1407,7 +1412,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     Color color,
   ) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
@@ -1417,7 +1422,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: color, size: 28),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
@@ -1426,7 +1431,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
               color: color,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             title,
             style: AppTypography.labelSmall.copyWith(
@@ -1469,8 +1474,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     final displayTitle = ad.title; // Use original ad title
     final displayImageUrl = ad.imageUrl; // Use original ad imageUrl
 
-    return  Card(
-      margin: EdgeInsets.only(bottom: 12),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
       child: ExpansionTile(
         leading: displayImageUrl != null
@@ -1485,22 +1490,24 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     width: 50,
                     height: 50,
                     color: AppColors.backgroundTertiary,
-                    child: Icon(Icons.image, color: AppColors.textSecondary),
+                    child:
+                        const Icon(Icons.image, color: AppColors.textSecondary),
                   ),
                 ),
               )
-            : Icon(Icons.campaign, size: 40),
+            : const Icon(Icons.campaign, size: 40),
         title: Text(
           displayTitle, // **FIX: Use original ad title**
           style: AppTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
           ad.adType.toUpperCase(),
-          style: AppTypography.labelSmall.copyWith(color: AppColors.textSecondary),
+          style:
+              AppTypography.labelSmall.copyWith(color: AppColors.textSecondary),
         ),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 // Key Metrics Row
@@ -1524,7 +1531,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     ),
                   ],
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -1545,7 +1552,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     ),
                   ],
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 // NEW: Add CPM to must-have KPIs
                 Row(
                   children: [
@@ -1567,10 +1574,10 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     ),
                   ],
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 // Additional Metrics
                 Container(
-                  padding: EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.backgroundSecondary,
                     borderRadius: BorderRadius.circular(AppRadius.md),
@@ -1578,26 +1585,26 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                   child: Column(
                     children: [
                       _buildDetailRow('Ad Views', _formatNumber(impressions)),
-                      Divider(),
+                      const Divider(),
                       _buildDetailRow('Reach (Unique Users)',
                           reach != null ? _formatNumber(reach) : '—'),
-                      Divider(),
+                      const Divider(),
                       _buildDetailRow('Conversions', conversions.toString()),
-                      Divider(),
+                      const Divider(),
                       _buildDetailRow('CVR', '${cvr.toStringAsFixed(2)}%'),
-                      Divider(),
+                      const Divider(),
                       _buildDetailRow(
                           'CPC',
                           cpc.isFinite
                               ? '₹${cpc.toStringAsFixed(2)}'
                               : '₹0.00'),
-                      Divider(),
+                      const Divider(),
                       _buildDetailRow(
                           'CPM',
                           cpm.isFinite
                               ? '₹${cpm.toStringAsFixed(2)}'
                               : '₹0.00'),
-                      Divider(),
+                      const Divider(),
                       _buildDetailRow('Status', ad.status.toUpperCase()),
                     ],
                   ),
@@ -1617,7 +1624,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     Color color,
   ) {
     return Container(
-      padding: EdgeInsets.all(12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -1625,7 +1632,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       child: Column(
         children: [
           Icon(icon, color: color, size: 24),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             value,
             style: AppTypography.headlineMedium.copyWith(
@@ -1634,7 +1641,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
           ),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
             ),
@@ -1646,7 +1653,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1773,18 +1780,19 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildInsightsTab() {
     if (_ads.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-             Icon(Icons.lightbulb_outlined, size: 64, color: AppColors.textTertiary),
-             SizedBox(height: 16),
+            Icon(Icons.lightbulb_outlined,
+                size: 64, color: AppColors.textTertiary),
+            SizedBox(height: 16),
             Text(
               'No insights available',
               style: TextStyle(fontSize: 18, color: AppColors.textSecondary),
             ),
-             SizedBox(height: 8),
-             Text(
+            SizedBox(height: 8),
+            Text(
               'Create and run ads to get insights',
               style: TextStyle(color: AppColors.textTertiary),
             ),
@@ -1794,14 +1802,14 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     }
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Performance insights
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1809,7 +1817,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Performance Insights',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ..._getPerformanceInsights()
                       .map((insight) => _buildInsightCard(insight)),
                 ],
@@ -1817,12 +1825,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Optimization recommendations
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1830,7 +1838,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Optimization Recommendations',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ..._getOptimizationRecommendations().map((recommendation) =>
                       _buildRecommendationCard(recommendation)),
                 ],
@@ -1838,12 +1846,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Best practices
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1851,9 +1859,9 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Best Practices',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ..._getBestPractices().map((practice) => ListTile(
-                        leading: Icon(Icons.check_circle,
+                        leading: const Icon(Icons.check_circle,
                             color: AppColors.success, size: 20),
                         title: Text(practice['title']!),
                         subtitle: Text(practice['description']!),
@@ -1870,14 +1878,14 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildSettingsTab() {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Account settings
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1885,12 +1893,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Account Settings',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ListTile(
-                    leading:
-                        Icon(Icons.notifications, color: AppColors.primary),
-                    title: Text('Email Notifications'),
-                    subtitle: Text('Get notified about ad performance'),
+                    leading: const Icon(Icons.notifications,
+                        color: AppColors.primary),
+                    title: const Text('Email Notifications'),
+                    subtitle: const Text('Get notified about ad performance'),
                     trailing: Switch(
                       value: true, // TODO: Connect to actual setting
                       onChanged: (value) {
@@ -1903,9 +1911,10 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     ),
                   ),
                   ListTile(
-                    leading: Icon(Icons.warning, color: AppColors.warning),
-                    title: Text('Budget Alerts'),
-                    subtitle: Text('Alert when 80% of budget is spent'),
+                    leading:
+                        const Icon(Icons.warning, color: AppColors.warning),
+                    title: const Text('Budget Alerts'),
+                    subtitle: const Text('Alert when 80% of budget is spent'),
                     trailing: Switch(
                       value: true, // TODO: Connect to actual setting
                       onChanged: (value) {
@@ -1922,12 +1931,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Default ad settings
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1935,30 +1944,32 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Default Ad Settings',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ListTile(
-                    leading:
-                        Icon(Icons.attach_money, color: AppColors.success),
-                    title: Text('Default Daily Budget'),
-                    subtitle: Text('₹100.00'),
+                    leading: const Icon(Icons.attach_money,
+                        color: AppColors.success),
+                    title: const Text('Default Daily Budget'),
+                    subtitle: const Text('₹100.00'),
                     trailing: IconButton(
                       onPressed: () => _showBudgetDialog(),
-                      icon: Icon(Icons.edit),
+                      icon: const Icon(Icons.edit),
                     ),
                   ),
                   ListTile(
-                    leading: Icon(Icons.group, color: AppColors.primaryDark),
-                    title: Text('Default Target Audience'),
-                    subtitle: Text('All ages, All locations'),
+                    leading:
+                        const Icon(Icons.group, color: AppColors.primaryDark),
+                    title: const Text('Default Target Audience'),
+                    subtitle: const Text('All ages, All locations'),
                     trailing: IconButton(
                       onPressed: () => _showTargetingDialog(),
-                      icon: Icon(Icons.edit),
+                      icon: const Icon(Icons.edit),
                     ),
                   ),
                   ListTile(
-                    leading: Icon(Icons.schedule, color: AppColors.primary),
-                    title: Text('Auto-pause Low Performance'),
-                    subtitle: Text('Pause ads with CTR < 1%'),
+                    leading:
+                        const Icon(Icons.schedule, color: AppColors.primary),
+                    title: const Text('Auto-pause Low Performance'),
+                    subtitle: const Text('Pause ads with CTR < 1%'),
                     trailing: Switch(
                       value: false, // TODO: Connect to actual setting
                       onChanged: (value) {
@@ -1974,12 +1985,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Billing and payments
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1987,12 +1998,13 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Billing & Payments',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ListTile(
-                    leading: Icon(Icons.credit_card, color: AppColors.primary),
-                    title: Text('Payment Methods'),
-                    subtitle: Text('Manage your payment methods'),
-                    trailing: Icon(Icons.arrow_forward_ios),
+                    leading:
+                        const Icon(Icons.credit_card, color: AppColors.primary),
+                    title: const Text('Payment Methods'),
+                    subtitle: const Text('Manage your payment methods'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
                     onTap: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -2001,10 +2013,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     },
                   ),
                   ListTile(
-                    leading: Icon(Icons.receipt, color: AppColors.success),
-                    title: Text('Billing History'),
-                    subtitle: Text('View past invoices and payments'),
-                    trailing: Icon(Icons.arrow_forward_ios),
+                    leading:
+                        const Icon(Icons.receipt, color: AppColors.success),
+                    title: const Text('Billing History'),
+                    subtitle: const Text('View past invoices and payments'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
                     onTap: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -2017,12 +2030,12 @@ class _AdManagementScreenState extends State<AdManagementScreen>
             ),
           ),
 
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Advanced settings
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2030,19 +2043,21 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     'Advanced Settings',
                     style: AppTypography.headlineSmall,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ListTile(
-                    leading: Icon(Icons.download, color: AppColors.primary),
-                    title: Text('Export Data'),
-                    subtitle: Text('Download ad performance reports'),
-                    trailing: Icon(Icons.arrow_forward_ios),
+                    leading:
+                        const Icon(Icons.download, color: AppColors.primary),
+                    title: const Text('Export Data'),
+                    subtitle: const Text('Download ad performance reports'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
                     onTap: () => _exportAdData(),
                   ),
                   ListTile(
-                    leading: Icon(Icons.delete_sweep, color: AppColors.error),
-                    title: Text('Clear Analytics Data'),
-                    subtitle: Text('Reset all performance metrics'),
-                    trailing: Icon(Icons.arrow_forward_ios),
+                    leading:
+                        const Icon(Icons.delete_sweep, color: AppColors.error),
+                    title: const Text('Clear Analytics Data'),
+                    subtitle: const Text('Reset all performance metrics'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
                     onTap: () => _showClearDataDialog(),
                   ),
                 ],
@@ -2058,11 +2073,11 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
             Icon(icon, color: color, size: 24),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               value,
               style: TextStyle(
@@ -2227,8 +2242,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     final isWarning = insight['type'] == 'warning';
 
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isSuccess
             ? AppColors.success.withValues(alpha: 0.1)
@@ -2258,18 +2273,19 @@ class _AdManagementScreenState extends State<AdManagementScreen>
                     ? AppColors.warning
                     : AppColors.primary,
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   insight['title']!,
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   insight['description']!,
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -2281,8 +2297,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
 
   Widget _buildRecommendationCard(Map<String, String> recommendation) {
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
-      padding: EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
@@ -2290,19 +2306,20 @@ class _AdManagementScreenState extends State<AdManagementScreen>
       ),
       child: Row(
         children: [
-          Icon(Icons.lightbulb, color: AppColors.primary),
-          SizedBox(width: 12),
+          const Icon(Icons.lightbulb, color: AppColors.primary),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   recommendation['title']!,
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   recommendation['description']!,
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -2329,7 +2346,7 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Default Daily Budget'),
+        title: const Text('Default Daily Budget'),
         content: const TextField(
           decoration: InputDecoration(
             labelText: 'Daily Budget (₹)',
@@ -2363,8 +2380,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Default Targeting'),
-        content: Column(
+        title: const Text('Default Targeting'),
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Set your default targeting preferences for new ads'),
@@ -2400,8 +2417,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Export Ad Data'),
-        content: Text('Export your ad performance data as CSV or PDF?'),
+        title: const Text('Export Ad Data'),
+        content: const Text('Export your ad performance data as CSV or PDF?'),
         actions: [
           AppButton(
             onPressed: () => Navigator.pop(context),
@@ -2437,8 +2454,8 @@ class _AdManagementScreenState extends State<AdManagementScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Clear Analytics Data'),
-        content: Text(
+        title: const Text('Clear Analytics Data'),
+        content: const Text(
           'This will reset all performance metrics (impressions, clicks, CTR) for all your ads. This action cannot be undone.',
         ),
         actions: [

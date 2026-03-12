@@ -1,29 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
-import 'dart:async';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLocalLoading = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Consumer<GoogleSignInController>(
-        builder: (context, authController, _) {
+      body: Consumer(
+        builder: (context, ref, _) {
+          final authController = ref.watch(googleSignInProvider);
           final bool showOverlay = authController.isLoading || _isLocalLoading;
           return Stack(
             children: [
@@ -144,7 +144,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.red.withValues(alpha: 0.1),
+                                        color:
+                                            Colors.red.withValues(alpha: 0.1),
                                         blurRadius: 10,
                                         offset: const Offset(0, 4),
                                       ),
@@ -290,8 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   isDisabled: authController.isLoading,
                                   onPressed: () async {
                                     final prefs =
-                                        await SharedPreferences
-                                            .getInstance();
+                                        await SharedPreferences.getInstance();
                                     await prefs.setBool(
                                         'auth_skip_login', true);
                                     Navigator.pushReplacementNamed(
@@ -312,14 +312,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   isFullWidth: true,
                                   isDisabled: authController.isLoading,
                                   onPressed: () async {
-                                    final user =
-                                        await authController.signIn();
-                                    if (user != null &&
-                                        context.mounted) {
+                                    final user = await authController.signIn();
+                                    if (user != null && context.mounted) {
                                       final result =
                                           await LocationOnboardingService
-                                              .showLocationOnboarding(
-                                                  context);
+                                              .showLocationOnboarding(context);
                                       if (result) {
                                         AppLogger.log(
                                             '✅ User granted location permission');
@@ -328,22 +325,20 @@ class _LoginScreenState extends State<LoginScreen> {
                                             '❌ User denied location permission');
                                       }
 
-                                       // **OPTIMIZED: Parallel state refresh and pre-fetch**
-                                       if (context.mounted) {
-                                         setState(() => _isLocalLoading = true);
-                                         final mainController =
-                                             Provider.of<MainController>(
-                                                 context,
-                                                 listen: false);
-                                         await mainController
-                                             .refreshAppStateAfterSwitch(
-                                                 context);
-                                       }
+                                      // **OPTIMIZED: Parallel state refresh and pre-fetch**
+                                      if (context.mounted) {
+                                        setState(() => _isLocalLoading = true);
+                                        final mainController =
+                                            ref.read(mainControllerProvider);
+                                        await mainController
+                                            .refreshAppStateAfterSwitch(
+                                                ref);
+                                      }
 
-                                       if (context.mounted) {
-                                         Navigator.pushReplacementNamed(
-                                             context, '/home');
-                                       }
+                                      if (context.mounted) {
+                                        Navigator.pushReplacementNamed(
+                                            context, '/home');
+                                      }
                                     }
                                   },
                                   icon: Image.network(
@@ -434,4 +429,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-

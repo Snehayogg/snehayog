@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:vayu/features/video/video_model.dart';
 import 'package:vayu/features/video/presentation/screens/video_feed_advanced.dart';
 import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
-import 'package:provider/provider.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
-class VideoScreen extends StatefulWidget {
+class VideoScreen extends ConsumerStatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
@@ -22,10 +22,10 @@ class VideoScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<VideoScreen> createState() => _VideoScreenState();
+  ConsumerState<VideoScreen> createState() => _VideoScreenState();
 }
 
-class _VideoScreenState extends State<VideoScreen> {
+class _VideoScreenState extends ConsumerState<VideoScreen> {
   final GlobalKey _videoFeedKey = GlobalKey();
 
   /// **PUBLIC: Refresh video list after upload**
@@ -50,8 +50,7 @@ class _VideoScreenState extends State<VideoScreen> {
     // This ensures Yug tab videos pause if this screen is pushed as a full-screen player
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        final mainController =
-            Provider.of<MainController>(context, listen: false);
+        final mainController = ref.read(mainControllerProvider);
         mainController.forcePauseVideos();
 
         final state = _videoFeedKey.currentState;
@@ -82,8 +81,7 @@ class _VideoScreenState extends State<VideoScreen> {
 
     // **FIX: Pause all videos when leaving VideoScreen**
     try {
-      final mainController =
-          Provider.of<MainController>(context, listen: false);
+      final mainController = ref.read(mainControllerProvider);
       mainController.forcePauseVideos();
 
       final videoControllerManager = VideoControllerManager();

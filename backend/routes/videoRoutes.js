@@ -23,7 +23,6 @@ router.post('/cache/clear', videoController.clearCache);
  * Video Upload & Processing Routes
  */
 router.post('/check-duplicate', verifyToken, videoController.checkDuplicate);
-router.post('/upload/presigned', verifyToken, uploadLimiter, videoController.generateR2PresignedUrl); // **NEW: Direct-to-R2 upload**
 router.post('/upload', verifyToken, uploadLimiter, validateVideoData, upload.single('video'), videoController.uploadVideo);
 router.post('/image', verifyToken, videoController.createImageFeedEntry);
 

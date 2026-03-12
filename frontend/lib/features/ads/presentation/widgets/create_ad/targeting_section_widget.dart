@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/services/city_search_service.dart';
 import 'package:vayu/shared/constants/interests.dart';
@@ -344,7 +342,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
   Widget build(BuildContext context) {
     // **FIXED: Wrap in Container with explicit constraints to prevent grey texture on first render**
     return Container(
-      constraints: BoxConstraints(
+      constraints: const BoxConstraints(
         minHeight: 0,
         maxHeight: double.infinity,
       ),
@@ -354,8 +352,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
         children: [
           Row(
             children: [
-              Icon(Icons.gps_fixed, color: AppColors.primary),
-              SizedBox(width: 8),
+              const Icon(Icons.gps_fixed, color: AppColors.primary),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Advanced Targeting',
@@ -368,7 +366,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Age Range
           Row(
@@ -376,7 +374,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               Expanded(
                 child: DropdownButtonFormField<int>(
                   initialValue: widget.minAge,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Min Age',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.person),
@@ -420,12 +418,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Gender Selection
           DropdownButtonFormField<String>(
             isExpanded: true,
-            initialValue: _genderOptions.contains(widget.selectedGender) ? widget.selectedGender : 'all',
+            initialValue: _genderOptions.contains(widget.selectedGender)
+                ? widget.selectedGender
+                : 'all',
             decoration: const InputDecoration(
               labelText: 'Gender',
               border: OutlineInputBorder(),
@@ -439,15 +439,15 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             }).toList(),
             onChanged: (value) => widget.onGenderChanged(value!),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // **RESTORED: Location Targeting with Search**
           _buildLocationFieldWithSearch(),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Interests Selection
           _buildInterestsField(),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // Platform Targeting
           _buildMultiSelectField(
@@ -458,13 +458,15 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             'Select target platforms',
             widget.onPlatformsChanged,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // **NEW: Device Type**
           DropdownButtonFormField<String>(
             isExpanded: true,
-            initialValue: _deviceTypeOptions.contains(widget.deviceType) ? widget.deviceType : 'all',
-            decoration: InputDecoration(
+            initialValue: _deviceTypeOptions.contains(widget.deviceType)
+                ? widget.deviceType
+                : 'all',
+            decoration: const InputDecoration(
               labelText: 'Device Type',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.devices),
@@ -481,19 +483,19 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             ],
             onChanged: (value) => widget.onDeviceTypeChanged(value ?? 'all'),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // **NEW: Advanced Campaign Settings**
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.settings, color: AppColors.primary),
-                      SizedBox(width: 8),
+                      const Icon(Icons.settings, color: AppColors.primary),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Advanced Campaign Settings',
@@ -507,15 +509,17 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Optimization Goal
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    initialValue: (widget.optimizationGoal == null || _optimizationGoalOptions.contains(widget.optimizationGoal)) 
-                        ? widget.optimizationGoal 
+                    initialValue: (widget.optimizationGoal == null ||
+                            _optimizationGoalOptions
+                                .contains(widget.optimizationGoal))
+                        ? widget.optimizationGoal
                         : 'impressions',
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Optimization Goal',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.track_changes),
@@ -535,12 +539,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     ],
                     onChanged: widget.onOptimizationGoalChanged,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Frequency Cap
                   TextFormField(
                     initialValue: widget.frequencyCap?.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Frequency Cap',
                       hintText: '3',
                       border: OutlineInputBorder(),
@@ -553,15 +557,16 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       widget.onFrequencyCapChanged(cap);
                     },
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Time Zone
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    initialValue: (widget.timeZone == null || _timeZoneOptions.contains(widget.timeZone)) 
-                        ? widget.timeZone 
+                    initialValue: (widget.timeZone == null ||
+                            _timeZoneOptions.contains(widget.timeZone))
+                        ? widget.timeZone
                         : 'Asia/Kolkata',
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Time Zone',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.schedule),
@@ -585,19 +590,19 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               ),
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           // **NEW: Bidding & Performance KPIs Section**
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.trending_up, color: AppColors.warning),
-                      SizedBox(width: 8),
+                      const Icon(Icons.trending_up, color: AppColors.warning),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Bidding & Performance KPIs',
@@ -611,7 +616,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Bid Strategy & Amount
                   Column(
@@ -619,61 +624,63 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     children: [
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                          initialValue: _bidTypeOptions.contains(widget.bidType) ? widget.bidType : 'CPM',
-                          decoration: InputDecoration(
-                            labelText: 'Bid Strategy',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.attach_money),
-                            helperText: 'How you want to bid',
-                          ),
-                          items: _bidTypeOptions
-                              .map(
-                                (type) => DropdownMenuItem(
-                                  value: type,
-                                  child: Text(type),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: widget.onBidTypeChanged,
+                        initialValue: _bidTypeOptions.contains(widget.bidType)
+                            ? widget.bidType
+                            : 'CPM',
+                        decoration: const InputDecoration(
+                          labelText: 'Bid Strategy',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.attach_money),
+                          helperText: 'How you want to bid',
                         ),
-                        SizedBox(height: 16),
-                      Builder(
-                          builder: (context) {
-                            final bidType = widget.bidType ?? 'CPM';
-                            return TextFormField(
-                              key: ValueKey(
-                                bidType,
-                              ), // Rebuild when bid type changes
-                              initialValue: widget.bidAmount?.toString(),
-                              decoration: InputDecoration(
-                                labelText: bidType == 'CPC'
-                                    ? 'Max CPC (₹)'
-                                    : 'CPM Bid (₹)',
-                                hintText: bidType == 'CPC' ? '5.00' : '30.00',
-                                border: OutlineInputBorder(),
-                                prefixText: '₹',
-                                helperText: bidType == 'CPC'
-                                    ? 'Max cost per click'
-                                    : 'Cost per 1000 impressions',
+                        items: _bidTypeOptions
+                            .map(
+                              (type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
                               ),
-                              keyboardType: TextInputType.number,
-                              onChanged: (value) {
-                                final amount = double.tryParse(value.trim());
-                                widget.onBidAmountChanged(amount);
-                              },
-                            );
-                          },
-                        ),
-                      SizedBox(height: 16),
+                            )
+                            .toList(),
+                        onChanged: widget.onBidTypeChanged,
+                      ),
+                      const SizedBox(height: 16),
+                      Builder(
+                        builder: (context) {
+                          final bidType = widget.bidType ?? 'CPM';
+                          return TextFormField(
+                            key: ValueKey(
+                              bidType,
+                            ), // Rebuild when bid type changes
+                            initialValue: widget.bidAmount?.toString(),
+                            decoration: InputDecoration(
+                              labelText: bidType == 'CPC'
+                                  ? 'Max CPC (₹)'
+                                  : 'CPM Bid (₹)',
+                              hintText: bidType == 'CPC' ? '5.00' : '30.00',
+                              border: const OutlineInputBorder(),
+                              prefixText: '₹',
+                              helperText: bidType == 'CPC'
+                                  ? 'Max cost per click'
+                                  : 'Cost per 1000 impressions',
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              final amount = double.tryParse(value.trim());
+                              widget.onBidAmountChanged(amount);
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Budget Pacing
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: widget.pacing ?? 'smooth',
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Budget Pacing',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.speed),
@@ -691,12 +698,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     }).toList(),
                     onChanged: widget.onPacingChanged,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Target CPA
                   TextFormField(
                     initialValue: widget.targetCPA?.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Target CPA (₹)',
                       hintText: '500.00',
                       border: OutlineInputBorder(),
@@ -709,12 +716,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       widget.onTargetCPAChanged(cpa);
                     },
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Target ROAS
                   TextFormField(
                     initialValue: widget.targetROAS?.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Target ROAS',
                       hintText: '3.0',
                       border: OutlineInputBorder(),
@@ -728,13 +735,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       widget.onTargetROASChanged(roas);
                     },
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
                   // Attribution Window
                   DropdownButtonFormField<int>(
                     isExpanded: true,
                     initialValue: widget.attributionWindow,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Attribution Window',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.access_time),
@@ -758,7 +765,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
               ),
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
 
           _buildDayPartingSection(),
         ],
@@ -778,9 +785,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             color: AppColors.white,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Container(
-          padding: EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300),
             borderRadius: BorderRadius.circular(8),
@@ -797,7 +804,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     final isCustom = _customInterests.contains(interest);
                     return Chip(
                       label: Text(interest),
-                      deleteIcon: Icon(Icons.close, size: 18),
+                      deleteIcon: const Icon(Icons.close, size: 18),
                       onDeleted: () {
                         if (isCustom) {
                           _removeCustomInterest(interest);
@@ -812,14 +819,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                           ? AppColors.success.withValues(alpha: 0.1)
                           : AppColors.primary.withValues(alpha: 0.1),
                       labelStyle: TextStyle(
-                        color: isCustom
-                            ? AppColors.success
-                            : AppColors.primary,
+                        color: isCustom ? AppColors.success : AppColors.primary,
                       ),
                     );
                   }).toList(),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
               ],
 
               // Predefined interests button
@@ -830,15 +835,15 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   _interestOptions,
                   widget.onInterestsChanged,
                 ),
-                icon: Icon(Icons.favorite, size: 18),
+                icon: const Icon(Icons.favorite, size: 18),
                 label: widget.selectedInterests.isEmpty
-                      ? 'Select Interests'
-                      : 'Add More',
+                    ? 'Select Interests'
+                    : 'Add More',
                 variant: AppButtonVariant.outline,
                 size: AppButtonSize.small,
               ),
 
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
 
               // Custom interest input
               Row(
@@ -846,7 +851,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   Expanded(
                     child: TextField(
                       controller: _customInterestController,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: 'Add custom interest...',
                         prefixIcon: Icon(Icons.add_circle_outline),
                         border: OutlineInputBorder(),
@@ -858,10 +863,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                       onSubmitted: (_) => _addCustomInterest(),
                     ),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   AppButton(
                     onPressed: _addCustomInterest,
-                    icon: Icon(Icons.add, size: 18),
+                    icon: const Icon(Icons.add, size: 18),
                     label: 'Add',
                     variant: AppButtonVariant.secondary,
                     size: AppButtonSize.small,
@@ -871,10 +876,10 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
               // Custom interests info
               if (_customInterests.isNotEmpty) ...[
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Custom Interests: ${_customInterests.join(', ')}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.success,
                     fontStyle: FontStyle.italic,
@@ -907,9 +912,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             color: AppColors.white,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Container(
-          padding: EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300),
             borderRadius: BorderRadius.circular(8),
@@ -925,18 +930,18 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   children: selectedItems.map((item) {
                     return Chip(
                       label: Text(item),
-                      deleteIcon: Icon(Icons.close, size: 18),
+                      deleteIcon: const Icon(Icons.close, size: 18),
                       onDeleted: () {
                         final newItems = List<String>.from(selectedItems)
                           ..remove(item);
                         onChanged(newItems);
                       },
                       backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                      labelStyle: TextStyle(color: AppColors.primary),
+                      labelStyle: const TextStyle(color: AppColors.primary),
                     );
                   }).toList(),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
               ],
 
               // Add button
@@ -967,8 +972,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
       children: [
         Row(
           children: [
-            Icon(Icons.location_on, color: AppColors.primary, size: 20),
-            SizedBox(width: 8),
+            const Icon(Icons.location_on, color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
             Text(
               'Target Locations (India)',
               style: AppTypography.headlineSmall.copyWith(
@@ -979,12 +984,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             ),
           ],
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
 
         // Selected locations display
         if (widget.selectedLocations.isNotEmpty) ...[
           Container(
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               border: Border.all(color: AppColors.backgroundTertiary),
               borderRadius: BorderRadius.circular(8),
@@ -993,7 +998,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Selected Locations:',
                   style: TextStyle(
                     fontSize: 12,
@@ -1001,7 +1006,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     color: AppColors.textTertiary,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -1009,9 +1014,9 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     return Chip(
                       label: Text(
                         location,
-                        style: TextStyle(fontSize: 12),
+                        style: const TextStyle(fontSize: 12),
                       ),
-                      deleteIcon: Icon(Icons.close, size: 16),
+                      deleteIcon: const Icon(Icons.close, size: 16),
                       onDeleted: () {
                         final newItems = List<String>.from(
                           widget.selectedLocations,
@@ -1019,14 +1024,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         widget.onLocationsChanged(newItems);
                       },
                       backgroundColor: AppColors.success.withValues(alpha: 0.1),
-                      labelStyle: TextStyle(color: AppColors.success),
+                      labelStyle: const TextStyle(color: AppColors.success),
                     );
                   }).toList(),
                 ),
               ],
             ),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
         ],
 
         // **FIXED: Simple search input with manual dropdown (avoids Autocomplete rendering bugs)**
@@ -1035,22 +1040,24 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
           focusNode: _locationSearchFocusNode,
           decoration: InputDecoration(
             hintText: 'Type city name (e.g., Mumbai, Delhi)...',
-            prefixIcon: Icon(Icons.search, color: AppColors.primary),
+            prefixIcon: const Icon(Icons.search, color: AppColors.primary),
             suffixIcon: _isSearchingLocations
-                ? Padding(
+                ? const Padding(
                     padding: EdgeInsets.all(12),
                     child: SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(AppColors.primary),
                       ),
                     ),
                   )
                 : _hasSearchText
                     ? IconButton(
-                        icon: Icon(Icons.clear, color: AppColors.textTertiary),
+                        icon: const Icon(Icons.clear,
+                            color: AppColors.textTertiary),
                         onPressed: () {
                           _locationSearchController.clear();
                           setState(() {
@@ -1059,7 +1066,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                           });
                         },
                       )
-                    : Icon(Icons.location_on_outlined,
+                    : const Icon(Icons.location_on_outlined,
                         color: Colors.grey),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -1075,7 +1082,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             ),
             filled: true,
             fillColor: AppColors.backgroundSecondary,
-            contentPadding: EdgeInsets.symmetric(
+            contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
             ),
@@ -1087,21 +1094,21 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
         // **FIXED: Show suggestions dropdown only when there are suggestions**
         // **FIXED: Use SizedBox with explicit height to prevent grey texture bug**
         if (_locationSuggestions.isNotEmpty) ...[
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           SizedBox(
             height: _locationSuggestions.length > 5
                 ? 200
                 : (_locationSuggestions.length * 56.0).clamp(0.0, 200.0),
             child: Container(
               decoration: BoxDecoration(
-              color: AppColors.backgroundSecondary,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.backgroundTertiary),
+                color: AppColors.backgroundSecondary,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.backgroundTertiary),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 8,
-                    offset: Offset(0, 2),
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -1121,7 +1128,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                         : const NeverScrollableScrollPhysics(),
                     padding: EdgeInsets.zero,
                     itemCount: _locationSuggestions.length,
-                    separatorBuilder: (context, index) => Divider(
+                    separatorBuilder: (context, index) => const Divider(
                       height: 1,
                       thickness: 1,
                       color: AppColors.backgroundTertiary,
@@ -1137,7 +1144,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
 
                       return ListTile(
                         dense: true,
-                        contentPadding: EdgeInsets.symmetric(
+                        contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 4,
                         ),
@@ -1173,7 +1180,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                                 color: Colors.green.shade600,
                                 size: 20,
                               )
-                            : Icon(
+                            : const Icon(
                                 Icons.add,
                                 color: AppColors.primary,
                                 size: 20,
@@ -1194,8 +1201,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
         ],
 
         // Popular Indian locations for quick selection
-        SizedBox(height: 16),
-        Text(
+        const SizedBox(height: 16),
+        const Text(
           'Popular Indian Cities:',
           style: TextStyle(
             fontSize: 14,
@@ -1203,14 +1210,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
             color: AppColors.textTertiary,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: _popularLocations.map((location) {
               final isSelected = widget.selectedLocations.contains(location);
               return Padding(
-                padding: EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: 8),
                 child: FilterChip(
                   label: Text(
                     location,
@@ -1267,16 +1274,16 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   return ListTile(
                     title: Text(
                       option,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppColors.success,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    leading: Icon(
+                    leading: const Icon(
                       Icons.add_circle_outline,
                       color: AppColors.success,
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
                       Navigator.pop(context);
                       _showCustomInterestDialog();
@@ -1324,13 +1331,13 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Add Custom Interest'),
+        title: const Text('Add Custom Interest'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _customInterestController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Enter your custom interest...',
                 prefixIcon: Icon(Icons.add_circle_outline),
                 border: OutlineInputBorder(),
@@ -1341,8 +1348,8 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 Navigator.pop(context);
               },
             ),
-            SizedBox(height: 16),
-            Text(
+            const SizedBox(height: 16),
+            const Text(
               'This will be added to your selected interests and can be used for targeting.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
@@ -1371,14 +1378,14 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
   Widget _buildDayPartingSection() {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.calendar_today, color: AppColors.primary),
-                SizedBox(width: 8),
+                const Icon(Icons.calendar_today, color: AppColors.primary),
+                const SizedBox(width: 8),
                 Text(
                   'Day Targeting',
                   style: AppTypography.headlineSmall.copyWith(
@@ -1389,12 +1396,12 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 ),
               ],
             ),
-            SizedBox(height: 12),
-            Text(
+            const SizedBox(height: 12),
+            const Text(
               'Select which days of the week to show ads:',
               style: TextStyle(fontSize: 14, color: AppColors.textTertiary),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -1415,7 +1422,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                 );
               }).toList(),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -1428,7 +1435,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     );
                     widget.onDayPartingChanged(allSelected);
                   },
-                  icon: Icon(Icons.select_all, size: 16),
+                  icon: const Icon(Icons.select_all, size: 16),
                   label: 'All Days',
                   variant: AppButtonVariant.text,
                   size: AppButtonSize.small,
@@ -1445,7 +1452,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                     );
                     widget.onDayPartingChanged(weekdaysSelected);
                   },
-                  icon: Icon(Icons.business, size: 16),
+                  icon: const Icon(Icons.business, size: 16),
                   label: 'Weekdays',
                   variant: AppButtonVariant.text,
                   size: AppButtonSize.small,
@@ -1454,7 +1461,7 @@ class _TargetingSectionWidgetState extends State<TargetingSectionWidget> {
                   onPressed: () {
                     widget.onDayPartingChanged({});
                   },
-                  icon: Icon(Icons.clear, size: 16),
+                  icon: const Icon(Icons.clear, size: 16),
                   label: 'Clear',
                   variant: AppButtonVariant.text,
                   size: AppButtonSize.small,

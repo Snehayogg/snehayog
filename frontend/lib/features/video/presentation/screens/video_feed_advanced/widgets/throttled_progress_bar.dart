@@ -2,10 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 class ThrottledProgressBar extends StatefulWidget {
   final VideoPlayerController controller;
@@ -68,10 +65,17 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
   }
 
   void _updateProgress() {
-    if (!mounted || !widget.controller.value.isInitialized) return;
-
-    final duration = widget.controller.value.duration;
-    final position = widget.controller.value.position;
+    if (!mounted) return;
+    Duration duration;
+    Duration position;
+    try {
+      if (!widget.controller.value.isInitialized) return;
+      duration = widget.controller.value.duration;
+      position = widget.controller.value.position;
+    } catch (_) {
+      // Controller was likely disposed; ignore updates.
+      return;
+    }
     final totalMs = duration.inMilliseconds;
     final posMs = position.inMilliseconds;
     final newProgress = totalMs > 0 ? (posMs / totalMs).clamp(0.0, 1.0) : 0.0;
@@ -88,15 +92,16 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
     // We use globalPosition.dx but map it to the local RenderBox to ensure accuracy
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final Offset localPosition = renderBox.globalToLocal(
-      details is DragUpdateDetails ? details.globalPosition : (details as TapDownDetails).globalPosition
-    );
-    
+        details is DragUpdateDetails
+            ? details.globalPosition
+            : (details as TapDownDetails).globalPosition);
+
     final newProgress = (localPosition.dx / widget.screenWidth).clamp(0.0, 1.0);
-    
+
     setState(() {
       _progress = newProgress;
     });
-    
+
     widget.onSeek(details);
 
     // **HAPTIC: Vibrate when reaching start or end**
@@ -119,7 +124,8 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
       onTapDown: (details) {
         setState(() {
           _isDragging = true;
-          _lastVibrateProgress = _progress; // **FIX: Reset on touch to prevent dead zones**
+          _lastVibrateProgress =
+              _progress; // **FIX: Reset on touch to prevent dead zones**
         });
         HapticFeedback.mediumImpact(); // **STRONGER: Initial touch feedback**
         _handleSeekUpdate(details);
@@ -137,7 +143,8 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
       onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
       onHorizontalDragCancel: () => setState(() => _isDragging = false),
       child: Container(
-        height: 19, // **TIGHTENED hit target to prevent accidental touch from above**
+        height:
+            19, // **TIGHTENED hit target to prevent accidental touch from above**
         color: Colors.transparent,
         child: Stack(
           alignment: Alignment.bottomCenter,
@@ -149,11 +156,12 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
               height: _isDragging ? 6 : 2,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: AppColors.white.withValues(alpha: _isDragging ? 0.3 : 0.2),
+                color:
+                    AppColors.white.withValues(alpha: _isDragging ? 0.3 : 0.2),
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
-            
+
             // 2. Progress bar filled portion
             // We use a regular Positioned width to avoid animation flicker during seek
             Positioned(
@@ -169,7 +177,7 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
                 ),
               ),
             ),
-            
+
             // 3. Seek handle (thumb)
             // Positioned updates instantly (no animation)
             Positioned(
@@ -183,13 +191,15 @@ class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
                 decoration: BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
-                  boxShadow: _isDragging ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    )
-                  ] : null,
+                  boxShadow: _isDragging
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
                 ),
               ),
             ),

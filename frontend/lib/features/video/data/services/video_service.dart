@@ -1,14 +1,10 @@
 import 'dart:convert';
 
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:video_player/video_player.dart';
-
-
 
 import 'package:video_compress/video_compress.dart';
 import 'package:vayu/features/video/video_model.dart';
@@ -91,9 +87,6 @@ class VideoService {
   void updateAppForegroundState(bool inForeground) {
     if (_isAppInForeground != inForeground) {
       _isAppInForeground = inForeground;
-      /* AppLogger.log(
-        '📱 VideoService: App foreground state changed to ${inForeground ? "FOREGROUND" : "BACKGROUND"}',
-      ); */
     }
   }
 
@@ -154,15 +147,16 @@ class VideoService {
 
       if (clearSession) {
         url += '&clearSession=true';
-        AppLogger.log('🧹 VideoService: Clearing session state for fresh videos');
+        AppLogger.log(
+            '🧹 VideoService: Clearing session state for fresh videos');
       }
 
       Map<String, String> headers = {
         'Content-Type': 'application/json',
       };
-      
+
       if (platformId.isNotEmpty) {
-         headers['x-device-id'] = platformId;
+        headers['x-device-id'] = platformId;
       }
 
       try {
@@ -191,7 +185,8 @@ class VideoService {
         final result = await compute(_parseVideosCompute, parseParams);
         return result;
       } else {
-        AppLogger.log('❌ VideoService: API returned status ${response.statusCode}');
+        AppLogger.log(
+            '❌ VideoService: API returned status ${response.statusCode}');
         String errorMessage = 'Failed to load videos: ${response.statusCode}';
         try {
           final errorData = json.decode(response.body);
@@ -384,7 +379,8 @@ class VideoService {
 
           if (retryRes.statusCode == 200) {
             final retryData = json.decode(retryRes.body);
-            AppLogger.log('✅ VideoService: Like toggled successfully after token refresh');
+            AppLogger.log(
+                '✅ VideoService: Like toggled successfully after token refresh');
             return VideoModel.fromJson(retryData);
           }
         }
@@ -474,10 +470,11 @@ class VideoService {
       headers['Content-Type'] = 'application/json';
 
       // **FIX: Robust URL construction to avoid double slashes or missing /api**
-      final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/') 
-          ? NetworkHelper.apiBaseUrl.substring(0, NetworkHelper.apiBaseUrl.length - 1)
+      final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/')
+          ? NetworkHelper.apiBaseUrl
+              .substring(0, NetworkHelper.apiBaseUrl.length - 1)
           : NetworkHelper.apiBaseUrl;
-      
+
       final url = '$baseUrl/videos/$videoId/save';
       AppLogger.log('🚀 VideoService: Save request URL: $url');
 
@@ -520,10 +517,11 @@ class VideoService {
       }
 
       final headers = await _getAuthHeaders();
-      final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/') 
-          ? NetworkHelper.apiBaseUrl.substring(0, NetworkHelper.apiBaseUrl.length - 1)
+      final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/')
+          ? NetworkHelper.apiBaseUrl
+              .substring(0, NetworkHelper.apiBaseUrl.length - 1)
           : NetworkHelper.apiBaseUrl;
-      
+
       final url = '$baseUrl/videos/saved';
 
       final res = await http
@@ -558,7 +556,6 @@ class VideoService {
     return await toggleLike(videoId);
   }
 
-
   /// **Get user videos**
   Future<List<VideoModel>> getUserVideos(String userId,
       {bool forceRefresh = false, int page = 1, int limit = 9}) async {
@@ -569,7 +566,8 @@ class VideoService {
       }
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      String url = '$resolvedBaseUrl/api/videos/user/$userId?page=$page&limit=$limit';
+      String url =
+          '$resolvedBaseUrl/api/videos/user/$userId?page=$page&limit=$limit';
 
       // **NEW: Append refresh=true if forceRefresh is requested**
       if (forceRefresh) {
@@ -700,7 +698,7 @@ class VideoService {
 
       final fileSize = await videoFile.length();
       if (fileSize > maxFileSize) {
-        throw Exception('File too large. Maximum size is 100MB');
+        throw Exception('File too large. Maximum size is 700MB');
       }
 
       // **REMOVED: duration-based categorization logic**
@@ -754,14 +752,15 @@ class VideoService {
       // 1. Get Presigned URL
       AppLogger.log('🔑 Requesting presigned URL...');
       final fileSize = await videoFile.length();
-      final mimeType = 'video/${videoFile.path.split('.').last}'; // Simple mime guess
+      final mimeType =
+          'video/${videoFile.path.split('.').last}'; // Simple mime guess
 
       // **FIX: Use auth service to get headers**
       final authHeaders = await _getAuthHeaders();
 
       // **FIX: Use shared httpClientService.dioClient to ensure interceptors and validateStatus work**
-      final dio = httpClientService.dioClient; 
-      
+      final dio = httpClientService.dioClient;
+
       final presignedResponse = await dio.post(
         '$baseUrl/api/upload/video/presigned',
         data: {
@@ -785,8 +784,8 @@ class VideoService {
 
       // 2. Upload to R2 (Directly)
       // Note: We use a separate Dio instance to avoid default interceptors/headers causing issues with R2
-      final r2Dio = Dio(); 
-      
+      final r2Dio = Dio();
+
       await r2Dio.put(
         uploadUrl,
         data: videoFile.openRead(), // Stream the file
@@ -807,7 +806,6 @@ class VideoService {
         },
       );
 
-      AppLogger.log('✅ R2 Upload complete. Notifying backend...');
       if (onProgress != null) onProgress(0.98); // Almost done
 
       // 3. Notify Backend to Start Processing
@@ -825,16 +823,14 @@ class VideoService {
         ),
       );
 
-      AppLogger.log('✅ Backend notified. Processing started.');
       if (onProgress != null) onProgress(1.0);
 
       return completeResponse.data;
-
     } catch (e) {
-      AppLogger.log('❌ Direct upload failed: $e');
       rethrow;
     }
   }
+
   Future<bool> updateVideoMetadata(String videoId, String videoName) async {
     try {
       AppLogger.log('🔄 VideoService: Updating metadata for video: $videoId');
@@ -846,7 +842,7 @@ class VideoService {
 
       final headers = await _getAuthHeaders();
       headers['Content-Type'] = 'application/json';
-      
+
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final url = '$resolvedBaseUrl/api/videos/$videoId';
 
@@ -982,7 +978,6 @@ class VideoService {
     }
   }
 
-
   /// **Compress video while preserving display (resolution/aspect) as much as possible**
   /// Uses DefaultQuality so encoder mainly reduces bitrate, not dimensions.
   Future<File?> compressVideo(File videoFile) async {
@@ -992,7 +987,8 @@ class VideoService {
 
       final MediaInfo? mediaInfo = await VideoCompress.compressVideo(
         videoFile.path,
-        quality: VideoQuality.Res640x480Quality, // 480p is perfect for mobile consumption & size
+        quality: VideoQuality
+            .Res640x480Quality, // 480p is perfect for mobile consumption & size
         deleteOrigin: false,
       );
 
@@ -1160,14 +1156,13 @@ class VideoService {
     };
   }
 
-
-
   // **DISPOSE METHOD**
   void dispose() {
     _videoIndexChangeListeners.clear();
     _videoScreenStateListeners.clear();
     AppLogger.log('🗑️ VideoService: Disposed all listeners');
   }
+
   /// **Helper: Parse videos in background isolate**
   static Map<String, dynamic> _parseVideosCompute(Map<String, dynamic> params) {
     final String body = params['body'];
@@ -1223,6 +1218,3 @@ class VideoService {
     };
   }
 }
-
-
-

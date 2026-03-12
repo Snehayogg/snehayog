@@ -1,0 +1,92 @@
+﻿
+warning - Unused 
+import: 'package:vayu/
+features/auth/data/ser
+vices/authservices.dar
+t' - lib\features\vide
+o\presentation\screens
+\vayu_long_form_player
+_screen.dart:12:8 - 
+unused_import
+warning - Unused 
+import: 'package:vayu/
+features/ads/data/serv
+ices/ad_impression_ser
+vice.dart' - lib\featu
+res\video\presentation
+\screens\vayu_long_for
+m_player_screen.dart:3
+0:8 - unused_import
+warning - The 
+declaration 
+'_currentVideo' isn't 
+referenced - lib\featu
+res\video\presentation
+\screens\vayu_long_for
+m_player_screen.dart:7
+9:18 - unused_element
+warning - The value 
+of the field 
+'_hasError' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:97:8 - 
+unused_field
+warning - The value 
+of the field 
+'_errorMessage' isn't 
+used - lib\features\vi
+deo\presentation\scree
+ns\vayu_long_form_play
+er_screen.dart:98:10 
+- unused_field
+warning - The 
+declaration '_navigate
+ToLoginScreen' isn't 
+referenced - lib\featu
+res\video\presentation
+\screens\video_feed_ad
+vanced.dart:1540:8 - 
+unused_element
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:73:
+11 - avoid_print
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:118
+:11 - avoid_print
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:133
+:7 - avoid_print
+   info - Don't 
+invoke 'print' in 
+production code - lib\
+shared\widgets\follow_
+button_widget.dart:164
+:11 - avoid_print
+   info - Empty catch 
+block - lib\shared\wid
+gets\follow_button_wid
+get.dart:171:23 - 
+empty_catches
+   info - Empty catch 
+block - lib\shared\wid
+gets\follow_button_wid
+get.dart:177:23 - 
+empty_catches
+   info - Empty catch 
+block - lib\shared\wid
+gets\follow_button_wid
+get.dart:183:23 - 
+empty_catches
+
+

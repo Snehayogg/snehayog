@@ -31,7 +31,19 @@ class GoogleSignInController extends ChangeNotifier {
       // First, try to get cached user data instantly (no network call)
       try {
         final prefs = await SharedPreferences.getInstance();
+        final needsLogin = prefs.getBool('auth_needs_login') ?? false;
+        final jwt = prefs.getString('jwt_token');
         final fallbackUser = prefs.getString('fallback_user');
+        // If token is missing/expired and refresh couldn't recover, treat as signed-out
+        // so UI shows Sign-In CTA instead of empty state.
+        if (needsLogin || jwt == null || jwt.isEmpty) {
+          _userData = null;
+          _isLoading = false;
+          _error = needsLogin ? 'Session expired - please sign in again' : null;
+          notifyListeners();
+          return;
+        }
+
         if (fallbackUser != null) {
           final cachedData = jsonDecode(fallbackUser);
           _userData = {
@@ -40,7 +52,7 @@ class GoogleSignInController extends ChangeNotifier {
             'name': cachedData['name'],
             'email': cachedData['email'],
             'profilePic': cachedData['profilePic'],
-            'token': prefs.getString('jwt_token'),
+            'token': jwt,
             'isFallback': true,
           };
           _isLoading = false;
@@ -65,7 +77,13 @@ class GoogleSignInController extends ChangeNotifier {
         _userData = await _authService.getUserData();
 
       } else {
-        _userData = null;
+        // Try to silently recover session once (refresh token / Google silent sign-in)
+        final refreshed = await _authService.refreshAccessToken();
+        if (refreshed != null) {
+          _userData = await _authService.getUserData();
+        } else {
+          _userData = null;
+        }
       }
     } catch (e) {
 
@@ -89,6 +107,11 @@ class GoogleSignInController extends ChangeNotifier {
       if (userInfo != null) {
         _userData = userInfo;
         _error = null;
+        // Clear "needs login" flag on successful sign-in
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('auth_needs_login', false);
+        } catch (_) {}
 
       } else {
         _error = 'Sign in failed';

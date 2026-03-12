@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/features/agent/data/autonomous_agent_service.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/features/auth/data/usermodel.dart';
 import 'package:vayu/features/video/data/services/video_service.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
@@ -27,18 +24,18 @@ class AgentMessage {
   });
 }
 
-class AgentScreen extends StatefulWidget {
-  const AgentScreen({Key? key}) : super(key: key);
+class AgentScreen extends ConsumerStatefulWidget {
+  const AgentScreen({super.key});
 
   @override
-  State<AgentScreen> createState() => _AgentScreenState();
+  ConsumerState<AgentScreen> createState() => _AgentScreenState();
 }
 
-class _AgentScreenState extends State<AgentScreen> {
+class _AgentScreenState extends ConsumerState<AgentScreen> {
   final TextEditingController _intentController = TextEditingController();
   final AutonomousAgentService _agentService = AutonomousAgentService();
   final ScrollController _scrollController = ScrollController();
-  
+
   final List<AgentMessage> _messages = [];
   bool _isInputEnabled = true;
 
@@ -65,15 +62,17 @@ class _AgentScreenState extends State<AgentScreen> {
     final intent = _intentController.text.trim();
     if (intent.isEmpty) return;
 
-    final userProvider = Provider.of<GoogleSignInController>(context, listen: false);
-    final user = userProvider.userData != null 
-        ? UserModel.fromJson(userProvider.userData!) 
+    final authController = ref.read(googleSignInProvider);
+    final user = authController.userData != null
+        ? UserModel.fromJson(authController.userData!)
         : null;
 
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to use the agent.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to use the agent.')),
+        );
+      }
       return;
     }
 
@@ -82,42 +81,45 @@ class _AgentScreenState extends State<AgentScreen> {
       _messages.add(AgentMessage(text: intent, isUser: true));
       _intentController.clear();
       _isInputEnabled = false;
-      
+
       // 2. Add Loading Message
       _messages.add(AgentMessage(
-        text: '', 
-        isUser: false, 
-        isLoading: true, 
-        loadingStep: 'Analyzing Request...'
-      ));
+          text: '',
+          isUser: false,
+          isLoading: true,
+          loadingStep: 'Analyzing Request...'));
     });
     _scrollToBottom();
 
     // UX Simulation steps
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) {
-       setState(() {
-          // Update the last message (loading state)
-          _messages.last = AgentMessage(
-            text: '', isUser: false, isLoading: true, loadingStep: 'Thinking & Planning...'
-          );
-       });
+      setState(() {
+        _messages.last = AgentMessage(
+            text: '',
+            isUser: false,
+            isLoading: true,
+            loadingStep: 'Thinking & Planning...');
+      });
     }
-    
+
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) {
-       setState(() {
-          _messages.last = AgentMessage(
-            text: '', isUser: false, isLoading: true, loadingStep: 'Drafting Content...'
-          );
-       });
+      setState(() {
+        _messages.last = AgentMessage(
+            text: '',
+            isUser: false,
+            isLoading: true,
+            loadingStep: 'Drafting Content...');
+      });
     }
 
     // Fetch Videos Context
     List<String> videoTitles = [];
     try {
       final videoService = VideoService();
-      final videos = await videoService.getUserVideos(user.id, page: 1, limit: 5);
+      final videos =
+          await videoService.getUserVideos(user.id, page: 1, limit: 5);
       videoTitles = videos.map((v) => v.videoName).toList();
     } catch (e) {
       // Ignore error
@@ -133,18 +135,20 @@ class _AgentScreenState extends State<AgentScreen> {
       if (mounted) {
         setState(() {
           _isInputEnabled = true;
-           // Remove loading message
-          _messages.removeLast();
+          // Remove loading message
+          if (_messages.isNotEmpty && _messages.last.isLoading) {
+            _messages.removeLast();
+          }
 
           if (result != null && result['status'] == 'success') {
             // Add Result Message
             _messages.add(AgentMessage(
-              text: 'Here is what I drafted for you based on "${intent}"', // Optional text
+              text: 'Here is what I drafted for you based on "$intent"', // Optional text
               isUser: false,
               data: result['data'],
             ));
           } else {
-             _messages.add(AgentMessage(
+            _messages.add(AgentMessage(
               text: 'Sorry, I failed to generate content. Please try again.',
               isUser: false,
             ));
@@ -156,7 +160,9 @@ class _AgentScreenState extends State<AgentScreen> {
       if (mounted) {
         setState(() {
           _isInputEnabled = true;
-          _messages.removeLast(); // Remove loading
+          if (_messages.isNotEmpty && _messages.last.isLoading) {
+            _messages.removeLast();
+          }
           _messages.add(AgentMessage(
             text: 'Error occurred: $e',
             isUser: false,
@@ -187,9 +193,9 @@ class _AgentScreenState extends State<AgentScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _messages.isEmpty 
-              ? _buildWelcomeMessage()
-              : _buildMessagesList(),
+            child: _messages.isEmpty
+                ? _buildWelcomeMessage()
+                : _buildMessagesList(),
           ),
           _buildInputArea(),
         ],
@@ -217,9 +223,9 @@ class _AgentScreenState extends State<AgentScreen> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 16, left: 40),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppColors.primary,
-            borderRadius: const BorderRadius.only(
+            borderRadius: BorderRadius.only(
               topLeft: Radius.circular(16),
               topRight: Radius.circular(4),
               bottomLeft: Radius.circular(16),
@@ -237,7 +243,8 @@ class _AgentScreenState extends State<AgentScreen> {
       return Align(
         alignment: Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 24, right: 20), // More margin for agent results
+          margin: const EdgeInsets.only(
+              bottom: 24, right: 20), // More margin for agent results
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -245,19 +252,22 @@ class _AgentScreenState extends State<AgentScreen> {
               Row(
                 children: [
                   Container(
-                    width: 28, height: 28,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
-                       color: AppColors.primary.withValues(alpha: 0.2),
-                       shape: BoxShape.circle,
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
+                    child: const Icon(Icons.auto_awesome,
+                        size: 16, color: AppColors.primary),
                   ),
                   const SizedBox(width: 8),
-                  const Text('Vayu Agent', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const Text('Vayu Agent',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
               const SizedBox(height: 8),
-              
+
               if (msg.isLoading)
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -268,14 +278,19 @@ class _AgentScreenState extends State<AgentScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                       const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54)),
-                       const SizedBox(width: 12),
-                       Text(msg.loadingStep ?? 'Thinking...', style: const TextStyle(color: Colors.white70)),
+                      const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white54)),
+                      const SizedBox(width: 12),
+                      Text(msg.loadingStep ?? 'Thinking...',
+                          style: const TextStyle(color: Colors.white70)),
                     ],
                   ),
                 )
               else if (msg.data != null)
-                 _buildResultCard(msg.data!)
+                _buildResultCard(msg.data!)
               else
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -283,7 +298,8 @@ class _AgentScreenState extends State<AgentScreen> {
                     color: AppColors.backgroundSecondary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(msg.text, style: const TextStyle(color: Colors.white)),
+                  child: Text(msg.text,
+                      style: const TextStyle(color: Colors.white)),
                 ),
             ],
           ),
@@ -310,31 +326,51 @@ class _AgentScreenState extends State<AgentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Generated Draft', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text('Generated Draft',
+                  style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold)),
               // Copy/Action Icons could go here
             ],
           ),
           const SizedBox(height: 12),
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          Text(caption, style: const TextStyle(color: Colors.white70, height: 1.5)),
+          Text(caption,
+              style: const TextStyle(color: Colors.white70, height: 1.5)),
           const SizedBox(height: 12),
           Container(
-             padding: const EdgeInsets.all(8),
-             decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-             child: Text(hashtags, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6)),
+            child: Text(hashtags,
+                style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
           ),
-          
           if (imagePrompt.isNotEmpty) ...[
-             const SizedBox(height: 16),
-             const Divider(color: Colors.white10),
-             const SizedBox(height: 8),
-             const Text('VISUAL PROMPT', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-             const SizedBox(height: 4),
-             Text(imagePrompt, style: const TextStyle(color: Colors.purpleAccent, fontSize: 13, height: 1.3)),
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 8),
+            const Text('VISUAL PROMPT',
+                style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(imagePrompt,
+                style: const TextStyle(
+                    color: Colors.purpleAccent, fontSize: 13, height: 1.3)),
           ],
         ],
       ),
@@ -342,14 +378,14 @@ class _AgentScreenState extends State<AgentScreen> {
   }
 
   Widget _buildWelcomeMessage() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 40),
-          const VayuLogo(fontSize: 48),
-          const SizedBox(height: 24),
-          const Text(
+          SizedBox(height: 40),
+          VayuLogo(fontSize: 48),
+          SizedBox(height: 24),
+          Text(
             'Ready to Create?',
             style: TextStyle(
               color: Colors.white,
@@ -361,7 +397,6 @@ class _AgentScreenState extends State<AgentScreen> {
       ),
     );
   }
-
 
   Widget _buildInputArea() {
     return Container(
@@ -379,7 +414,8 @@ class _AgentScreenState extends State<AgentScreen> {
                   hintText: 'Ask Vayu...',
                   hintStyle: TextStyle(color: Colors.grey),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 10),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 0, vertical: 10),
                   isDense: true,
                 ),
                 maxLines: 5,
@@ -388,14 +424,20 @@ class _AgentScreenState extends State<AgentScreen> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: !_isInputEnabled 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                : const Icon(Icons.arrow_upward, color: Colors.white, size: 20),
+              icon: !_isInputEnabled
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.arrow_upward,
+                      color: Colors.white, size: 20),
               onPressed: _isInputEnabled ? _generateContent : null,
               style: IconButton.styleFrom(
-                 backgroundColor: _isInputEnabled ? AppColors.primary : Colors.grey,
-                 padding: const EdgeInsets.all(8),
-                 minimumSize: const Size(36, 36),
+                backgroundColor:
+                    _isInputEnabled ? AppColors.primary : Colors.grey,
+                padding: const EdgeInsets.all(8),
+                minimumSize: const Size(36, 36),
               ),
             ),
           ],

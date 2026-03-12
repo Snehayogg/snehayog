@@ -24,11 +24,7 @@ class AdService {
       link,
       adType,
       budget,
-      targetAudience,
-      targetKeywords,
       uploaderId,
-      uploaderName,
-      uploaderProfilePic,
       startDate,
       endDate,
       minAge,
@@ -45,20 +41,8 @@ class AdService {
       imageUrls // **NEW: Support multiple image URLs for carousel ads**
     } = adData;
 
-    console.log('🔍 AdService: deviceType after destructuring:', deviceType);
-    console.log('🔍 AdService: deviceType type after destructuring:', typeof deviceType);
-    console.log('🔍 AdService: Link field value:', link);
-    console.log('🔍 AdService: Link field type:', typeof link);
-    console.log('🔍 AdService: Link field length:', link ? link.length : 'null');
-
     // **NEW: Validate required fields**
     if (!title || !description || !adType || !budget || !uploaderId) {
-      console.log('❌ AdService: Missing required fields:');
-      console.log('   Title:', !!title);
-      console.log('   Description:', !!description);
-      console.log('   Ad Type:', !!adType);
-      console.log('   Budget:', !!budget);
-      console.log('   Uploader ID:', !!uploaderId);
       throw new Error('Missing required fields: title, description, adType, budget, and uploaderId are required');
     }
 
@@ -68,11 +52,6 @@ class AdService {
     if (!user) {
       throw new Error(`User not found with googleId: ${uploaderId}`);
     }
-    console.log('✅ AdService: Found user:', user._id);
-
-    // **NEW: Create AdCampaign with all targeting fields**
-    console.log('🔍 AdService: About to create campaign with deviceType:', deviceType);
-    console.log('🔍 AdService: deviceType condition check:', deviceType && { deviceType: deviceType });
     
     const campaign = new AdCampaign({
       name: title,

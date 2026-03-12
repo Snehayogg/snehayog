@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/core/design/radius.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/ads/presentation/widgets/create_ad/ad_type_selector_widget.dart';
 import 'package:vayu/features/ads/presentation/widgets/create_ad/media_uploader_widget.dart';
@@ -16,14 +15,11 @@ import 'package:vayu/features/ads/presentation/widgets/create_ad/campaign_previe
 import 'package:vayu/features/ads/presentation/widgets/create_ad/ad_placement_preview_widget.dart';
 import 'package:vayu/features/ads/presentation/widgets/create_ad/payment_handler_widget.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_static_views.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
 import 'package:vayu/features/ads/data/services/ad_refresh_notifier.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';
-import 'package:vayu/features/video/presentation/managers/main_controller.dart';
 import 'dart:io';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
@@ -31,15 +27,15 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/shared/managers/activity_recovery_manager.dart';
 import 'package:vayu/shared/models/app_activity.dart';
 
-class CreateAdScreenRefactored extends StatefulWidget {
+class CreateAdScreenRefactored extends ConsumerStatefulWidget {
   const CreateAdScreenRefactored({super.key});
 
   @override
-  State<CreateAdScreenRefactored> createState() =>
+  ConsumerState<CreateAdScreenRefactored> createState() =>
       _CreateAdScreenRefactoredState();
 }
 
-class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
+class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefactored>
     with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
@@ -109,7 +105,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   final CloudflareR2Service _cloudflareService = CloudflareR2Service();
   final ScrollController _scrollController = ScrollController();
 
-
   @override
   void initState() {
     super.initState();
@@ -134,7 +129,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     // **NEW: Advanced KPI defaults**
     _bidType = 'CPM';
     _pacing = 'smooth';
-
 
     // **FIX: Pause videos when entering create ad screen**
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -217,10 +211,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   void _pauseBackgroundVideos() {
     try {
       // Import MainController to pause videos
-      final mainController = Provider.of<MainController>(
-        context,
-        listen: false,
-      );
+      final mainController = ref.read(mainControllerProvider);
       mainController.forcePauseVideos();
       AppLogger.log('✅ CreateAdScreen: Background videos paused successfully');
     } catch (e) {
@@ -235,7 +226,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
       // Save form data to SharedPreferences (Legacy)
       _saveFormData();
-      
+
       // Save to ActivityRecoveryManager (New Global System)
       _saveToActivityManager();
 
@@ -442,12 +433,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         centerTitle: true,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppColors.primary),
+          icon: const Icon(Icons.arrow_back, color: AppColors.primary),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: Consumer<GoogleSignInController>(
-        builder: (context, authController, _) {
+      body: Consumer(
+        builder: (context, ref, _) {
+          final authController = ref.watch(googleSignInProvider);
           final isSignedIn = authController.isSignedIn;
 
           if (!isSignedIn) {
@@ -455,7 +447,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               onGoogleSignIn: () async {
                 final user = await authController.signIn();
                 if (user != null) {
-                  await LogoutService.refreshAllState(context);
+                  await LogoutService.refreshAllState(ref);
                 }
               },
             );
@@ -466,7 +458,6 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
       ),
     );
   }
-
 
   Widget _buildCreateAdForm() {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
@@ -536,13 +527,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             // **ENHANCED: Ad Details Form with helpful tips**
             Card(
               child: Padding(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.edit, color: AppColors.primary),
+                        const Icon(Icons.edit, color: AppColors.primary),
                         AppSpacing.hSpace8,
                         Text(
                           _selectedAdType == 'banner'
@@ -557,8 +548,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     ),
                     // **NEW: Helpful tip for beginners**
                     Container(
-                      margin: EdgeInsets.only(top: 12, bottom: 8),
-                      padding: EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: AppColors.backgroundSecondary,
                         borderRadius: BorderRadius.circular(8),
@@ -566,7 +557,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       ),
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.tips_and_updates,
                             size: 16,
                             color: AppColors.primary,
@@ -577,7 +568,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                               _selectedAdType == 'banner'
                                   ? AppText.get('ad_tip_banner')
                                   : AppText.get('ad_tip_general'),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 11,
                                 color: AppColors.textSecondary,
                               ),
@@ -612,13 +603,14 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             // **NEW: Simple Budget & Duration Section (Beginner-friendly)**
             Card(
               child: Padding(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.attach_money, color: AppColors.success),
+                        const Icon(Icons.attach_money,
+                            color: AppColors.success),
                         AppSpacing.hSpace8,
                         Text(
                           AppText.get('ad_budget_duration'),
@@ -631,7 +623,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                         // **NEW: Helpful tip icon**
                         Tooltip(
                           message: AppText.get('ad_budget_recommended'),
-                          child: Icon(
+                          child: const Icon(
                             Icons.help_outline,
                             size: 20,
                             color: AppColors.textTertiary,
@@ -650,12 +642,12 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                               labelText: AppText.get('ad_daily_budget'),
                               hintText: AppText.get('ad_budget_hint'),
                               prefixText: '₹',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                               helperText: AppText.get('ad_budget_minimum'),
                               suffixIcon: _budgetController.text == '300.00'
                                   ? Container(
-                                      margin: EdgeInsets.all(8),
-                                      padding: EdgeInsets.symmetric(
+                                      margin: const EdgeInsets.all(8),
+                                      padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
                                       ),
                                       decoration: BoxDecoration(
@@ -669,7 +661,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                                         child: Text(
                                           AppText.get(
                                               'ad_budget_recommended_badge'),
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 10,
                                             color: AppColors.success,
                                             fontWeight: FontWeight.w600,
@@ -705,10 +697,10 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     // **NEW: Show budget error if any**
                     if (!_isBudgetValid && _budgetError != null)
                       Padding(
-                        padding: EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.only(top: 4),
                         child: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.error_outline,
                               size: 16,
                               color: AppColors.error,
@@ -717,7 +709,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                             Expanded(
                               child: Text(
                                 _budgetError!,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: AppColors.error,
                                   fontSize: 12,
                                 ),
@@ -730,7 +722,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     // Quick duration picker
                     Text(
                       AppText.get('ad_campaign_duration'),
-                      style: TextStyle(fontWeight: AppTypography.weightMedium),
+                      style: const TextStyle(
+                          fontWeight: AppTypography.weightMedium),
                     ),
                     AppSpacing.vSpace8,
                     Wrap(
@@ -753,7 +746,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                             },
                           ),
                         ChoiceChip(
-                          label: Text('Custom'),
+                          label: const Text('Custom'),
                           selected: _endDate != null &&
                               _startDate != null &&
                               !([7, 14, 30].contains(
@@ -767,7 +760,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       AppSpacing.vSpace8,
                       Text(
                         '${_startDate!.day}/${_startDate!.month}/${_startDate!.year} - ${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
                         ),
@@ -776,7 +769,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       AppSpacing.vSpace8,
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.error_outline,
                             size: 16,
                             color: AppColors.error,
@@ -785,7 +778,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                           Expanded(
                             child: Text(
                               _dateError!,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: AppColors.error,
                                 fontSize: 12,
                               ),
@@ -806,7 +799,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ListTile(
-                    leading: Icon(Icons.tune, color: AppColors.primary),
+                    leading: const Icon(Icons.tune, color: AppColors.primary),
                     title: Text(
                       AppText.get('ad_advanced_settings'),
                       style: AppTypography.headlineSmall.copyWith(
@@ -817,7 +810,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     ),
                     subtitle: Text(
                       AppText.get('ad_advanced_settings_desc'),
-                      style: TextStyle(fontSize: 12),
+                      style: const TextStyle(fontSize: 12),
                     ),
                     trailing: Icon(
                       _showAdvancedSettings
@@ -831,29 +824,32 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       });
                     },
                   ),
-                  if (_showAdvancedSettings) Divider(height: 1),
+                  if (_showAdvancedSettings) const Divider(height: 1),
                   if (_showAdvancedSettings)
                     Container(
-                      constraints: BoxConstraints(
+                      constraints: const BoxConstraints(
                         minHeight: 0,
                         maxHeight: double.infinity,
                       ),
                       child: Padding(
-                        padding: EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              padding: EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.05),
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.05),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                                border: Border.all(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.2)),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.lightbulb_outline,
                                     color: AppColors.primary,
                                     size: 20,
@@ -862,7 +858,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                                   Expanded(
                                     child: Text(
                                       AppText.get('ad_smart_targeting'),
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         fontSize: 12,
                                         color: AppColors.primary,
                                       ),
@@ -1054,7 +1050,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             AppSpacing.vSpace24,
             AppButton(
               onPressed: _isLoading ? null : _submitAd,
-              icon: Icon(Icons.create),
+              icon: const Icon(Icons.create),
               label: _isLoading
                   ? AppText.get('btn_creating_ad')
                   : AppText.get('btn_create_ad'),
@@ -1066,7 +1062,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
             // Progress indicator
             if (_isLoading && _errorMessage != null)
-              Padding(
+              const Padding(
                 padding: EdgeInsets.only(top: 16),
                 child: LinearProgressIndicator(
                   backgroundColor: AppColors.backgroundTertiary,
@@ -1082,7 +1078,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
   /// **NEW: Build Legal Agreement Checkbox**
   Widget _buildLegalAgreement() {
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1096,13 +1092,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
             },
             title: Wrap(
               children: [
-                Text(
+                const Text(
                   'I agree to the ',
                   style: TextStyle(fontSize: 13),
                 ),
                 GestureDetector(
                   onTap: () => _launchURL('https://snehayog.site/terms.html'),
-                  child: Text(
+                  child: const Text(
                     'Terms & Conditions',
                     style: TextStyle(
                       fontSize: 13,
@@ -1112,13 +1108,13 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                     ),
                   ),
                 ),
-                Text(
+                const Text(
                   ' and ',
                   style: TextStyle(fontSize: 13),
                 ),
                 GestureDetector(
                   onTap: () => _launchURL('https://snehayog.site/privacy.html'),
-                  child: Text(
+                  child: const Text(
                     'Privacy Policy',
                     style: TextStyle(
                       fontSize: 13,
@@ -1160,23 +1156,24 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
   Widget _buildSuccessMessage() {
     return Container(
-      padding: EdgeInsets.all(16),
-      margin: EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: AppColors.success.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.3), width: 2),
+        border: Border.all(
+            color: AppColors.success.withValues(alpha: 0.3), width: 2),
         boxShadow: [
           BoxShadow(
             color: AppColors.success.withValues(alpha: 0.1),
             blurRadius: 8,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.check_circle_outline,
             color: AppColors.success,
             size: 24,
@@ -1185,7 +1182,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           Expanded(
             child: Text(
               _successMessage!,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.success,
                 fontSize: 14,
                 fontWeight: AppTypography.weightMedium,
@@ -1195,9 +1192,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
           ),
           IconButton(
             onPressed: () => setState(() => _successMessage = null),
-            icon: Icon(Icons.close, color: AppColors.success, size: 20),
+            icon: const Icon(Icons.close, color: AppColors.success, size: 20),
             padding: EdgeInsets.zero,
-            constraints: BoxConstraints(),
+            constraints: const BoxConstraints(),
           ),
         ],
       ),
@@ -1206,17 +1203,18 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
   Widget _buildErrorMessage() {
     return Container(
-      padding: EdgeInsets.all(16),
-      margin: EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: AppColors.error.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.3), width: 2),
+        border:
+            Border.all(color: AppColors.error.withValues(alpha: 0.3), width: 2),
         boxShadow: [
           BoxShadow(
             color: AppColors.error.withValues(alpha: 0.1),
             blurRadius: 8,
-            offset: Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1225,9 +1223,9 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
         children: [
           Row(
             children: [
-              Icon(Icons.error_outline, color: AppColors.error, size: 24),
+              const Icon(Icons.error_outline, color: AppColors.error, size: 24),
               AppSpacing.hSpace8,
-              Expanded(
+              const Expanded(
                 child: Text(
                   'Error',
                   style: TextStyle(
@@ -1239,16 +1237,16 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               ),
               IconButton(
                 onPressed: () => setState(() => _errorMessage = null),
-                icon: Icon(Icons.close, color: AppColors.error, size: 20),
+                icon: const Icon(Icons.close, color: AppColors.error, size: 20),
                 padding: EdgeInsets.zero,
-                constraints: BoxConstraints(),
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
           AppSpacing.vSpace8,
           Text(
             _errorMessage!,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.error,
               fontSize: 14,
               height: 1.4,
@@ -1258,7 +1256,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
               _errorMessage!.contains('media') ||
               _errorMessage!.contains('network'))
             Padding(
-              padding: EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.only(top: 12),
               child: Row(
                 children: [
                   AppButton(
@@ -1266,7 +1264,7 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
                       setState(() => _errorMessage = null);
                       _clearMediaSelection();
                     },
-                    icon: Icon(Icons.refresh, size: 16),
+                    icon: const Icon(Icons.refresh, size: 16),
                     label: 'Try Again',
                     variant: AppButtonVariant.primary,
                   ),
@@ -1545,31 +1543,36 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
 
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               AppText.get('ad_required_fields'),
-              style: TextStyle(fontSize: 16, fontWeight: AppTypography.weightBold),
+              style: const TextStyle(
+                  fontSize: 16, fontWeight: AppTypography.weightBold),
             ),
             AppSpacing.vSpace12,
             ...validationItems.map(
               (item) => Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
                     Icon(
                       item['isValid']
                           ? Icons.check_circle
                           : Icons.radio_button_unchecked,
-                      color: item['isValid'] ? AppColors.success : AppColors.textSecondary,
+                      color: item['isValid']
+                          ? AppColors.success
+                          : AppColors.textSecondary,
                       size: 20,
                     ),
                     AppSpacing.hSpace8,
                     Icon(
                       item['icon'] as IconData,
-                      color: item['isValid'] ? AppColors.success : AppColors.textSecondary,
+                      color: item['isValid']
+                          ? AppColors.success
+                          : AppColors.textSecondary,
                       size: 16,
                     ),
                     AppSpacing.hSpace8,
@@ -1926,7 +1929,8 @@ class _CreateAdScreenRefactoredState extends State<CreateAdScreenRefactored>
     // Check agreement to terms
     if (!_agreeToTerms) {
       setState(() {
-        _errorMessage = 'Please agree to the Terms & Conditions and Privacy Policy';
+        _errorMessage =
+            'Please agree to the Terms & Conditions and Privacy Policy';
         isValid = false;
       });
     }

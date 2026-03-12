@@ -35,8 +35,14 @@ class VideoPage extends StatelessWidget {
         children: [
           Positioned.fill(child: _buildVideoThumbnail(video)),
           if (controller != null &&
-              controller!.value.isInitialized &&
-              showPlayer)
+              showPlayer &&
+              (() {
+                try {
+                  return controller!.value.isInitialized;
+                } catch (_) {
+                  return false;
+                }
+              }()))
             Positioned.fill(
               child: VideoAspectSurface(
                 controller: controller!,
@@ -58,31 +64,6 @@ class VideoPage extends StatelessWidget {
       width: double.infinity,
       height: double.infinity,
       color: Colors.black,
-    );
-  }
-
-  Widget _buildFallbackThumbnail() {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.play_circle_outline, size: 80, color: Colors.white54),
-            SizedBox(height: 16),
-            Text(
-              'Tap to play video',
-              style: TextStyle(
-                color: Colors.white54,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

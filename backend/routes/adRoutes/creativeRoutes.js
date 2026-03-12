@@ -84,52 +84,6 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
     });
   }
 
-  try {
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: type === 'video' ? 'video' : 'image',
-      folder: 'snehayog-ads',
-      transformation: [
-        { quality: 'auto:good' },
-        { fetch_format: 'auto' }
-      ]
-    });
-
-    // Create ad creative
-    const creative = new AdCreative({
-      campaignId,
-      adType,
-      type,
-      cloudinaryUrl: result.secure_url,
-      thumbnail: type === 'video' ? result.thumbnail_url : result.secure_url,
-      aspectRatio,
-      durationSec: type === 'video' ? durationSec : undefined,
-      title: adType === 'banner' ? title : undefined,
-      callToAction: {
-        label: callToActionLabel,
-        url: callToActionUrl
-      },
-      // **FIX: Auto-approve and activate banner ads immediately**
-      reviewStatus: 'approved',
-      isActive: true,
-      activatedAt: new Date()
-    });
-
-    await creative.save();
-    console.log(`✅ ${adType} ad creative created and auto-approved:`, creative._id);
-
-    res.status(201).json({
-      message: 'Ad creative uploaded successfully',
-      creative
-    });
-
-  } catch (error) {
-    console.error('Creative upload error:', error);
-    throw error;
-  } finally {
-    // Clean up temp file
-    cleanupTempFile(req.file?.path);
-  }
 }));
 
 // POST /ads/campaigns/:id/creatives/carousel - Upload carousel ad with multiple images

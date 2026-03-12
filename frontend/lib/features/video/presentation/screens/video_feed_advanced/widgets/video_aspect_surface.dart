@@ -23,8 +23,16 @@ class VideoAspectSurface extends StatelessWidget {
       builder: (context, constraints) {
         
 
-        final Size videoSize = controller.value.size;
-        final int rotation = controller.value.rotationCorrection;
+        Size videoSize;
+        int rotation;
+        try {
+          videoSize = controller.value.size;
+          rotation = controller.value.rotationCorrection;
+        } catch (e) {
+          // Controller disposed or not ready; render nothing to avoid crash.
+          AppLogger.log('⚠️ VideoAspectSurface: controller unusable: $e');
+          return const SizedBox.shrink();
+        }
 
         AppLogger.log('🎬 MODEL aspect ratio: $modelAspectRatio');
         AppLogger.log(

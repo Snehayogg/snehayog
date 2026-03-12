@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:vayu/shared/services/local_dubbing_service.dart';
@@ -48,7 +47,7 @@ class _DubbingTestScreenState extends State<DubbingTestScreen> {
     }
 
     final videoPath = result.files.single.path!;
-    
+
     setState(() {
       _isProcessing = true;
       _status = 'Starting dubbing test...';
@@ -58,7 +57,7 @@ class _DubbingTestScreenState extends State<DubbingTestScreen> {
 
     try {
       final startTime = DateTime.now();
-      
+
       // 2. Run the isolated pipeline
       final outputPath = await localDubbingService.processDubbing(
         videoPath: videoPath,
@@ -74,15 +73,14 @@ class _DubbingTestScreenState extends State<DubbingTestScreen> {
       );
 
       final elapsed = DateTime.now().difference(startTime);
-      
+
       setState(() {
         _status = 'Success! Took ${elapsed.inSeconds} seconds.';
         _resultPath = outputPath;
         _progress = 1.0;
       });
-      
-      AppLogger.log('Dubbing Test Complete: $outputPath');
 
+      AppLogger.log('Dubbing Test Complete: $outputPath');
     } catch (e) {
       setState(() {
         _status = 'Error: $e';
@@ -117,20 +115,21 @@ class _DubbingTestScreenState extends State<DubbingTestScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            if (_isProcessing) 
-               LinearProgressIndicator(value: _progress),
+            if (_isProcessing) LinearProgressIndicator(value: _progress),
             const SizedBox(height: 16),
             Text(
               _status,
               style: TextStyle(
-                color: _status.startsWith('Error') ? Colors.red : Colors.white
-              ),
+                  color:
+                      _status.startsWith('Error') ? Colors.red : Colors.white),
               textAlign: TextAlign.center,
             ),
             if (_resultPath != null) ...[
               const SizedBox(height: 16),
-              const Text('Output File:', style: TextStyle(fontWeight: FontWeight.bold)),
-              SelectableText(_resultPath!, style: const TextStyle(fontSize: 12)),
+              const Text('Output File:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              SelectableText(_resultPath!,
+                  style: const TextStyle(fontSize: 12)),
             ],
             const Spacer(),
             ElevatedButton(

@@ -25,29 +25,32 @@ class ProfileSkeleton extends StatelessWidget {
                       width: ResponsiveHelper.isMobile(context) ? 100 : 150,
                       height: ResponsiveHelper.isMobile(context) ? 100 : 150,
                       decoration: BoxDecoration(
-                        color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                        color:
+                            AppColors.backgroundTertiary.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
                     ),
-                    SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
                     // Name skeleton
                     Container(
                       width: 200,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                        color:
+                            AppColors.backgroundTertiary.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
                     // Edit button skeleton
                     Container(
                       width: 120,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                        color:
+                            AppColors.backgroundTertiary.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
@@ -59,8 +62,8 @@ class ProfileSkeleton extends StatelessWidget {
             // Stats skeleton
             RepaintBoundary(
               child: Container(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                decoration: BoxDecoration(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: const BoxDecoration(
                   border: Border(
                     top: BorderSide(color: AppColors.borderPrimary),
                     bottom: BorderSide(color: AppColors.borderPrimary),
@@ -76,16 +79,18 @@ class ProfileSkeleton extends StatelessWidget {
                                 width: 60,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                  color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                                  color: AppColors.backgroundTertiary
+                                      .withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               Container(
                                 width: 80,
                                 height: 20,
                                 decoration: BoxDecoration(
-                                  color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                                  color: AppColors.backgroundTertiary
+                                      .withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               ),
@@ -107,18 +112,19 @@ class ProfileSkeleton extends StatelessWidget {
                       width: 150,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                        color:
+                            AppColors.backgroundTertiary.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
                     // Video grid skeleton
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
-                          SliverGridDelegateWithFixedCrossAxisCount(
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
                         crossAxisSpacing: 1,
                         mainAxisSpacing: 1,
@@ -127,7 +133,8 @@ class ProfileSkeleton extends StatelessWidget {
                       itemCount: 6,
                       itemBuilder: (context, index) => Container(
                         decoration: BoxDecoration(
-                          color: AppColors.backgroundTertiary.withValues(alpha: 0.5),
+                          color: AppColors.backgroundTertiary
+                              .withValues(alpha: 0.5),
                           borderRadius: BorderRadius.zero,
                         ),
                       ),
@@ -156,32 +163,33 @@ class ProfileSignInView extends StatelessWidget {
     return RepaintBoundary(
       child: Center(
         child: Padding(
-          padding: EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const HugeIcon(icon: HugeIcons.strokeRoundedUserCircle,
+              const HugeIcon(
+                icon: HugeIcons.strokeRoundedUserCircle,
                 size: 100,
                 color: AppColors.textTertiary,
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               Text(
                 AppText.get('profile_sign_in_title'),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
                 AppText.get('profile_sign_in_desc'),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+                      color: AppColors.textSecondary,
+                    ),
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               ElevatedButton.icon(
                 onPressed: onGoogleSignIn,
                 icon: Image.network(
@@ -193,7 +201,7 @@ class ProfileSignInView extends StatelessWidget {
                   backgroundColor: AppColors.textPrimary,
                   foregroundColor: AppColors.textInverse,
                   padding:
-                      EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppRadius.radiusMedium),
                   ),

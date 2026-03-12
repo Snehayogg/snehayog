@@ -113,6 +113,25 @@ class UserService {
       if (response.statusCode == 200) {
         AppLogger.log('✅ Follow API Success: User followed successfully');
         return true;
+      } else if (response.statusCode == 400) {
+        // Some backends return 400 with "Already following this user" if the
+        // relationship already exists. Treat that as a logical success so the
+        // UI can still move to the "Subscribed" state instead of failing.
+        try {
+          final body = jsonDecode(response.body);
+          final errorMessage = body['error']?.toString() ?? '';
+          if (errorMessage.toLowerCase().contains('already following')) {
+            AppLogger.log(
+                '✅ Follow API Logical Success: Already following $trimmedUserId');
+            return true;
+          }
+        } catch (_) {
+          // If parsing fails, fall through to generic error handling below.
+        }
+
+        AppLogger.log(
+            '❌ Follow API Error: Status code ${response.statusCode}, Body: ${response.body}');
+        throw Exception('Failed to follow user: ${response.statusCode}');
       } else {
         AppLogger.log(
             '❌ Follow API Error: Status code ${response.statusCode}, Body: ${response.body}');

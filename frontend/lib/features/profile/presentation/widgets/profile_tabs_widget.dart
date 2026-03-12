@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
 
 class ProfileTabsWidget extends StatelessWidget {
   final int activeIndex;
@@ -74,7 +71,8 @@ class ProfileTabsWidget extends StatelessWidget {
             label,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+              color:
+                  isSelected ? AppColors.textPrimary : AppColors.textSecondary,
             ),
           ),
         ),

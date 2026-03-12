@@ -34,20 +34,22 @@ void main(List<String> args) {
           }
         } else {
           if (!line.trimLeft().startsWith('#')) {
-             // add # at the beginning of the text, preserving indentation
-             final textIndex = line.indexOf(pkg);
-             lines[i] = line.substring(0, textIndex) + '#' + line.substring(textIndex);
+            // add # at the beginning of the text, preserving indentation
+            final textIndex = line.indexOf(pkg);
+            lines[i] =
+                '${line.substring(0, textIndex)}#${line.substring(textIndex)}';
           }
         }
       }
     }
   }
-  pubspecFile.writeAsStringSync(lines.join('\n') + '\n');
+  pubspecFile.writeAsStringSync('${lines.join('\n')}\n');
   print('✅ Updated pubspec.yaml');
 
   // 2. Toggle dart files
   _toggleDartFile('lib/shared/services/local_dubbing_service.dart', enable);
-  _toggleDartFile('lib/shared/services/local_ai_inference_service.dart', enable);
+  _toggleDartFile(
+      'lib/shared/services/local_ai_inference_service.dart', enable);
 
   print('✅ Done. Please run `flutter pub get` now.');
 }
@@ -61,30 +63,30 @@ void _toggleDartFile(String path, bool enable) {
 
   for (int i = 0; i < lines.length; i++) {
     final line = lines[i];
-    final isDubbingImport = line.contains('package:ffmpeg') || 
-                            line.contains('package:whisper') || 
-                            line.contains('package:google_mlkit_translation') || 
-                            line.contains('package:sherpa_onnx');
-                            
+    final isDubbingImport = line.contains('package:ffmpeg') ||
+        line.contains('package:whisper') ||
+        line.contains('package:google_mlkit_translation') ||
+        line.contains('package:sherpa_onnx');
+
     if (isDubbingImport) {
       if (enable && line.startsWith('// #DUBBING_IMPORT# ')) {
         lines[i] = line.replaceFirst('// #DUBBING_IMPORT# ', '');
         modified = true;
       } else if (!enable && !line.startsWith('//')) {
-        lines[i] = '// #DUBBING_IMPORT# ' + line;
+        lines[i] = '// #DUBBING_IMPORT# $line';
         modified = true;
       }
     }
-    
+
     // Toggle the method logic to avoid compile errors
     // We can do this by injecting a return at the top of the methods, or commenting out the whole body.
     // However, since we simply want to compile, commenting the logic is safer.
-    // A simpler way: Find specific lines using the heavy packages and comment them, 
+    // A simpler way: Find specific lines using the heavy packages and comment them,
     // but the AST is complex. We'll use a specific marker approach.
   }
-  
+
   if (modified) {
-    file.writeAsStringSync(lines.join('\n') + '\n');
+    file.writeAsStringSync('${lines.join('\n')}\n');
     print('✅ Updated \$path');
   }
 }
