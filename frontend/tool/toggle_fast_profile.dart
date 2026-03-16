@@ -2,7 +2,7 @@ import 'dart:io';
 
 const List<String> dubbingPackages = [
   'sherpa_onnx:',
-  'ffmpeg_kit_flutter_new_https_gpl:',
+  'ffmpeg_kit_16kb:',
   'whisper_flutter_new:',
   'google_mlkit_translation:',
 ];
