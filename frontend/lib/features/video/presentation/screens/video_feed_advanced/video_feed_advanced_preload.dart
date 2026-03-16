@@ -462,19 +462,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
   /// **NEW: Get acting URL representing original or dubbed state**
   String _getActingUrl(VideoModel video) {
-    if (_isDubbedActiveVN[video.id]?.value == true && _dubbedVideoUrls.containsKey(video.id)) {
-      final dubbedUrl = _dubbedVideoUrls[video.id]!;
-      if (!_isValidDubbedPlaybackSource(dubbedUrl)) {
-        _dubbedVideoUrls.remove(video.id);
-      } else {
-      // **POC FIX: If using local path, don't proxy it**
-      if (dubbedUrl.startsWith('/') || dubbedUrl.contains(':\\')) {
-        return dubbedUrl;
-      }
-      AppLogger.log('🌐 Auto-Dub: Using globally cached URL for [${video.id}]');
-      return videoCacheProxy.proxyUrl(dubbedUrl);
-      }
-    }
+    // We will implement language selection later.
+    // For now, use the original video URL.
 
     // Standard logic
     final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true

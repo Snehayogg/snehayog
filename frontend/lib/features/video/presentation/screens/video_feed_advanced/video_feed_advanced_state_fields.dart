@@ -226,8 +226,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
 
   // Dubbing State
   final Map<String, String> _dubbedVideoUrls = {};
-  final Map<String, ValueNotifier<bool>> _isDubbedActiveVN = {};
-  final Map<String, ValueNotifier<double>> _dubbingProgressVN = {};
+  final Map<String, String> _selectedAudioLanguage = {};
 
   bool _isLikelyLocalPath(String value) {
     return value.startsWith('/') ||
@@ -241,15 +240,6 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
         v.contains('dummy') ||
         v.contains('mock') ||
         v.contains('sample');
-  }
-
-  bool _isValidDubbedPlaybackSource(String? value) {
-    if (value == null) return false;
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return false;
-    if (_isLikelyPlaceholderSource(trimmed)) return false;
-    if (_isLikelyLocalPath(trimmed)) return true;
-    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
   }
 
   bool _isValidRemoteDubbedUrl(String? value) {

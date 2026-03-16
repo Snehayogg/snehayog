@@ -90,36 +90,7 @@ class VideoControllerManager {
     return video.videoUrl;
   }
 
-  /// Get URL source type for debugging
-  String _getUrlSource(String url) {
-    final lower = url.toLowerCase();
-
-    if (lower.contains('r2.cloudflarestorage.com') ||
-        lower.contains('r2.dev')) {
-      return '🟢 CLOUDFLARE R2 (Best - Fast CDN)';
-    }
-    if (lower.contains('cdn.snehayog.site') ||
-        lower.contains('cdn.snehayog.com')) {
-      return '🟢 CUSTOM CDN (Good)';
-    }
-    if (lower.contains('/hls/')) {
-      return '🟡 BACKEND HLS (Local Server)';
-    }
-    if (lower.contains('cloudinary.com')) {
-      return '🔴 CLOUDINARY (Slow - Avoid)';
-    }
-    if (lower.contains('.m3u8')) {
-      return '🟡 HLS STREAMING';
-    }
-    if (lower.contains('localhost') ||
-        lower.contains('127.0.0.1') ||
-        lower.contains('10.0.2.2')) {
-      return '🟡 LOCALHOST (Development)';
-    }
-
-    return '⚪ UNKNOWN SOURCE';
-  }
-
+ 
   Future<VideoPlayerController> getController(
       int index, VideoModel video) async {
     // Decide final URL without Cloudinary signing (prefer Cloudflare/CDN)

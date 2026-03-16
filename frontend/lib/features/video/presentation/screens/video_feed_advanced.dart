@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:vibration/vibration.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, compute;
@@ -57,7 +59,6 @@ import 'package:vayu/features/video/presentation/widgets/video_feed_skeleton.dar
 import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/services/local_gallery_service.dart';
 import 'package:vayu/features/video/presentation/screens/edit_video_title.dart';
-import 'package:vayu/shared/services/local_dubbing_service.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 
@@ -68,7 +69,6 @@ part 'video_feed_advanced/video_feed_advanced_initialization.dart';
 part 'video_feed_advanced/video_feed_advanced_data.dart';
 part 'video_feed_advanced/video_feed_advanced_preload.dart';
 part 'video_feed_advanced/video_feed_advanced_ui.dart';
-part 'video_feed_advanced/video_feed_advanced_dubbing.dart';
 
 // #region agent log
 // Debug logging helper for instrumentation

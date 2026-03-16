@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "start:worker": "node workers/videoWorker.js",
+    "start:dubbing-worker": "node workers/dubbingWorker.js",
     "dev": "nodemon server.js",
     "test": "jest",
     "setup": "npm install && npm run setup:ffmpeg",

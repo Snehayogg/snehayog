@@ -44,6 +44,11 @@ const videoQueue = new Queue('video-processing', {
   connection: redisOptions
 });
 
+// Create the video dubbing queue
+const dubbingQueue = new Queue('video-dubbing', {
+  connection: redisOptions
+});
+
 class FeedQueueService {
     constructor() {
         console.log('🔄 FeedQueueService: Initialized (with actual Queue support)');
@@ -96,6 +101,32 @@ class FeedQueueService {
             throw error;
         }
     }
+
+    /**
+     * Add a video dubbing job to the queue
+     * @param {Object} data - Job data
+     * @param {string} data.videoId - Video ID
+     * @param {string} data.targetLanguage - Target language (e.g. 'hi', 'en')
+     */
+    async addDubbingJob(data) {
+        try {
+            console.log(`📥 QueueService: Adding dubbing job to queue: ${data.videoId} to ${data.targetLanguage}`);
+            await dubbingQueue.add('generate-dub', data, {
+                attempts: 3,
+                backoff: {
+                    type: 'exponential',
+                    delay: 5000 // Start retry after 5s
+                },
+                removeOnComplete: true,
+                removeOnFail: false
+            });
+            console.log('✅ QueueService: Dubbing job added successfully');
+            return true;
+        } catch (error) {
+            console.error('❌ QueueService: Failed to add dubbing job:', error);
+            throw error;
+        }
+    }
     
     // Legacy FanOut method (stub or move existing logic here if needed)
     async fanOutToFollowers(userId, videoId, videoType) {
@@ -108,4 +139,4 @@ class FeedQueueService {
 }
 
 export default new FeedQueueService();
-export { videoQueue, redisOptions };
+export { videoQueue, dubbingQueue, redisOptions };

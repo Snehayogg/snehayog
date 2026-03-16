@@ -1,0 +1,16 @@
+fastapi==0.109.0
+uvicorn==0.27.0
+requests==2.31.0
+python-dotenv==1.0.1
+pydub==0.25.1
+demucs==4.0.0
+TTS==0.22.0
+whisperx @ git+https://github.com/m-bain/whisperx.git
+ffmpeg-python==0.2.0
+boto3==1.34.34
+pyrubberband==0.3.0
+openai==1.12.0
+torch
+torchaudio
+torchvision
+runpod==1.5.1

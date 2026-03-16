@@ -475,16 +475,65 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
             final validCachedUrl = cachedUrl!.trim();
             // Store the URL for preloading/playback
             _dubbedVideoUrls[video.id] = validCachedUrl;
-            // Set the active UI state to true so "Smart Dub" button glows
-            _getOrCreateNotifier<bool>(_isDubbedActiveVN, video.id, true);
             AppLogger.log(
-                '🌐 Global Dub Match for [${video.id}]: Active by default');
+                '🌐 Global Dub Match for [${video.id}]: URL cached');
           }
         }
-      } else {
-        // Ensure state exists but is false for new/undubbed videos
-        _getOrCreateNotifier<bool>(_isDubbedActiveVN, video.id, false);
       }
+    }
+  }
+
+  void _handleLanguageSelection(VideoModel video, String langCode) {
+    if (_selectedAudioLanguage[video.id] == langCode) return;
+    
+    // Check if generating is needed
+    if (langCode != 'default' && !(video.dubbedUrls?.containsKey(langCode) ?? false)) {
+       // Request generation
+       _requestDubbing(video, langCode);
+       ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text('Generating AI Dub... This may take a minute.')),
+       );
+       return;
+    }
+
+    safeSetState(() {
+      _selectedAudioLanguage[video.id] = langCode;
+    });
+
+    final controller = _controllerPool[video.id];
+    if (controller != null) {
+       final position = controller.value.position;
+       final wasPlaying = controller.value.isPlaying;
+       
+       _cleanupVideoStateMapsByIds([video.id]); 
+       
+       final index = _videos.indexWhere((v) => v.id == video.id);
+       if (index != -1) {
+          _preloadVideo(index).then((_) {
+            final newController = _controllerPool[video.id];
+            if (newController != null) {
+              newController.seekTo(position).then((_) {
+                 if (wasPlaying && index == _currentIndex) {
+                    newController.play();
+                 }
+              });
+            }
+          });
+       }
+    }
+  }
+
+  Future<void> _requestDubbing(VideoModel video, String targetLanguage) async {
+    try {
+      final dio = Dio();
+      final url = '${VideoService.baseUrl}/api/dubbing/request';
+      await dio.post(url, data: {
+        'videoId': video.id,
+        'targetLanguage': targetLanguage,
+      });
+      AppLogger.log('Dubbing requested successfully for ${video.id}');
+    } catch (e) {
+      AppLogger.log('Error requesting dubbing: $e');
     }
   }
 }

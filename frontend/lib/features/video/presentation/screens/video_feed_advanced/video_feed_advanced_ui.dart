@@ -1324,11 +1324,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       ),
                     _buildLikeButton(video, index),
                     AppSpacing.vSpace12,
-                    // **NEW: Info Button for Video Details**
-                    _buildVerticalActionButton(
-                      icon: Icons.info_outline,
-                      onTap: () => _showVideoDetailsBottomSheet(context, video),
-                    ),
+                    // **NEW: Language Selector Button**
+                    _buildLanguageButton(video),
                     AppSpacing.vSpace12,
                     _buildVerticalActionButton(
                       icon: Icons.share,
@@ -2019,109 +2016,77 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ],
           ),
           AppSpacing.vSpace16,
-          const Divider(),
-          AppSpacing.vSpace12,
-          _buildDubButton(video),
         ],
       ),
     );
   }
+  Widget _buildLanguageButton(VideoModel video) {
+    return _buildVerticalActionButton(
+      icon: Icons.translate_rounded,
+      onTap: () => _showLanguageSelector(context, video),
+    );
+  }
 
-  Widget _buildDubButton(VideoModel video) {
-    if (!FeatureFlags.isDubbingEnabled) return const SizedBox.shrink();
-    final videoId = video.id;
-    final progressVN =
-        _dubbingProgressVN.putIfAbsent(videoId, () => ValueNotifier<double>(0));
-    final isActiveVN = _isDubbedActiveVN.putIfAbsent(
-        videoId, () => ValueNotifier<bool>(false));
-
-    return ValueListenableBuilder<double>(
-      valueListenable: progressVN,
-      builder: (context, progress, _) {
-        final isProcessing = progress > 0 && progress < 1;
-
-        return ValueListenableBuilder<bool>(
-          valueListenable: isActiveVN,
-          builder: (context, isActive, _) {
-            return InkWell(
-              onTap: () => _handleSmartDub(video),
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Row(
-                  children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? AppColors.primary.withValues(alpha: 0.1)
-                                : AppColors.textSecondary
-                                    .withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isProcessing ? Icons.sync : Icons.translate_rounded,
-                            color: isActive
-                                ? AppColors.primary
-                                : AppColors.textSecondary,
-                            size: 20,
-                          ),
-                        ),
-                        if (isProcessing)
-                          SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: CircularProgressIndicator(
-                              value: progress,
-                              strokeWidth: 2,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary),
-                            ),
-                          ),
-                      ],
-                    ),
-                    AppSpacing.hSpace16,
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isActive ? 'Dubbing (Active)' : 'Smart Dubbing',
-                            style: TextStyle(
-                              fontSize: AppTypography.fontSizeLG,
-                              fontWeight: AppTypography.weightMedium,
-                              color: isActive
-                                  ? AppColors.primary
-                                  : AppColors.textPrimary,
-                            ),
-                          ),
-                          Text(
-                            isActive
-                                ? 'Currently playing the dubbed version'
-                                : isProcessing
-                                    ? 'Processing... ${(progress * 100).toInt()}%'
-                                    : 'Translate this video to your language',
-                            style: TextStyle(
-                              fontSize: AppTypography.fontSizeSM,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isActive)
-                      const Icon(Icons.check_circle,
-                          color: AppColors.primary, size: 20),
-                  ],
+  void _showLanguageSelector(BuildContext context, VideoModel video) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select Audio Language',
+                  style: TextStyle(
+                    fontSize: AppTypography.fontSizeXL,
+                    fontWeight: AppTypography.weightBold,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-              ),
-            );
-          },
+                AppSpacing.vSpace16,
+                _buildLanguageOption(context, video, 'Default (Original)', 'default'),
+                _buildLanguageOption(context, video, 'English', 'en'),
+                _buildLanguageOption(context, video, 'Hindi', 'hi'),
+              ],
+            ),
+          ),
         );
+      },
+    );
+  }
+
+  Widget _buildLanguageOption(BuildContext context, VideoModel video, String title, String langCode) {
+    final String currentSelected = _selectedAudioLanguage[video.id] ?? 'default';
+    final bool isSelected = currentSelected == langCode;
+    
+    // Default is always available, others depend on 'dubbedUrls'
+    final bool isAvailable = langCode == 'default' || (video.dubbedUrls?.containsKey(langCode) ?? false);
+
+    return ListTile(
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isSelected ? AppColors.primary : AppColors.textPrimary,
+          fontWeight: isSelected ? AppTypography.weightBold : AppTypography.weightRegular,
+        ),
+      ),
+      trailing: isSelected 
+          ? const Icon(Icons.check_circle, color: AppColors.primary)
+          : (!isAvailable)
+              ? const Text('Generate to Play', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)) 
+              : null,
+      onTap: () {
+        Navigator.pop(context);
+        if (!isSelected) {
+          _handleLanguageSelection(video, langCode);
+        }
       },
     );
   }
