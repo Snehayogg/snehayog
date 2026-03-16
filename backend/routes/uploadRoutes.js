@@ -273,9 +273,6 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       });
     }
 
-    // **NEW: Show cost estimate**
-    const costEstimate = hybridVideoService.getCostEstimate(videoValidation.sizeInMB);
-    console.log('💰 Cost estimate:', costEstimate);
 
     // **NEW: Find user by Google ID to get proper ObjectId**
     const user = await User.findOne({ googleId: userId });

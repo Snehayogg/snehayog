@@ -16,7 +16,6 @@ class HybridVideoService {
       let isRemoteFile = false;
 
       if (videoPath.startsWith('http')) {
-        console.log('🌐 Remote video detected (Direct Upload). Downloading to local temp...');
         isRemoteFile = true;
         
         const tempDir = path.join(process.cwd(), 'temp');
@@ -293,13 +292,7 @@ class HybridVideoService {
         }
       );
       
-      console.log('✅ HLS conversion completed:');
-      console.log(`   Segments: ${hlsResult.segments}`);
-      console.log(`   Playlist: ${hlsResult.playlistPath}`);
-      console.log(`   Output Dir: ${hlsResult.outputDir}`);
-      
       // Step 3: Upload ALL HLS files to R2 (playlist + segments)
-      console.log('📤 Uploading HLS files to R2...');
       const r2HLSResult = await cloudflareR2Service.uploadHLSDirectoryToR2(
         hlsResult.outputDir,
         videoId,

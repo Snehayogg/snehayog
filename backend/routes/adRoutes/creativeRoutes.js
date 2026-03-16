@@ -4,7 +4,6 @@ import { adUpload, cleanupTempFile } from '../../config/upload.js';
 import AdCreative from '../../models/AdCreative.js';
 import AdCampaign from '../../models/AdCampaign.js';
 import User from '../../models/User.js';
-import cloudinary from '../../config/cloudinary.js';
 
 const router = express.Router();
 
@@ -14,10 +13,7 @@ router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandle
   const {
     adType,
     type,
-    aspectRatio,
     durationSec,
-    callToActionLabel,
-    callToActionUrl,
     title
   } = req.body;
 
@@ -91,7 +87,6 @@ router.post('/campaigns/:id/creatives/carousel', adUpload.array('creatives', 10)
   const campaignId = req.params.id;
   const {
     type,
-    aspectRatio,
     callToActionLabel,
     callToActionUrl,
     slideTitles, // Optional: JSON string array of titles for each slide
@@ -127,8 +122,6 @@ router.post('/campaigns/:id/creatives/carousel', adUpload.array('creatives', 10)
 
   try {
     // Parse optional slide metadata
-    let titles = [];
-    let descriptions = [];
     try {
       titles = slideTitles ? JSON.parse(slideTitles) : [];
       descriptions = slideDescriptions ? JSON.parse(slideDescriptions) : [];
@@ -138,33 +131,6 @@ router.post('/campaigns/:id/creatives/carousel', adUpload.array('creatives', 10)
 
     // Upload all files and create slides array
     const slides = [];
-    
-    for (let i = 0; i < req.files.length; i++) {
-      const file = req.files[i];
-      
-      console.log(`📤 Uploading slide ${i + 1}/${req.files.length} to Cloudinary...`);
-      
-      // Upload to Cloudinary
-      const result = await cloudinary.uploader.upload(file.path, {
-        resource_type: type === 'video' ? 'video' : 'image',
-        folder: 'snehayog-ads/carousel',
-        transformation: [
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' }
-        ]
-      });
-
-      slides.push({
-        mediaUrl: result.secure_url,
-        thumbnail: type === 'video' ? result.thumbnail_url : result.secure_url,
-        mediaType: type,
-        aspectRatio: aspectRatio || '9:16',
-        title: titles[i] || undefined,
-        description: descriptions[i] || undefined
-      });
-      
-      console.log(`✅ Slide ${i + 1} uploaded: ${result.secure_url}`);
-    }
 
     // Create carousel ad creative with slides
     const creative = new AdCreative({

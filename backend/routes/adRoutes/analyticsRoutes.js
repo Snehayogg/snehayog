@@ -2,7 +2,6 @@ import express from 'express';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import adService from '../../services/adService.js';
 import redisService from '../../services/redisService.js';
-import { AdCacheKeys } from '../../middleware/cacheMiddleware.js';
 
 const router = express.Router();
 
@@ -27,13 +26,7 @@ router.get('/serve', asyncHandler(async (req, res) => {
     }
     console.log(`❌ Ad Cache MISS: ${cacheKey}`);
   }
-  
-  console.log('🎯 Ad Serve Request:', {
-    videoCategory,
-    videoTags: parsedTags,
-    videoKeywords: parsedKeywords,
-    adType
-  });
+
   
   const activeAds = await adService.getActiveAds({ 
     userId, 
@@ -80,8 +73,6 @@ router.get('/analytics/:adId', asyncHandler(async (req, res) => {
   try {
     const { adId } = req.params;
     const { userId } = req.query;
-    
-    console.log('📊 Analytics Route: Request for ad:', adId, 'userId:', userId);
     
     if (!adId) {
       return res.status(400).json({ error: 'Ad ID is required' });

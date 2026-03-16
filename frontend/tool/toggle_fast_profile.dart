@@ -13,7 +13,7 @@ void main(List<String> args) {
     print('  enable:  Restores full dependencies and real files for dubbing.');
     print(
         '  disable: Comments out heavy dependencies and uses stubs (Fast Profile).');
-    exit(1);
+    return;
   }
 
   final disable =

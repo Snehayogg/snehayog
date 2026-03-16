@@ -4,7 +4,6 @@ import AdCampaign from '../models/AdCampaign.js';
 import AdCreative from '../models/AdCreative.js';
 import Video from '../models/Video.js';
 import Invoice from '../models/Invoice.js';
-import cloudinary from '../config/cloudinary.js';
 import fs from 'fs';
 import User from '../models/User.js';
 import { verifyToken } from '../utils/verifytoken.js';
@@ -177,8 +176,7 @@ router.post('/create-with-payment', async (req, res) => {
 
     // Calculate CPM based on ad type
     const cpm = adType === 'banner' ? 20 : 30; 
-    const calculatedImpressions = estimatedImpressions || Math.floor(budget / cpm * 1000);
-
+    
     // Create ad creative
     const adCreative = new AdCreative({
       campaignId: null, // This is the old endpoint, no campaign
@@ -369,16 +367,6 @@ router.post('/campaigns/:id/creatives', upload.single('creative'), async (req, r
       return res.status(400).json({ error: 'No creative file uploaded' });
     }
 
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: type === 'video' ? 'video' : 'image',
-      folder: 'snehayog-ads',
-      transformation: [
-        { quality: 'auto:good' },
-        { fetch_format: 'auto' }
-      ]
-    });
-
     // Clean up temp file
     fs.unlinkSync(req.file.path);
 
@@ -386,7 +374,6 @@ router.post('/campaigns/:id/creatives', upload.single('creative'), async (req, r
     const creative = new AdCreative({
       campaignId,
       type,
-      cloudinaryUrl: result.secure_url,
       thumbnail: type === 'video' ? result.thumbnail_url : result.secure_url,
       aspectRatio,
       durationSec: type === 'video' ? durationSec : undefined,

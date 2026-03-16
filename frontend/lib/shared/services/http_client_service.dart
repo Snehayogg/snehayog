@@ -22,6 +22,9 @@ class HttpClientService {
   /// Callback to handle token refresh when 401 occurs
   Future<String?> Function()? onTokenExpired;
   
+  /// Callback to notify the UI when a session is unrecoverably expired
+  void Function()? onSessionExpired;
+  
   /// To prevent concurrent refresh calls
   bool _isRefreshing = false;
   Future<String?>? _refreshFuture;
@@ -201,6 +204,9 @@ class HttpClientService {
                   await prefs.setBool('auth_needs_login', true);
                   // Remove JWT to stop auto-injection/401 loops; keep fallback_user for UI.
                   await prefs.remove('jwt_token');
+                  
+                  // Notify UI globally that session has expired
+                  onSessionExpired?.call();
                 } catch (_) {}
               }
             } catch (e) {

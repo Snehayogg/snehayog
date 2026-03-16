@@ -23,6 +23,7 @@ import 'package:vayu/core/design/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/shared/managers/activity_recovery_manager.dart';
 import 'package:vayu/shared/models/app_activity.dart';
+import 'package:vayu/shared/services/http_client_service.dart';
 import 'package:hugeicons/hugeicons.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
@@ -249,6 +250,14 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
     _checkTokenValidity();
 
+    // **NEW: Initialize session expiration callback**
+    HttpClientService.instance.onSessionExpired = () {
+      if (mounted) {
+        AppLogger.log('🚨 MainScreen: Global session expiration triggered, refreshing auth state...');
+        ref.read(googleSignInProvider).refreshAuthState();
+      }
+    };
+
     // **NEW: Restore last tab index when app starts**
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _restoreLastTabIndex();
@@ -302,7 +311,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
       }
 
       final restoredIndex = await mainController.restoreLastTabIndex();
-      print('✅ MainScreen: Restored to tab index $restoredIndex');
     } catch (e) {
       print('❌ MainScreen: Error restoring tab index: $e');
     }
@@ -433,12 +441,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
       // If leaving video tab, immediately pause videos through MainController
       if (mainController.currentIndex == 0) {
-        print('Homescreen: Leaving video tab, pausing videos immediately');
         mainController.forcePauseVideos();
 
         // **BACKGROUND PRELOADING: Stop preloading when leaving Yug tab**
-        print(
-            '⏸️ MainScreen: Stopping background profile preloading (leaving Yug tab)');
         _profilePreloader.stopBackgroundPreloading();
       }
 

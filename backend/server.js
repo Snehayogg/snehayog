@@ -121,7 +121,7 @@ app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known'
 // Rate Limiter Imports
 import { globalLimiter, apiLimiter } from './middleware/rateLimiter.js';
 
-// **ENHANCED: CORS Configuration for Flutter app and Railway**
+// **ENHANCED: CORS Configuration for Flutter app and fly.io**
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman, or curl requests)
@@ -203,10 +203,8 @@ app.use(express.urlencoded({ extended: true, limit: '400mb' }));
 // This handles bugs where frontend or proxy adds extra /api/api
 app.use((req, res, next) => {
     if (req.url.startsWith('/api/api')) {
-        const originalUrl = req.url;
         // Replace multiple occurrences of /api at the start with just one
         req.url = req.url.replace(/^\/api(\/api)+/, '/api');
-        // console.log(`📡 Route Fix: Corrected ${originalUrl} -> ${req.url}`);
     
         // New Relic transaction naming fix
         try {

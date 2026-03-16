@@ -13,6 +13,7 @@ const __dirname = path.dirname(__filename);
 
 let ffmpegPath = null;
 let ffprobePath = null;
+const segmentDuration = 2;
 
 try {
   const systemFfmpeg = spawnSync('which', ['ffmpeg']);
@@ -386,14 +387,14 @@ class HLSEncodingService {
         fs.mkdirSync(variantDir, { recursive: true });
       }
 
-      const promise = this.encodeVariant(inputPath, variantDir, variant, variant.segmentDuration, videoId, { codec });
+      const promise = this.encodeVariant(inputPath, variantDir, variant, segmentDuration, videoId, { codec });
       promises.push(promise);
     }
 
     try {
       console.log(`[HLS] ${videoId} | adaptive START | codec=${codec} [720p,480p,360p,240p]`);
       const results = await Promise.all(promises);
-      const masterPlaylist = this.generateMasterPlaylist(results, variants[0].segmentDuration, codec);
+      const masterPlaylist = this.generateMasterPlaylist(results, segmentDuration, codec);
       fs.writeFileSync(masterPlaylistPath, masterPlaylist);
       const totalSegments = results.reduce((sum, r) => sum + (r.segments || 0), 0);
       console.log(`[HLS] ${videoId} | adaptive DONE | codec=${codec} variants=${results.length} segments=${totalSegments}`);
@@ -449,8 +450,7 @@ class HLSEncodingService {
         ];
 
     // 🔥 ORIENTATION SAFE SCALE
-    const scaleFilter = `scale='if(gt(iw,ih),-2,${variant.height})':'if(gt(ih,iw),-2,${variant.height})'`;
-
+    const scaleFilter = `scale='if(gt(iw,ih),-2,${variant.height})':'if(gt(ih,iw),${variant.height},-2)'`;
     ffmpeg(inputPath)
       .inputOptions(['-y','-hide_banner','-loglevel error'])
       .videoFilters(scaleFilter)
@@ -474,15 +474,32 @@ class HLSEncodingService {
 
       .on('end', () => {
         const segments = fs.readdirSync(outputDir).filter(f => f.endsWith('.ts'));
-
-        console.log(`[HLS] ${videoId} | variant ${variant.name} | DONE segments=${segments.length}`);
-
-        resolve({
-          name: variant.name,
-          playlistPath,
-          playlistUrl:`/uploads/hls/${cleanVideoId}/${variant.name}/playlist.m3u8`,
-          segments:segments.length,
-          bitrate:variant.targetBitrate
+      
+        ffmpeg.ffprobe(playlistPath, (err, metadata) => {
+      
+          let width = 0;
+          let height = 0;
+      
+          if (!err) {
+            const stream = metadata.streams.find(s => s.codec_type === 'video');
+            if (stream) {
+              width = stream.width;
+              height = stream.height;
+            }
+          }
+      
+          console.log(`[HLS] ${videoId} | variant ${variant.name} | DONE segments=${segments.length} res=${width}x${height}`);
+      
+          resolve({
+            name: variant.name,
+            playlistPath,
+            playlistUrl:`/uploads/hls/${cleanVideoId}/${variant.name}/playlist.m3u8`,
+            segments:segments.length,
+            bitrate:variant.targetBitrate,
+            width,
+            height
+          });
+      
         });
       })
 
@@ -513,7 +530,7 @@ class HLSEncodingService {
 
     for (const variant of sortedVariants) {
       const bandwidth = this.estimateBandwidth(variant);
-      const resolution = variant.resolution;
+      const resolution = `${variant.width}x${variant.height}`;
       playlist += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution},CODECS="${codecsStr}"\n`;
       playlist += `${variant.name}/playlist.m3u8\n`;
     }
@@ -675,42 +692,10 @@ class HLSEncodingService {
    */
   getQualityVariants() {
     return [
-      { 
-        name: '720p', 
-        crf: 24, 
-        width: 720, 
-        height: 1280, // 9:16 aspect ratio
-        audioBitrate: '96k', 
-        targetBitrate: '1200k',
-        segmentDuration: 2
-      },
-      { 
-        name: '480p', 
-        crf: 26, 
-        width: 480, 
-        height: 854, // 9:16 aspect ratio
-        audioBitrate: '64k', 
-        targetBitrate: '550k',
-        segmentDuration: 2
-      },
-      { 
-        name: '360p', 
-        crf: 28, 
-        width: 360, 
-        height: 640, // 9:16 aspect ratio
-        audioBitrate: '48k', 
-        targetBitrate: '350k',
-        segmentDuration: 2
-      },
-      { 
-        name: '240p', 
-        crf: 30, 
-        width: 240, 
-        height: 426, // 9:16 aspect ratio
-        audioBitrate: '32k', 
-        targetBitrate: '150k',
-        segmentDuration: 2
-      }
+      { name: '720p', crf: 24, height: 720, audioBitrate: '96k', targetBitrate: '1200k' },
+      { name: '480p', crf: 26, height: 480, audioBitrate: '64k', targetBitrate: '550k' },
+      { name: '360p', crf: 28, height: 360, audioBitrate: '48k', targetBitrate: '350k' },
+      { name: '240p', crf: 30, height: 240, audioBitrate: '32k', targetBitrate: '150k' }
     ];
   }
 

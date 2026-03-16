@@ -21,8 +21,6 @@ class SignedUrlService {
       final isCdn = lower.contains('cdn.snehayog.com');
       final isBackendHls = lower.contains('/hls/');
       if (isR2 || isCdn || isBackendHls) {
-        print(
-            '⚡ SignedUrlService: Skipping signing for Cloudflare/R2/backend HLS URL');
         return videoUrl;
       }
 
@@ -60,16 +58,12 @@ class SignedUrlService {
           print('🔗 Signed URL: $signedUrl');
           return signedUrl;
         } else {
-          print('❌ SignedUrlService: Backend error: ${data['error']}');
           return null;
         }
       } else {
-        print('❌ SignedUrlService: HTTP error: ${response.statusCode}');
-        print('📄 Response: ${response.body}');
         return null;
       }
     } catch (e) {
-      print('❌ SignedUrlService: Error generating signed URL: $e');
       return null;
     }
   }
@@ -102,8 +96,6 @@ class SignedUrlService {
     if (signedUrl != null) return signedUrl;
 
     // Return original URL as last resort
-    print(
-        '⚠️ SignedUrlService: All signed URL generation failed, using original URL');
     return videoUrl;
   }
 }
