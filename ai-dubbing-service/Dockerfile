@@ -19,7 +19,6 @@ RUN pip install --no-cache-dir git+https://github.com/m-bain/whisperx.git
 
 # Copy server code
 COPY main.py .
-COPY handler.py .
 
 # Start RunPod Serverless Handler
-CMD ["python", "-u", "handler.py"]
+CMD ["python", "-u", "main.py"]

@@ -1,6 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from pydantic import BaseModel
-import uvicorn
+import runpod
 import requests
 import os
 import subprocess
@@ -15,15 +13,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="Vayug AI Dubbing Service")
-
-class DubbingRequest(BaseModel):
-    videoId: str
-    videoUrl: str
-    targetLanguage: str
-    webhookUrl: str
-    webhookSecret: str
-
 # S3 / R2 Configuration
 S3_ENDPOINT = os.getenv("R2_ENDPOINT_URL")
 S3_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
@@ -32,7 +21,7 @@ S3_BUCKET = os.getenv("R2_BUCKET", "snehayog")
 S3_PUBLIC_URL = os.getenv("R2_PUBLIC_URL", "https://pub.snehayog.com")
 
 # LLM / Translation Configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # Shared for DeepSeek or Gemini
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com")
 
 # Global Model Cache
@@ -74,7 +63,7 @@ def translate_text(text: str, target_lang: str) -> str:
     
     try:
         response = client.chat.completions.create(
-            model="deepseek-chat", # or gemini-1.5-flash
+            model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3
         )
@@ -87,7 +76,6 @@ def upload_to_r2(local_path: str, object_name: str) -> str:
     """Uploads a file to Cloudflare R2 and returns the public URL."""
     if not S3_ENDPOINT or not S3_ACCESS_KEY or not S3_SECRET_KEY:
         print("Warning: S3 credentials not configured. Skipping upload.")
-        # Return a dummy URL for local testing if no credentials are provided
         return f"http://localhost:8000/temp/{object_name}"
         
     s3_client = boto3.client(
@@ -108,7 +96,7 @@ def upload_to_r2(local_path: str, object_name: str) -> str:
         raise e
 
 def _run_cmd(cmd: list):
-    """Utility to run a shell command and print outputs."""
+    """Utility to run a shell command."""
     print(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -116,13 +104,19 @@ def _run_cmd(cmd: list):
         raise Exception(f"Command failed with code {result.returncode}")
     return result.stdout
 
-def process_video_dubbing(req: DubbingRequest):
+def process_video_dubbing(job_input):
     """
-    Background worker that handles the heavylifting for AI Dubbing.
+    Main AI Dubbing Pipeline.
     """
-    print(f"Starting dubbing process for video {req.videoId} to {req.targetLanguage}")
+    video_id = job_input.get("videoId")
+    video_url = job_input.get("videoUrl")
+    target_lang = job_input.get("targetLanguage")
+    webhook_url = job_input.get("webhookUrl")
+    webhook_secret = job_input.get("webhookSecret")
+
+    print(f"Starting dubbing process for video {video_id} to {target_lang}")
     
-    temp_dir = os.path.join(os.getcwd(), f"temp_{req.videoId}")
+    temp_dir = os.path.join(os.getcwd(), f"temp_{video_id}")
     os.makedirs(temp_dir, exist_ok=True)
     
     video_path = os.path.join(temp_dir, "input_video.mp4")
@@ -132,7 +126,7 @@ def process_video_dubbing(req: DubbingRequest):
     try:
         # 1. Download Video
         print("1. Downloading video...")
-        response = requests.get(req.videoUrl, stream=True)
+        response = requests.get(video_url, stream=True)
         response.raise_for_status()
         with open(video_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -144,10 +138,8 @@ def process_video_dubbing(req: DubbingRequest):
         
         # 3. Separate Vocals (Demucs)
         print("3. Separating vocals using Demucs...")
-        # We call Demucs as a process to manage VRAM better
         _run_cmd(["demucs", "-n", "htdemucs_ft", "-o", voices_dir, audio_path])
         
-        # Determine path from Demucs naming convention
         base_name = os.path.splitext(os.path.basename(audio_path))[0]
         vocals_path = os.path.join(voices_dir, "htdemucs_ft", base_name, "vocals.wav")
         no_vocals_path = os.path.join(voices_dir, "htdemucs_ft", base_name, "no_vocals.wav")
@@ -163,7 +155,6 @@ def process_video_dubbing(req: DubbingRequest):
         audio = whisperx.load_audio(vocals_path)
         result = model.transcribe(audio, batch_size=16)
         
-        # Align timestamps
         model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=MODEL_CACHE["device"])
         result = whisperx.align(result["segments"], model_a, metadata, audio, MODEL_CACHE["device"], return_char_alignments=False)
         
@@ -171,8 +162,8 @@ def process_video_dubbing(req: DubbingRequest):
         print(f"Original Text: {full_text[:100]}...")
 
         # 5. Translate
-        print(f"5. Translating text to {req.targetLanguage}...")
-        translated_text = translate_text(full_text, req.targetLanguage)
+        print(f"5. Translating text to {target_lang}...")
+        translated_text = translate_text(full_text, target_lang)
         print(f"Translated Text: {translated_text[:100]}...")
 
         # 6. Generate TTS (XTTSv2)
@@ -183,15 +174,14 @@ def process_video_dubbing(req: DubbingRequest):
         tts.tts_to_file(
             text=translated_text,
             speaker_wav=vocals_path,
-            language=req.targetLanguage if req.targetLanguage in ['en', 'hi', 'es', 'fr', 'de'] else 'hi',
+            language=target_lang if target_lang in ['en', 'hi', 'es', 'fr', 'de'] else 'hi',
             file_path=generated_audio_path
         )
         
-        # 7. Speed Alignment (Matching original duration)
+        # 7. Speed Alignment
         print("7. Stretching audio to match original length...")
         final_vocals_path = os.path.join(temp_dir, "generated_vocals_aligned.wav")
         
-        # Get durations
         import wave
         with wave.open(audio_path, 'r') as f:
             orig_duration = f.getnframes() / float(f.getframerate())
@@ -199,7 +189,6 @@ def process_video_dubbing(req: DubbingRequest):
             gen_duration = f.getnframes() / float(f.getframerate())
             
         rate = gen_duration / orig_duration
-        # Use pyrubberband for high-quality time stretching without pitch shift
         _run_cmd(["ffmpeg", "-y", "-i", generated_audio_path, "-filter:a", f"atempo={rate}", final_vocals_path])
         
         # 8. Merge Audio
@@ -215,7 +204,7 @@ def process_video_dubbing(req: DubbingRequest):
         
         # 9. Merge Video & Audio
         print("9. Finalizing video...")
-        final_video_name = f"final_dubbed_{req.targetLanguage}.mp4"
+        final_video_name = f"final_dubbed_{target_lang}.mp4"
         final_video_path = os.path.join(temp_dir, final_video_name)
         _run_cmd([
             "ffmpeg", "-y",
@@ -230,57 +219,47 @@ def process_video_dubbing(req: DubbingRequest):
         
         # 10. Upload to R2
         print("10. Uploading to R2...")
-        object_name = f"dubbed/{req.videoId}_{req.targetLanguage}_{uuid.uuid4().hex[:6]}.mp4"
+        object_name = f"dubbed/{video_id}_{target_lang}_{uuid.uuid4().hex[:6]}.mp4"
         final_url = upload_to_r2(final_video_path, object_name)
 
         # 11. Webhook
         print("Dubbing finished successfully. Hitting webhook...")
         payload = {
-            "videoId": req.videoId,
-            "targetLanguage": req.targetLanguage,
+            "videoId": video_id,
+            "targetLanguage": target_lang,
             "status": "completed",
             "url": final_url,
-            "webhookSecret": req.webhookSecret
+            "webhookSecret": webhook_secret
         }
-        requests.post(req.webhookUrl, json=payload, timeout=10)
+        requests.post(webhook_url, json=payload, timeout=10)
+        return {"status": "success", "url": final_url}
         
     except Exception as e:
-        print(f"Error dubbing video {req.videoId}: {e}")
-        # Failure webhook payload
+        print(f"Error dubbing video {video_id}: {e}")
         payload = {
-            "videoId": req.videoId,
+            "videoId": video_id,
             "status": "failed",
-            "targetLanguage": req.targetLanguage,
+            "targetLanguage": target_lang,
             "error": str(e),
-            "webhookSecret": req.webhookSecret
+            "webhookSecret": webhook_secret
         }
         try:
-             requests.post(req.webhookUrl, json=payload, timeout=10)
+             requests.post(webhook_url, json=payload, timeout=10)
         except Exception:
              pass
+        return {"status": "error", "error": str(e)}
              
     finally:
-        # Crucial for GPU VRAM management
         if MODEL_CACHE["device"] == "cuda":
             torch.cuda.empty_cache()
             gc.collect()
-        # Clean up temp files
         # shutil.rmtree(temp_dir, ignore_errors=True)
-        print(f"Finished job {req.videoId}")
+        print(f"Finished job {video_id}")
 
-
-@app.post("/dubbing/start")
-async def start_dubbing(req: DubbingRequest, background_tasks: BackgroundTasks):
-    """
-    Entrypoint for Node.js backend. 
-    Accepts video info and immediately returns a 202 Accepted.
-    The actual AI processing happens in the background.
-    """
-    
-    background_tasks.add_task(process_video_dubbing, req)
-    
-    return {"message": "Dubbing job accepted", "jobId": f"job_{req.videoId}"}
-
+def handler(job):
+    """RunPod Handler"""
+    return process_video_dubbing(job["input"])
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("--- Starting RunPod Serverless Worker (Vayug AI) ---")
+    runpod.serverless.start({"handler": handler})
