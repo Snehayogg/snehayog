@@ -244,36 +244,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           '🔄 ProfileScreen: Starting data loading (forceRefresh: $forceRefresh)');
 
       // **CRITICAL: If forceRefresh=true, SKIP ALL cache checks and go directly to server**
-      // This ensures manual refresh ALWAYS shows latest data, never cached data
       if (forceRefresh) {
         AppLogger.log(
             '🔄 ProfileScreen: FORCE REFRESH - bypassing ALL cache, fetching fresh data from server');
-        // **PREVENT STALE DATA: Clear old user data immediately before loading new user**
         _stateManager.clearData();
         if (mounted) ref.read(gameCreatorManagerProvider).clearData();
       } else {
-        // Step 1: Try cache first (only when NOT forcing refresh)
+        // Step 1: Try cache first
         final cachedData = await _loadCachedProfileData();
         if (cachedData != null) {
           AppLogger.log(
               '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
 
-          // **INSTANT: Show cached data immediately (no loading state)**
           _stateManager.setUserData(cachedData);
-
-          // **OPTIMIZATION: Also load cached videos immediately**
           await _loadVideosFromCache(); 
           _isLoading.value = false;
 
-          // **NEW: Check UPI ID status and guide after cached data is loaded**
           if (widget.userId == null) {
             Future.microtask(() async {
               await _checkUpiIdStatus();
             });
           }
 
-          // **OPTIMIZATION: Always refresh in background for fresh data**
-          _profileLoadAttemptCount = 0; // Reset count as we have at least cached data
+          _profileLoadAttemptCount = 0; 
           
           Future.microtask(() async {
             try {
@@ -287,7 +280,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 await _loadVideos(forceRefresh: true, silent: true);
                 if (widget.userId == null) {
                   await _refreshEarningsData(forceRefresh: true);
-                  // **RE-CHECK: Update status after background refresh confirms latest data**
                   await _checkUpiIdStatus();
                 }
               }
@@ -297,7 +289,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             }
           });
 
-          return; // Exit early - user sees cached data instantly
+          return; 
         }
       }
 
@@ -314,27 +306,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
       await _loadDataWithRetry(forceRefresh: forceRefresh);
       
-      // If we got here and userData is still null, mark as no data
       if (_stateManager.userData == null) {
         _profileNoDataFound = true;
         AppLogger.log('ℹ️ ProfileScreen: Successfully fetched but no data returned');
       } else {
         _profileNoDataFound = false;
-        _profileLoadAttemptCount = 0; // Reset count on success
-        
-        _profileNoDataFound = false;
-        _profileLoadAttemptCount = 0; // Reset count on success
+        _profileLoadAttemptCount = 0; 
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading data: $e');
       _error.value = _getUserFriendlyError(e);
       _isLoading.value = false;
-      // Do not mark _profileNoDataFound = true on error, as it might be a temporary network issue
     }
   }
 
   /// **NEW: Load data with retry mechanism**
-  /// **CRITICAL: When forceRefresh=true, NEVER use cache, ALWAYS fetch from server**
   Future<void> _loadDataWithRetry(
       {bool forceRefresh = false, int maxRetries = 3}) async {
     int retryCount = 0;
@@ -348,58 +334,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             ? const Duration(seconds: 10)
             : const Duration(seconds: 15);
 
-        await _stateManager
-            .loadUserData(widget.userId, forceRefresh: forceRefresh)
-            .timeout(
-          timeoutDuration,
-          onTimeout: () {
-            throw Exception('Request timed out. Please check your connection.');
-          },
-        );
+        // **OPTIMIZATION: Parallel Loading**
+        final authService = ref.read(authServiceProvider);
+        final effectiveUserId = widget.userId ?? authService.currentUserId;
+
+        if (effectiveUserId != null) {
+          AppLogger.log('🚀 ProfileScreen: Parallel loading for $effectiveUserId');
+          await Future.wait([
+            _stateManager.loadUserData(widget.userId, forceRefresh: forceRefresh),
+            _loadVideos(forceRefresh: forceRefresh, silent: true),
+          ]).timeout(timeoutDuration);
+        } else {
+          await _stateManager
+              .loadUserData(widget.userId, forceRefresh: forceRefresh)
+              .timeout(
+            timeoutDuration,
+            onTimeout: () {
+              throw Exception('Request timed out. Please check your connection.');
+            },
+          );
+          
+          if (_stateManager.userData != null) {
+             await _loadVideos(forceRefresh: forceRefresh);
+          }
+        }
 
         if (_stateManager.userData != null) {
           if (!forceRefresh) {
             await _cacheProfileData(_stateManager.userData!);
           }
 
-          final currentUserId = _stateManager.userData!['googleId'] ??
-              _stateManager.userData!['id'] ??
-              _stateManager.userData!['_id'];
+          _isLoading.value = false;
+          _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
 
-          if (currentUserId != null) {
-            if (forceRefresh) {
-              await _loadVideos(forceRefresh: true);
-              _isLoading.value = false;
-            } else {
-              _isLoading.value = false;
-              _loadVideos(forceRefresh: false).catchError((e) {
-                AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
-              });
-            }
-
-            _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
-
-            if (forceRefresh) {
-              await _cacheProfileData(_stateManager.userData!);
-            }
-
-            AppLogger.log('✅ ProfileScreen: Profile data loaded successfully');
-            return;
+          if (forceRefresh) {
+            await _cacheProfileData(_stateManager.userData!);
           }
+
+          AppLogger.log('✅ ProfileScreen: Profile data loaded successfully');
+          return;
         }
-        // If we reach here, userData was null or currentUserId was null, which is an issue
+        
         throw Exception('Server returned empty profile data or invalid user ID');
       } catch (e) {
         retryCount++;
 
         if (retryCount > maxRetries) {
-          // Max retries reached - show error
           _error.value = _getUserFriendlyError(e);
           _isLoading.value = false;
           AppLogger.log('❌ ProfileScreen: Max retries reached, showing error');
         } else {
-          // **FIXED: Exponential backoff for retries (1s, 2s, 4s)**
-          final delaySeconds = retryCount; // 1, 2, 4 seconds
+          final delaySeconds = retryCount; 
           AppLogger.log(
               '🔄 ProfileScreen: Retrying in $delaySeconds second(s)...');
           await Future.delayed(Duration(seconds: delaySeconds));

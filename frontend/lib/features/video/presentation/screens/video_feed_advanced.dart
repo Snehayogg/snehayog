@@ -579,7 +579,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       final video = _videos[index];
       bool needsRestore = false;
 
-      // Check local pool
+      // 1. Check local pool for disposal
       if (_controllerPool.containsKey(video.id)) {
         final controller = _controllerPool[video.id];
         if (sharedPool.isControllerDisposed(controller)) {
@@ -587,12 +587,26 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
               '⚠️ VideoFeedAdvanced: Controller for ${video.id} is DISPOSED (local). Marking for restore.');
           _controllerPool.remove(video.id);
           _controllerStates.remove(video.id);
+          _preloadedVideos.remove(video.id);
           needsRestore = true;
         }
       } else {
-        // Not in local pool - if it's the CURRENT video, we definitely need it
-        if (index == _currentIndex) {
-          needsRestore = true;
+        // 2. Not in local pool - check if shared pool has a valid one we can adopt
+        final sharedController = sharedPool.getController(video.id);
+        if (sharedController != null && !sharedPool.isControllerDisposed(sharedController)) {
+          AppLogger.log('♻️ VideoFeedAdvanced: Adopting valid controller from shared pool for ${video.id}');
+          _controllerPool[video.id] = sharedController;
+          _controllerStates[video.id] = false;
+          _preloadedVideos.add(video.id);
+          
+          // Attach listeners to this adopted controller
+          _attachEndListenerIfNeeded(sharedController, index);
+          _attachBufferingListenerIfNeeded(sharedController, index);
+        } else {
+          // If it's the CURRENT video, we definitely need it
+          if (index == _currentIndex) {
+            needsRestore = true;
+          }
         }
       }
 
@@ -601,12 +615,10 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       }
     }
 
-    // Restore identified videos
+    // Restore missing/disposed controllers
     for (final index in indicesToRestore) {
-      // Only log if index matches current to avoid noise
       if (index == _currentIndex) {
-        AppLogger.log(
-            '🔄 VideoFeedAdvanced: Restoring controller for index $index (Current Video)');
+        AppLogger.log('🔄 VideoFeedAdvanced: Restoring controller for index $index (Current Video)');
       }
 
       _preloadVideo(index).then((_) {
@@ -2050,8 +2062,9 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _longPressAdAutoHideTimer?.cancel();
     _showLongPressAdOverlayVN.dispose();
 
-    // **NEW: Cancel ad refresh subscription**
+    // **NEW: Cancel ad refresh subscription and pool disposal watchdog**
     _adRefreshSubscription?.cancel();
+    _poolDisposalSubscription?.cancel();
     _connectivitySubscription?.cancel();
 
     // Remove observer

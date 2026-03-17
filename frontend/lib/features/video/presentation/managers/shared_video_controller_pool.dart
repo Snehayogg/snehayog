@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
@@ -15,6 +16,11 @@ class SharedVideoControllerPool {
   final Map<String, VideoPlayerController> _controllerPool = {};
   final Map<String, bool> _controllerStates = {}; // Track if controller is active
   final Map<String, VoidCallback> _listeners = {};
+
+  // **DISPOSAL STREAM: Notify listeners when a controller is evicted**
+  final StreamController<String> _disposalStreamController =
+      StreamController<String>.broadcast();
+  Stream<String> get disposalStream => _disposalStreamController.stream;
 
   // **LRU TRACKING**
   final Map<String, DateTime> _lastAccessed =
@@ -109,6 +115,9 @@ class SharedVideoControllerPool {
     _listeners.remove(videoId);
     _lastAccessed.remove(videoId);
     _videoIndices.remove(videoId);
+
+    // Notify listeners that this controller is being evicted
+    _disposalStreamController.add(videoId);
 
     if (disposeInstance) {
       try {
@@ -207,6 +216,10 @@ class SharedVideoControllerPool {
       if (oldController != controller && !skipDisposeOld) {
         oldController?.removeListener(_listeners[videoId] ?? () {});
         oldController?.dispose();
+        
+        // Notify listeners that this controller is being evicted
+        _disposalStreamController.add(videoId);
+        
         AppLogger.log(
             '🗑️ SharedPool: Disposed old controller for video: $videoId');
       } else {
@@ -579,5 +592,6 @@ class SharedVideoControllerPool {
   void dispose() {
     AppLogger.log('🗑️ SharedPool: Disposing all resources');
     clearAll();
+    _disposalStreamController.close();
   }
 }

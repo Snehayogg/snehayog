@@ -32,6 +32,24 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       _handleConnectivityChange(results);
     });
 
+    // **NEW: Shared Pool Disposal Watchdog**
+    // Listen for evictions from the global SharedVideoControllerPool.
+    // If a controller is disposed by another screen (e.g. Profile), 
+    // we MUST remove it from our local pool to prevent "used after disposed" errors.
+    _poolDisposalSubscription = SharedVideoControllerPool().disposalStream.listen((videoId) {
+      if (mounted && _controllerPool.containsKey(videoId)) {
+        AppLogger.log('🧹 VideoFeed: Cleaning up stale controller for $videoId (Evicted from SharedPool)');
+        _controllerPool.remove(videoId);
+        _controllerStates.remove(videoId);
+        _preloadedVideos.remove(videoId);
+        
+        // Ensure UI state for this video is reset
+        if (_firstFrameReady.containsKey(videoId)) {
+          _firstFrameReady[videoId]?.value = false;
+        }
+      }
+    });
+
     _loadInitialData();
     
     // **UNBLOCK AD LOADING: Trigger ad loading immediately (non-blocking)**

@@ -109,7 +109,7 @@ class SmartCacheManager {
       enableStaleWhileRevalidate: true,
     ),
     'user_profile': const InstagramCacheConfig(
-      maxAge: Duration(hours: 24),
+      maxAge: Duration(minutes: 3),
       maxEntries: 40,
       enableEtag: true,
       enableStaleWhileRevalidate: true,

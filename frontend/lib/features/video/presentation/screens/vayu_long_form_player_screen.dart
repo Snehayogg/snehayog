@@ -534,7 +534,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final currentPosition = _controllers[_currentIndex]!.value.position;
     final totalDuration = _controllers[_currentIndex]!.value.duration;
 
-    // Sensitivity: 1 pixel = 100ms (adjust as needed)
+    // Sensitivity: 1 pixel = 800ms (Agressive seeking for long-form content)
     final seekOffset =
         Duration(milliseconds: (_horizontalDragTotal * 100).toInt());
     var targetPosition = currentPosition + seekOffset;

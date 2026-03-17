@@ -140,6 +140,9 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   final Map<String, ValueNotifier<bool>> _firstFrameReady = {};
   final Map<String, ValueNotifier<bool>> _forceMountPlayer = {};
 
+  // Disposal subscription
+  StreamSubscription<String>? _poolDisposalSubscription;
+
   // Retained controllers for refresh
 
   // Infinite scrollingtrollers for refresh
