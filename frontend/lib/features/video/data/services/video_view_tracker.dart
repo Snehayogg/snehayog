@@ -15,6 +15,7 @@ class VideoViewTracker {
   // Track which videos have been viewed to prevent duplicate counts in same session
   final Set<String> _viewedVideos = <String>{};
   final Map<String, Timer> _viewTimers = <String, Timer>{};
+  final Map<String, DateTime> _playbackStartTimes = <String, DateTime>{};
   final Map<String, int> _userViewCounts = <String, int>{};
 
   // **NEW: Track recent views to prevent rapid repeat spam**
@@ -173,6 +174,7 @@ class VideoViewTracker {
 
     // Cancel any existing timer for this video
     _viewTimers[videoId]?.cancel();
+    _playbackStartTimes[videoId] = DateTime.now();
 
     // Start new timer
     _viewTimers[videoId] =
@@ -207,6 +209,18 @@ class VideoViewTracker {
   void stopViewTracking(String videoId) {
     AppLogger.log(
         '🎯 VideoViewTracker: Stopping view tracking for video $videoId');
+
+    final startTime = _playbackStartTimes.remove(videoId);
+    if (startTime != null) {
+      final elapsed = DateTime.now().difference(startTime);
+      final threshold = AppConstants.videoViewCountThreshold;
+
+      if (elapsed < threshold && elapsed.inMilliseconds > 500) {
+        AppLogger.log(
+            '⏭️ VideoViewTracker: Video $videoId skipped (watched for ${elapsed.inMilliseconds}ms < ${threshold.inMilliseconds}ms)');
+        _trackSkip(videoId);
+      }
+    }
 
     _viewTimers[videoId]?.cancel();
     _viewTimers.remove(videoId);
@@ -346,6 +360,48 @@ class VideoViewTracker {
       AppLogger.log('❌ VideoViewTracker: Error syncing watch events batch: $e');
       // Re-queue on network error
       _pendingWatchEvents.insertAll(0, eventsToSync);
+    }
+  }
+
+  /// **NEW: Track video skip via API**
+  Future<void> _trackSkip(String videoId) async {
+    try {
+      final token = await AuthService.getToken();
+      final platformId = await PlatformIdService().getPlatformId();
+      
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+      };
+      
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+      
+      if (platformId.isNotEmpty) {
+        headers['x-device-id'] = platformId;
+      }
+
+      final url = Uri.parse('$_baseUrl/api/videos/$videoId/skip');
+      
+      // Fire and forget
+      httpClientService.post(
+        url,
+        headers: headers,
+        body: json.encode({}),
+      ).then((response) {
+        if (response.statusCode == 200) {
+          AppLogger.log('✅ VideoViewTracker: Skip tracked for $videoId');
+        } else {
+          AppLogger.log('⚠️ VideoViewTracker: Skip tracking failed (${response.statusCode})');
+        }
+      }).catchError((e) {
+        AppLogger.log('❌ VideoViewTracker: Error tracking skip: $e');
+      });
+      
+      // Also queue as a watch event with completed: false
+      _queueWatchEvent(videoId, 0, false, platformId, null);
+    } catch (e) {
+       AppLogger.log('❌ VideoViewTracker: Exception in _trackSkip: $e');
     }
   }
 

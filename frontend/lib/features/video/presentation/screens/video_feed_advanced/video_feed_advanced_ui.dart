@@ -1324,8 +1324,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       ),
                     _buildLikeButton(video, index),
                     AppSpacing.vSpace12,
-                    // **NEW: Language Selector Button**
-                    _buildLanguageButton(video),
+                    _buildSmartDubButton(video),
                     AppSpacing.vSpace12,
                     _buildVerticalActionButton(
                       icon: Icons.share,
@@ -2020,14 +2019,98 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       ),
     );
   }
-  Widget _buildLanguageButton(VideoModel video) {
-    return _buildVerticalActionButton(
-      icon: Icons.translate_rounded,
-      onTap: () => _showLanguageSelector(context, video),
+  Widget _buildSmartDubButton(VideoModel video) {
+    final videoId = video.id;
+
+    // Default to idle if no result exists yet
+    // But check if it has a dubbedUrl in the model already (cached from server)
+    final cachedUrl = _dubbingService.getCachedDubbedUrl(video.dubbedUrls);
+    final initialResult = cachedUrl != null
+        ? DubbingResult(status: DubbingStatus.completed, dubbedUrl: cachedUrl)
+        : const DubbingResult(status: DubbingStatus.idle);
+
+    final resultVN = _getOrCreateNotifier<DubbingResult>(
+      _dubbingResultsVN,
+      videoId,
+      initialResult,
+    );
+
+    return ValueListenableBuilder<DubbingResult>(
+      valueListenable: resultVN,
+      builder: (context, result, _) {
+        final isProcessing = !result.isDone && result.status != DubbingStatus.idle;
+        final isCompleted = result.status == DubbingStatus.completed;
+        final isNotSuitable = result.status == DubbingStatus.notSuitable;
+        final isFailed = result.status == DubbingStatus.failed;
+
+        // Choose icon & color
+        IconData icon = Icons.record_voice_over_outlined;
+        Color color = AppColors.white;
+
+        if (isCompleted) {
+          icon = Icons.play_circle_fill_rounded;
+          color = Colors.greenAccent;
+        } else if (isNotSuitable) {
+          icon = Icons.music_note_rounded;
+          color = AppColors.white.withValues(alpha: 0.5);
+        } else if (isFailed) {
+          icon = Icons.error_outline_rounded;
+          color = Colors.redAccent;
+        } else if (isProcessing) {
+          color = Colors.purpleAccent;
+        }
+
+        return GestureDetector(
+          onTap: isNotSuitable ? null : () => _onSmartDubTap(video),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: _secondaryActionHitTargetSize,
+                height: _secondaryActionHitTargetSize,
+                child: Center(
+                  child: Container(
+                    width: AppConstants.secondaryActionButtonContainerSize,
+                    height: AppConstants.secondaryActionButtonContainerSize,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundSecondary.withValues(alpha: 0.7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: isProcessing
+                        ? SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              value: result.progress > 0 ? result.progress / 100 : null,
+                              strokeWidth: 2,
+                              color: color,
+                            ),
+                          )
+                        : Icon(
+                            icon,
+                            color: color,
+                            size: AppConstants.secondaryActionButtonSize,
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   void _showLanguageSelector(BuildContext context, VideoModel video) {
+    // Detect detected source - if 'hindi' dub exists, source is English (and vice-versa)
+    // because our backend always dubs TO the opposite language
+    final hasEnglishDub = video.dubbedUrls?.containsKey('english') ?? false;
+    final hasHindiDub = video.dubbedUrls?.containsKey('hindi') ?? false;
+    
+    // Source language is the opposite of what was dubbed
+    final String detectedSource = hasEnglishDub ? 'Hindi' : (hasHindiDub ? 'English' : 'Original');
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.backgroundPrimary,
@@ -2043,17 +2126,45 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Select Audio Language',
+                  'Audio Language',
                   style: TextStyle(
                     fontSize: AppTypography.fontSizeXL,
                     fontWeight: AppTypography.weightBold,
                     color: AppColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  'Choose which audio track to play',
+                  style: TextStyle(
+                    fontSize: AppTypography.fontSizeSM,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 AppSpacing.vSpace16,
-                _buildLanguageOption(context, video, 'Default (Original)', 'default'),
-                _buildLanguageOption(context, video, 'English', 'en'),
-                _buildLanguageOption(context, video, 'Hindi', 'hi'),
+                // Default = always available = source language
+                _buildLanguageOption(
+                  context, video, 
+                  '$detectedSource (Original)', 
+                  'default',
+                  badge: 'Original',
+                ),
+                // English option
+                _buildLanguageOption(
+                  context, video, 
+                  'English${hasHindiDub ? '' : ' (Source)'}',
+                  'english',
+                  badge: hasEnglishDub ? 'Dubbed' : (hasHindiDub ? null : 'Original'),
+                  available: hasEnglishDub,
+                ),
+                // Hindi option  
+                _buildLanguageOption(
+                  context, video, 
+                  'Hindi${hasEnglishDub ? '' : ' (Source)'}',
+                  'hindi',
+                  badge: hasHindiDub ? 'Dubbed' : (hasEnglishDub ? null : 'Original'),
+                  available: hasHindiDub,
+                ),
               ],
             ),
           ),
@@ -2062,32 +2173,81 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 
-  Widget _buildLanguageOption(BuildContext context, VideoModel video, String title, String langCode) {
+  Widget _buildLanguageOption(
+    BuildContext context, 
+    VideoModel video, 
+    String title, 
+    String langCode, {
+    String? badge,
+    bool available = true,
+  }) {
     final String currentSelected = _selectedAudioLanguage[video.id] ?? 'default';
     final bool isSelected = currentSelected == langCode;
-    
-    // Default is always available, others depend on 'dubbedUrls'
-    final bool isAvailable = langCode == 'default' || (video.dubbedUrls?.containsKey(langCode) ?? false);
+    final Color titleColor = isSelected 
+        ? AppColors.primary 
+        : (available ? AppColors.textPrimary : AppColors.textSecondary);
 
     return ListTile(
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isSelected ? AppColors.primary : AppColors.textPrimary,
-          fontWeight: isSelected ? AppTypography.weightBold : AppTypography.weightRegular,
-        ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      title: Row(
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: titleColor,
+              fontWeight: isSelected ? AppTypography.weightBold : AppTypography.weightRegular,
+            ),
+          ),
+          if (badge != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: badge == 'Dubbed' 
+                    ? Colors.purpleAccent.withValues(alpha: 0.15)
+                    : badge == 'Original' 
+                        ? Colors.greenAccent.withValues(alpha: 0.15)
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: badge == 'Dubbed' 
+                      ? Colors.purpleAccent.withValues(alpha: 0.5)
+                      : badge == 'Original'
+                          ? Colors.greenAccent.withValues(alpha: 0.5)
+                          : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                badge,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: badge == 'Dubbed' ? Colors.purpleAccent : Colors.greenAccent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
-      trailing: isSelected 
-          ? const Icon(Icons.check_circle, color: AppColors.primary)
-          : (!isAvailable)
-              ? const Text('Generate to Play', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)) 
-              : null,
-      onTap: () {
-        Navigator.pop(context);
-        if (!isSelected) {
-          _handleLanguageSelection(video, langCode);
-        }
-      },
+      subtitle: !available
+          ? Text(
+              'Not available — generate a dub first',
+              style: TextStyle(fontSize: 11, color: AppColors.textSecondary.withValues(alpha: 0.6)),
+            )
+          : null,
+      trailing: isSelected
+          ? const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20)
+          : null,
+      enabled: available,
+      onTap: available
+          ? () {
+              Navigator.pop(context);
+              if (!isSelected) {
+                _handleLanguageSelection(video, langCode);
+              }
+            }
+          : null,
     );
   }
 }

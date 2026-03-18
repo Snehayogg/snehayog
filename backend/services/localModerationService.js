@@ -127,7 +127,11 @@ class LocalModerationService {
   async extractFrames(videoPath, outputDir, count) {
     return new Promise((resolve, reject) => {
       const frames = [];
-      const absoluteVideoPath = path.resolve(videoPath);
+      const absoluteVideoPath = videoPath.startsWith('http') ? videoPath : path.resolve(videoPath);
+      
+      if (videoPath.startsWith('http')) {
+        console.log('🌐 [Moderation] Processing remote video URL:', absoluteVideoPath);
+      }
 
       ffmpeg(absoluteVideoPath)
         .screenshots({

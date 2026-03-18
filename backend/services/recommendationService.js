@@ -133,6 +133,7 @@ class RecommendationService {
       comments = 0,
       shares = 0,
       views = 0,
+      skipCount = 0,
       uploadedAt
     } = videoData;
 
@@ -149,7 +150,12 @@ class RecommendationService {
     // Decaying Freshness Boost (max 3.0)
     const freshnessBoost = this.calculateFreshnessBoost(uploadedAt);
 
-    const finalScore = (baseScore + freshnessBoost) * recencyBoost;
+    // **NEW: Skip Penalty**
+    // Penalize videos with high skip rates. Normalize skipCount by views.
+    const skipRate = views > 0 ? (skipCount / views) : 0;
+    const skipPenalty = Math.max(0, skipRate * 2.0); // Up to 2.0 penalty
+
+    const finalScore = (baseScore + freshnessBoost - skipPenalty) * recencyBoost;
 
     return Math.max(finalScore, 0.01); 
   }
@@ -236,6 +242,7 @@ class RecommendationService {
         comments: video.comments || [],
         shares: video.shares || 0,
         views: video.views || 0,
+        skipCount: video.skipCount || 0,
         uploadedAt: video.uploadedAt || video.createdAt
       });
 
@@ -459,6 +466,112 @@ class RecommendationService {
     } catch (error) {
       console.error('❌ Error in recalculateAllScores:', error);
       throw error;
+    }
+  }
+
+  /**
+   * **NEW: Item-Based Collaborative Filtering (IBCF)**
+   * Finds "Users also watched" by looking for common viewers.
+   * 
+   * @param {String} videoId - The reference video ID
+   * @param {Number} limit - Number of recommendations to return
+   * @returns {Promise<Array>} List of recommended videos
+   */
+  static async getCollaborativeRecommendations(videoId, limit = 10) {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(videoId)) return [];
+
+      const vId = new mongoose.Types.ObjectId(videoId);
+
+      // 1. Find users who watched THIS video
+      const viewers = await WatchHistory.find({ videoId: vId, isSkip: false })
+        .limit(200) // Sample of 200 users for performance
+        .select('userId')
+        .lean();
+
+      const userIds = viewers.map(v => v.userId);
+      if (userIds.length === 0) return [];
+
+      // 2. Find OTHER videos these users watched
+      const recommendations = await WatchHistory.aggregate([
+        { 
+          $match: { 
+            userId: { $in: userIds }, 
+            videoId: { $ne: vId },
+            isSkip: false 
+          } 
+        },
+        { 
+          $group: { 
+            _id: '$videoId', 
+            userCount: { $sum: 1 }, 
+            avgWatch: { $avg: '$watchDuration' } 
+          } 
+        },
+        { $sort: { userCount: -1, avgWatch: -1 } },
+        { $limit: limit }
+      ]);
+
+      const videoIds = recommendations.map(r => r._id);
+      if (videoIds.length === 0) return [];
+
+      return await Video.find({ _id: { $in: videoIds }, processingStatus: 'completed' })
+        .select('videoName videoUrl thumbnailUrl views likes uploader')
+        .lean();
+        
+    } catch (error) {
+      console.error('❌ Error in IBCF recommendations:', error);
+      return [];
+    }
+  }
+
+  /**
+   * **NEW: Get Recommendation Analytics for Admin Dashboard**
+   */
+  static async getRecommendationStats() {
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+
+      const stats = await Video.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalViews: { $sum: '$views' },
+            totalSkips: { $sum: '$skipCount' },
+            avgScore: { $avg: '$finalScore' }
+          }
+        }
+      ]);
+
+      const topSkipped = await Video.find({ skipCount: { $gt: 0 } })
+        .sort({ skipCount: -1 })
+        .limit(5)
+        .select('videoName skipCount views')
+        .lean();
+
+      const recentSkips = await WatchHistory.countDocuments({
+        isSkip: true,
+        createdAt: { $gte: startOfDay }
+      });
+
+      const totalViews = stats[0]?.totalViews || 1;
+      const totalSkips = stats[0]?.totalSkips || 0;
+
+      return {
+        globalSkipRate: (totalSkips / totalViews * 100).toFixed(2) + '%',
+        totalSkips,
+        avgFeedScore: (stats[0]?.avgScore || 0).toFixed(4),
+        dailySkips: recentSkips,
+        topSkippedVideos: topSkipped.map(v => ({
+          name: v.videoName,
+          skips: v.skipCount,
+          rate: v.views > 0 ? (v.skipCount / v.views * 100).toFixed(2) + '%' : '0%'
+        }))
+      };
+    } catch (error) {
+      console.error('❌ Error getting recommendation stats:', error);
+      return null;
     }
   }
 

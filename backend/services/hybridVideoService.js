@@ -196,12 +196,12 @@ class HybridVideoService {
         throw new Error('Video file not found');
       }
 
-      // Check file size (max 100MB for cost optimization)
+      // Check file size (max 700MB)
       const stats = fs.statSync(videoPath);
       const fileSizeInMB = stats.size / (1024 * 1024);
       
-      if (fileSizeInMB > 100) {
-        throw new Error('Video file too large (max 100MB for cost optimization)');
+      if (fileSizeInMB > 700) {
+        throw new Error('Video file too large (max 700MB)');
       }
 
       // Check file extension

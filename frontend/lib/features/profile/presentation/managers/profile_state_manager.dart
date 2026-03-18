@@ -103,6 +103,16 @@ class ProfileStateManager extends ChangeNotifier {
   bool get hasMoreVideos => _hasMoreVideos;
   bool get isSignedIn => _authService.currentUserId != null;
 
+  /// **NEW: Check if the current user data is partial (fallback or missing metrics)**
+  bool get isDataPartial {
+    if (_userData == null) return true;
+    if (_userData!['isFallback'] == true) return true;
+    
+    // Check for critical missing metrics that should have been there
+    final followers = _userData!['followersCount'] ?? _userData!['followers'];
+    return followers == null;
+  }
+
   /// **NEW: Check if the current user is the owner of the viewed profile**
   bool get isOwner {
     if (_requestedUserId == null) return true; // null means own profile
@@ -236,6 +246,12 @@ class ProfileStateManager extends ChangeNotifier {
       // This ensures that preloaded data (cached by ProfilePreloader) has all required fields like googleId
       final normalizedData = _normalizeUserData(
           userData, userId ?? userData['googleId'] ?? userData['id']);
+      
+      // **FIX: Preserve fallback flag in normalized data**
+      if (userData['isFallback'] == true) {
+        normalizedData['isFallback'] = true;
+      }
+      
       _userData = Map<String, dynamic>.from(normalizedData);
       nameController.text = _userData?['name']?.toString() ?? '';
 

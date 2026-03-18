@@ -640,6 +640,20 @@ router.get('/stats', requireAdminDashboardKey, async (req, res) => {
   }
 });
 
+// **NEW: Route to get recommendation system effectiveness**
+router.get('/recommender/stats', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const stats = await RecommendationService.getRecommendationStats();
+    if (!stats) {
+      return res.status(500).json({ success: false, error: 'Failed to generate metrics' });
+    }
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error('❌ Error loading recommendation stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to load recommendation stats' });
+  }
+});
+
 // **NEW: Admin endpoint to get monthly earnings for all creators**
 router.get('/creators/monthly-earnings', requireAdminDashboardKey, async (req, res) => {
   try {

@@ -1057,6 +1057,49 @@ export const trackWatch = async (req, res) => {
 };
 
 /**
+ * **NEW: Track Video Skip**
+ * Penalizes videos that users quickly swipe away.
+ */
+export const trackSkip = async (req, res) => {
+  try {
+    const userId = req.user?.googleId || req.user?.id || req.headers['x-device-id'];
+    const videoId = req.params.id;
+
+    if (!userId) return res.status(400).json({ error: 'User identifier required' });
+    if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
+      return res.status(400).json({ error: 'Invalid video ID' });
+    }
+
+    // 1. Update WatchHistory with isSkip: true
+    await WatchHistory.findOneAndUpdate(
+      { userId, videoId },
+      { 
+        $set: { isSkip: true, lastWatchedAt: new Date() },
+        $inc: { watchCount: 1 },
+        $setOnInsert: { watchedAt: new Date() }
+      },
+      { upsert: true }
+    );
+
+    // 2. Globally penalize the video
+    await Video.findByIdAndUpdate(videoId, { $inc: { skipCount: 1 } });
+
+    // 3. Invalidate Redis cache for this user's feed
+    if (redisService.getConnectionStatus()) {
+      const types = ['all', 'yog', 'vayu', 'reel', 'short', 'long'];
+      const keysToDel = types.map(type => `feed:${userId}:${type}`);
+      keysToDel.push(`videos:unwatched:ids:${userId}:all`);
+      await Promise.all(keysToDel.map(k => redisService.del(k)));
+    }
+
+    res.json({ success: true, message: 'Skip tracked successfully' });
+  } catch (error) {
+    console.error('❌ Error tracking skip:', error);
+    res.status(500).json({ error: 'Failed to track skip', message: error.message });
+  }
+};
+
+/**
  * **NEW: Batch sync watch events**
  * Critical for reducing network overhead for 1M+ users.
  */

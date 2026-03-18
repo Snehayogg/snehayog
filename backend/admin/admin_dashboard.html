@@ -398,6 +398,12 @@
                 <div class="stat-number" id="unreadFeedback">-</div>
                 <div class="stat-label">Unread Feedback</div>
             </div>
+
+            <div class="stat-card danger" onclick="document.getElementById('recommenderSection').scrollIntoView({behavior: 'smooth'})" style="cursor: pointer;">
+                <div class="stat-icon">⏭️</div>
+                <div class="stat-number" id="globalSkipRate">-</div>
+                <div class="stat-label">Global Skip Rate</div>
+            </div>
         </div>
 
         <div class="dashboard-section">
@@ -427,6 +433,27 @@
                 <button class="btn btn-primary" onclick="sendNotification()">
                     🚀 Send Notification
                 </button>
+            </div>
+        </div>
+
+        <div class="dashboard-section" id="recommenderSection">
+            <h2 class="section-title">📊 Recommendation Effectiveness</h2>
+            <div class="stats-grid">
+                <div class="stat-card primary">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-number" id="avgFeedScore">-</div>
+                    <div class="stat-label">Avg Feed Score</div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-icon">🔕</div>
+                    <div class="stat-number" id="dailySkips">-</div>
+                    <div class="stat-label">Skips Today</div>
+                </div>
+            </div>
+            
+            <h3 style="margin: 20px 0 10px;">📉 Top Skipped Videos</h3>
+            <div id="topSkippedList">
+                <p>Loading skip analytics...</p>
             </div>
         </div>
 
@@ -1757,6 +1784,9 @@
                 await loadFeedback();
                 await loadFeedbackStats();
 
+                // Load recommendation stats
+                await loadRecommenderStats();
+
                 setLoading(false);
             } catch (error) {
                 console.error('Error refreshing data:', error);
@@ -2545,6 +2575,61 @@
                 console.error('Error unflagging video:', error);
                 showError(`Error: ${error.message}`);
             }
+        }
+        
+        // **NEW: Recommendation Stats Logic**
+        async function loadRecommenderStats() {
+            try {
+                const response = await authorizedFetch(`${API_BASE}/admin/recommender/stats`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const stats = data.stats;
+
+                    document.getElementById('globalSkipRate').textContent = stats.globalSkipRate;
+                    document.getElementById('avgFeedScore').textContent = stats.avgFeedScore;
+                    document.getElementById('dailySkips').textContent = formatNumber(stats.dailySkips);
+
+                    renderTopSkippedVideos(stats.topSkippedVideos || []);
+                }
+            } catch (error) {
+                console.error('Error loading recommender stats:', error);
+            }
+        }
+
+        function renderTopSkippedVideos(videos) {
+            const container = document.getElementById('topSkippedList');
+            if (!videos || videos.length === 0) {
+                container.innerHTML = '<p>No skip data available yet.</p>';
+                return;
+            }
+
+            const tableRows = videos.map(v => `
+                <tr>
+                    <td>${escapeHtml(v.name)}</td>
+                    <td>${v.skips}</td>
+                    <td>
+                        <div style="background: #eee; width: 100px; height: 10px; border-radius: 5px; overflow: hidden;">
+                            <div style="background: #dc3545; width: ${v.rate}; height: 100%;"></div>
+                        </div>
+                        <small>${v.rate}</small>
+                    </td>
+                </tr>
+            `).join('');
+
+            container.innerHTML = `
+                <table class="payout-table">
+                    <thead>
+                        <tr>
+                            <th>Video Name</th>
+                            <th>Total Skips</th>
+                            <th>Skip Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            `;
         }
     </script>
 </body>

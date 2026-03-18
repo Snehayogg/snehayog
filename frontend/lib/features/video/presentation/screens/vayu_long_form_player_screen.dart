@@ -28,6 +28,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
 import 'package:vayu/features/video/presentation/screens/video_feed_advanced/widgets/banner_ad_section.dart';
 import 'package:vayu/shared/widgets/interactive_scale_button.dart';
+import 'package:vayu/features/video/presentation/widgets/vayu_video_progress_bar.dart';
 
 enum _AspectRatioMode {
   fit,
@@ -534,9 +535,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final currentPosition = _controllers[_currentIndex]!.value.position;
     final totalDuration = _controllers[_currentIndex]!.value.duration;
 
-    // Sensitivity: 1 pixel = 800ms (Agressive seeking for long-form content)
+    // Sensitivity: 1 pixel = 500ms (Agressive seeking for long-form content)
     final seekOffset =
-        Duration(milliseconds: (_horizontalDragTotal * 100).toInt());
+        Duration(milliseconds: (_horizontalDragTotal * 500).toInt());
     var targetPosition = currentPosition + seekOffset;
 
     // Clamp target position
@@ -1255,6 +1256,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             child: SizedBox(
               width: size.width,
               child: Stack(
+                clipBehavior: Clip.none, // Allow hit area to overflow into progress bar padding
                 children: [
                   if (chewie != null &&
                       controller != null &&
@@ -1337,36 +1339,42 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                     ),
                     if (_aspectRatioOverlayText != null)
                       _buildAspectRatioOverlay(),
+
+                    // **CUSTOM PRODUCTION-LEVEL SEEK BAR (POSITIONED AT BOTTOM)**
+                    if (controller != null && controller.value.isInitialized)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: VayuVideoProgressBar(
+                          controller: controller,
+                          height: 36.0, // Balanced for landscape
+                          onDragStart: () {
+                            setState(() {
+                              _showScrubbingOverlay = true;
+                              _showControls = false;
+                            });
+                          },
+                          onProgressUpdate: (relative, position) {
+                            setState(() {
+                              _scrubbingTargetTime = position;
+                              _isForward = position > controller.value.position;
+                              _scrubbingDelta = position - controller.value.position;
+                            });
+                          },
+                          onDragEnd: () {
+                            setState(() {
+                              _showScrubbingOverlay = false;
+                              _showControls = true;
+                            });
+                          },
+                        ),
+                      ),
                   ],
                 ],
               ),
             ),
           ),
-
-          // **NEW: Sleek Edge-to-Edge Progress Bar for Full Screen**
-          if (controller != null && controller.value.isInitialized)
-            Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewPadding.bottom,
-                left: MediaQuery.of(context).viewPadding.left,
-                right: MediaQuery.of(context).viewPadding.right,
-              ),
-              child: SizedBox(
-                height: 3.0, // Minimalist thin line
-                width: size.width,
-                child: VideoProgressIndicator(
-                  controller,
-                  allowScrubbing: true,
-                  padding: EdgeInsets
-                      .zero, // Edge-to-edge relative to padded container
-                  colors: VideoProgressColors(
-                    playedColor: AppColors.primary,
-                    bufferedColor: AppColors.textPrimary.withValues(alpha: 0.2),
-                    backgroundColor: AppColors.backgroundSecondary,
-                  ),
-                ),
-              ),
-            ),
         ],
       );
     }
@@ -1383,6 +1391,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           child: Container(
             color: AppColors.backgroundPrimary,
             child: Stack(
+              clipBehavior: Clip.none, // Allow hit area to overflow balanced
               children: [
                 if (chewie != null &&
                     controller != null &&
@@ -1464,29 +1473,46 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
                 if (_aspectRatioOverlayText != null && index == _currentIndex)
                   _buildAspectRatioOverlay(),
-              ],
-            ),
-          ),
-        ),
 
-        // **NEW: Sleek Edge-to-Edge Progress Bar Divider**
-        if (controller != null && controller.value.isInitialized)
-          SizedBox(
-            height: 3.0, // Minimalist thin line
-            width: size.width,
-            child: VideoProgressIndicator(
-              controller,
-              allowScrubbing: true,
-              padding: EdgeInsets.zero, // Edge-to-edge
-              colors: VideoProgressColors(
-                playedColor: AppColors.primary,
-                bufferedColor: AppColors.textPrimary.withValues(alpha: 0.2),
-                backgroundColor: AppColors.backgroundSecondary,
+                  if (_aspectRatioOverlayText != null && index == _currentIndex)
+                    _buildAspectRatioOverlay(),
+
+                  // **CUSTOM PRODUCTION-LEVEL SEEK BAR (POSITIONED AT BOTTOM)**
+                  if (controller != null && controller.value.isInitialized && index == _currentIndex)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: VayuVideoProgressBar(
+                        controller: controller,
+                        height: 30.0, // Compact for portrait
+                        onDragStart: () {
+                          setState(() {
+                            _showScrubbingOverlay = true;
+                            _showControls = false;
+                          });
+                        },
+                        onProgressUpdate: (relative, position) {
+                          setState(() {
+                            _scrubbingTargetTime = position;
+                            _isForward = position > controller.value.position;
+                            _scrubbingDelta = position - controller.value.position;
+                          });
+                        },
+                        onDragEnd: () {
+                          setState(() {
+                            _showScrubbingOverlay = false;
+                            _showControls = true;
+                          });
+                        },
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
-      ],
-    );
+        ],
+      );
   }
 
   // Removed old scroll sections

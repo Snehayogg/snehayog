@@ -9,7 +9,7 @@ class AppConfig {
   static const String kApiVersion = '2026-03-12';
 
   // Set to true to force local development server, false for remote server (Fly/custom domain)
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   // Use the explicit flag instead of kReleaseMode
   static bool get _isDevelopment => isDevelopment;
@@ -269,7 +269,7 @@ class AppConfig {
 
   // Media upload configuration
   static const int maxImageSize = 5 * 1024 * 1024;
-  static const int maxVideoSize = 400 * 1024 * 1024;
+  static const int maxVideoSize = 700 * 1024 * 1024; // 700MB
 
   // **NEW: Cloudinary Configuration for HLS Streaming**
   // Note: API credentials should be fetched from backend for security
@@ -430,7 +430,7 @@ class NetworkHelper {
   static const Duration defaultRetryDelay = Duration(seconds: 2);
 
   /// File size limits
-  static const int maxVideoFileSize = 400 * 1024 * 1024; // 400MB
+  static const int maxVideoFileSize = 700 * 1024 * 1024; // 700MB
   static const int maxImageFileSize = 5 * 1024 * 1024; // 5MB
 
   /// Valid file extensions

@@ -496,30 +496,44 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
        return;
     }
 
+    AppLogger.log('🎙️ Language Switch: [${video.id}] -> $langCode');
+
     safeSetState(() {
       _selectedAudioLanguage[video.id] = langCode;
+      // Force loading flag locally to prevent stale frame flicker
+      _loadingVideos.add(video.id);
     });
 
     final controller = _controllerPool[video.id];
-    if (controller != null) {
-       final position = controller.value.position;
-       final wasPlaying = controller.value.isPlaying;
-       
-       _cleanupVideoStateMapsByIds([video.id]); 
-       
-       final index = _videos.indexWhere((v) => v.id == video.id);
-       if (index != -1) {
-          _preloadVideo(index).then((_) {
-            final newController = _controllerPool[video.id];
-            if (newController != null) {
-              newController.seekTo(position).then((_) {
-                 if (wasPlaying && index == _currentIndex) {
-                    newController.play();
-                 }
-              });
+    final Duration position = controller?.value.position ?? Duration.zero;
+    final bool wasPlaying = controller?.value.isPlaying ?? false;
+
+    // **CRITICAL FIX: Clear BOTH local and shared pool state**
+    // Without this, _preloadVideo might reuse the old original-audio decoder
+    _cleanupVideoStateMapsByIds([video.id]); 
+    SharedVideoControllerPool().removeController(video.id); 
+    
+    final index = _videos.indexWhere((v) => v.id == video.id);
+    if (index != -1) {
+      _preloadVideo(index).then((_) {
+        if (!mounted) return;
+        final newController = _controllerPool[video.id];
+        if (newController != null) {
+          // Restore position for a seamless experience
+          newController.seekTo(position).then((_) {
+            if (wasPlaying && index == _currentIndex && mounted) {
+              newController.play();
             }
           });
-       }
+        }
+      }).catchError((e) {
+        AppLogger.log('❌ Failed to switch language: $e');
+        if (mounted) {
+          safeSetState(() {
+             _loadingVideos.remove(video.id);
+          });
+        }
+      });
     }
   }
 

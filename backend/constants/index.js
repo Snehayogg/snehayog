@@ -16,7 +16,7 @@ export const DATABASE_CONFIG = {
 
 export const UPLOAD_CONFIG = {
   AD_FILE_SIZE_LIMIT: 10 * 1024 * 1024, // 10MB
-  VIDEO_FILE_SIZE_LIMIT: 100 * 1024 * 1024, // 100MB
+  VIDEO_FILE_SIZE_LIMIT: 700 * 1024 * 1024, // 700MB
   ALLOWED_AD_TYPES: [
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
     'video/mp4', 'video/webm', 'video/avi'

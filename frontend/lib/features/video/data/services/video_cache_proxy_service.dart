@@ -346,7 +346,7 @@ class VideoCacheProxyService {
   /// **NEW: Proactively pre-fetch the first few MB of a video to disk (Resume Support)**
   /// Uses Range headers to continue buffering where the player left off.
   Future<void> prefetchChunk(String url, {int megabytes = 5}) async {
-    if (url.isEmpty) return;
+    if (url.isEmpty || _cachePath == null) return;
     final String fileKey = md5.convert(utf8.encode(url)).toString();
     final String filePath = '$_cachePath/$fileKey.chunk';
     final file = File(filePath);
@@ -428,7 +428,7 @@ class VideoCacheProxyService {
   /// Downloads only the first 300-500KB of a video for instant playback start.
   /// The rest of the video is loaded by ExoPlayer in the background.
   Future<void> prefetchInitialChunk(String url, {int kilobytes = 400}) async {
-    if (url.isEmpty) return;
+    if (url.isEmpty || _cachePath == null) return;
 
     // **HLS SPECIAL HANDLING**
     // If it's an HLS playlist, we must download the manifest AND the first segment.
@@ -517,6 +517,7 @@ class VideoCacheProxyService {
           
           // Save Manifest
           final String manifestKey = md5.convert(utf8.encode(url)).toString();
+          if (_cachePath == null) return;
           final File manifestFile = File('$_cachePath/$manifestKey.chunk');
           await manifestFile.writeAsString(response.body);
           

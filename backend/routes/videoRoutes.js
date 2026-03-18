@@ -41,6 +41,7 @@ router.post('/:id/save', verifyToken, videoController.toggleSave);
 router.post('/sync-watch-history', verifyToken, videoController.syncWatchHistory);
 router.post('/watch/batch', passiveVerifyToken, videoController.syncWatchEvents);
 router.post('/:id/watch', passiveVerifyToken, videoController.trackWatch);
+router.post('/:id/skip', passiveVerifyToken, videoController.trackSkip);
 router.post('/:id/like', verifyToken, videoController.toggleLike);
 router.delete('/:id/like', verifyToken, videoController.deleteLike);
 router.post('/:id/increment-view', videoController.incrementView);

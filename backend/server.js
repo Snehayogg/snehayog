@@ -196,8 +196,8 @@ app.use(cors({
 // Apply Global Rate Limiter (Catch-all for safety)
 app.use(globalLimiter);
 
-app.use(express.json({ limit: '400mb' }));
-app.use(express.urlencoded({ extended: true, limit: '400mb' }));
+app.use(express.json({ limit: '700mb' }));
+app.use(express.urlencoded({ extended: true, limit: '700mb' }));
 
 // 🚀 PERFORMANCE & ROUTING FIX: Strip redundant /api prefixes
 // This handles bugs where frontend or proxy adds extra /api/api

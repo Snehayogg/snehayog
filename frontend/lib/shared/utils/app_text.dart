@@ -120,7 +120,7 @@ class AppText {
     'upload_error_enter_title': 'Please enter a title for your content',
     'upload_error_select_category': 'Please select a category',
     'upload_error_file_too_large':
-        'Video file is too large. Maximum size is 100MB',
+        'Video file is too large. Maximum size is 700MB',
     'upload_error_invalid_format':
         'Invalid video format. Supported formats: {formats}',
     'upload_error_file_not_exist': 'Selected video file does not exist',
@@ -135,7 +135,7 @@ class AppText {
     'upload_error_service_unavailable':
         'Video upload service is temporarily unavailable. Please try again later.',
     'upload_error_file_too_large_short':
-        'Video file is too large. Maximum size is 100MB.',
+        'Video file is too large. Maximum size is 700MB.',
     'upload_error_invalid_file_type':
         'Invalid video format. Please upload a supported video file.',
     'upload_error_duplicate':

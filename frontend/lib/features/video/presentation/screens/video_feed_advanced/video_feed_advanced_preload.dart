@@ -338,10 +338,21 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
           _initializingVideos.remove(videoId);
         }
 
-        // **RELEVANCY CHECKPOINT #3: After initialization**
-        if (mounted && (index - _currentIndex).abs() > 1 && index != _currentIndex) {
+        // **LIFECYCLE CHECK: Ensure controller is still valid after async initialization**
+        if (!mounted || (index - _currentIndex).abs() > 1 && index != _currentIndex) {
           _loadingVideos.remove(videoId);
           controller.dispose();
+          return;
+        }
+
+        // **POST-INIT CHECK: Safe check for disposal**
+        try {
+          if (controller.value.isInitialized) {
+            // Success
+          }
+        } catch (_) {
+          // Controller might be disposed already
+          _loadingVideos.remove(videoId);
           return;
         }
       }
@@ -462,17 +473,31 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
   /// **NEW: Get acting URL representing original or dubbed state**
   String _getActingUrl(VideoModel video) {
-    // We will implement language selection later.
-    // For now, use the original video URL.
+    // **PRIORITY 1: User Selected Audio Language**
+    final selectedLang = _selectedAudioLanguage[video.id] ?? 'default';
+    
+    if (selectedLang != 'default') {
+      final dubbedUrl = video.dubbedUrls?[selectedLang];
+      if (dubbedUrl != null && dubbedUrl.isNotEmpty) {
+        final proxied = videoCacheProxy.proxyUrl(dubbedUrl);
+        AppLogger.log('🎙️ Preload: Using User-Selected ($selectedLang) URL: $proxied');
+        return proxied;
+      }
+    }
 
-    // Standard logic
+    // **PRIORITY 2: Implicit Auto-Switch check**
+    // Staying on original (default) as requested, unless user selects otherwise via bottom sheet.
+
+    // Standard logic (Source Audio)
     final hlsUrl = video.hlsPlaylistUrl?.isNotEmpty == true
         ? video.hlsPlaylistUrl
         : video.hlsMasterPlaylistUrl;
     
     final String targetUrl = (hlsUrl != null && hlsUrl.isNotEmpty) ? hlsUrl : video.videoUrl;
     final fixedUrl = _validateAndFixVideoUrl(targetUrl);
-    return videoCacheProxy.proxyUrl(fixedUrl ?? targetUrl);
+    final finalUrl = videoCacheProxy.proxyUrl(fixedUrl ?? targetUrl);
+    
+    return finalUrl;
   }
 
 
@@ -556,19 +581,43 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       if (ctrl != null) {
         try {
           if (ctrl.value.isInitialized) {
-             ctrl.pause();
-             ctrl.setVolume(0.0);
+            try {
+              ctrl.pause();
+              ctrl.setVolume(0.0);
+            } catch (_) {}
           }
-          ctrl.removeListener(_bufferingListeners[videoId] ?? () {});
-          ctrl.removeListener(_videoEndListeners[videoId] ?? () {});
           
-          if (_errorListeners.containsKey(videoId)) {
-             ctrl.removeListener(_errorListeners[videoId]!);
-             _errorListeners.remove(videoId);
+          final bufferingListener = _bufferingListeners[videoId];
+          if (bufferingListener != null) {
+            try {
+              ctrl.removeListener(bufferingListener);
+            } catch (_) {}
+            _bufferingListeners.remove(videoId);
           }
-          ctrl.dispose();
+
+          final endListener = _videoEndListeners[videoId];
+          if (endListener != null) {
+            try {
+              ctrl.removeListener(endListener);
+            } catch (_) {}
+            _videoEndListeners.remove(videoId);
+          }
+          
+          final errorListener = _errorListeners[videoId];
+          if (errorListener != null) {
+            try {
+              ctrl.removeListener(errorListener);
+            } catch (_) {}
+            _errorListeners.remove(videoId);
+          }
+
+          try {
+            ctrl.dispose();
+          } catch (e) {
+            AppLogger.log('⚠️ Error during ctrl.dispose() for $videoId: $e');
+          }
         } catch (e) {
-          AppLogger.log('⚠️ Error disposing controller for video $videoId: $e');
+          AppLogger.log('⚠️ Error during full disposal sequence for video $videoId: $e');
         }
       }
 

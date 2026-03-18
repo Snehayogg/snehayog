@@ -165,7 +165,7 @@ const appConfigSchema = new mongoose.Schema({
     uploadLimits: {
       maxVideoSize: {
         type: Number,
-        default: 100 * 1024 * 1024, // 100MB
+        default: 700 * 1024 * 1024, // 700MB
         description: 'Maximum video file size in bytes'
       },
       maxImageSize: {

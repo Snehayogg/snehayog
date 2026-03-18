@@ -40,7 +40,7 @@ class VideoService {
       NetworkHelper.getBaseUrlWithFallback();
   static const int maxRetries = 2;
   static const int retryDelay = 1;
-  static const int maxFileSize = 100 * 1024 * 1024; // 100MB
+  static const int maxFileSize = 700 * 1024 * 1024; // 700MB
 
   // **GETTERS: Video tracking state**
   int get currentVisibleVideoIndex => _currentVisibleVideoIndex;
@@ -448,6 +448,31 @@ class VideoService {
         rethrow; // Re-throw authentication errors as-is
       }
       throw Exception('Failed to like video: ${e.toString()}');
+    }
+  }
+
+  /// **Track video skip**
+  Future<void> trackSkip(String videoId) async {
+    try {
+      final headers = await _getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+
+      final url = '${NetworkHelper.apiBaseUrl}/videos/$videoId/skip';
+      
+      // Use fire-and-forget or background tracking for skips to avoid blocking UI
+      unawaited(http.post(
+        Uri.parse(url),
+        headers: headers,
+        body: json.encode({}),
+      ).then((res) {
+        if (res.statusCode != 200) {
+          AppLogger.log('⚠️ VideoService: Skip tracking failed for $videoId: ${res.statusCode}');
+        }
+      }).catchError((e) {
+        AppLogger.log('⚠️ VideoService: Error tracking skip for $videoId: $e');
+      }));
+    } catch (e) {
+      AppLogger.log('⚠️ VideoService: Exception preparing skip tracking: $e');
     }
   }
 

@@ -316,7 +316,7 @@ class VideoRemoteDataSource {
       final errorMessage = responseData['error'].toString();
 
       if (errorMessage.contains('File too large')) {
-        throw const FileSizeException('File too large. Maximum size is 100MB');
+        throw const FileSizeException('File too large. Maximum size is 700MB');
       } else if (errorMessage.contains('Invalid file type')) {
         throw const FileTypeException(
           'Invalid file type. Please upload a video file (MP4, AVI, MOV, WMV, FLV, WEBM)',

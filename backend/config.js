@@ -26,7 +26,7 @@ export const config = {
 
   // File Upload Configuration
   upload: {
-    maxFileSize: 100 * 1024 * 1024, // 100MB
+    maxFileSize: 700 * 1024 * 1024, // 700MB
     allowedVideoTypes: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'],
     allowedImageTypes: ['jpg', 'jpeg', 'png', 'gif', 'webp']
   },

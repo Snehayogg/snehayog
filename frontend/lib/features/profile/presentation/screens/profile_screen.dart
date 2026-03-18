@@ -188,27 +188,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final managerUserId = (_stateManager.userData?['googleId'] ?? _stateManager.userData?['id'])?.toString();
     final isStaleData = managerUserId != null && managerUserId != currentUserId;
 
-    // **OPTIMIZED: Only load if data is completely missing, stale, or we haven't exhausted retries**
-    if (_stateManager.userData == null || isStaleData) {
+    // **OPTIMIZED: Only load if data is completely missing, stale, partial, or we haven't exhausted retries**
+    if (_stateManager.userData == null || isStaleData || _stateManager.isDataPartial) {
       if (isStaleData) {
         AppLogger.log(
             '⚠️ ProfileScreen: Detected stale user data in manager, clearing and reloading...');
         _stateManager.clearData();
         if (mounted) ref.read(gameCreatorManagerProvider).clearData();
       }
-      if (_profileNoDataFound) {
+      
+      if (_stateManager.isDataPartial && !isStaleData) {
+        AppLogger.log('🔄 ProfileScreen: Detected partial/fallback data, attempting full refresh...');
+      }
+
+      if (_profileNoDataFound && !_stateManager.isDataPartial) {
         AppLogger.log('ℹ️ ProfileScreen: Already checked - no data found for this user (not reloading)');
         return;
       }
       
-      if (_profileLoadAttemptCount >= 3) {
+      if (_profileLoadAttemptCount >= 3 && !_stateManager.isDataPartial) {
         AppLogger.log('⚠️ ProfileScreen: Max load attempts (3) reached - not retrying automatically');
         return;
       }
 
       AppLogger.log(
-          '📡 ProfileScreen: No user data found (Attempt ${_profileLoadAttemptCount + 1}/3), loading...');
-      _loadData(); 
+          '📡 ProfileScreen: loading data (isPartial: ${_stateManager.isDataPartial}, attempt ${_profileLoadAttemptCount + 1}/3)...');
+      _loadData(forceRefresh: _stateManager.isDataPartial); 
     } else if (_stateManager.needsVideoRefresh) {
       // **NEW: Handle producer/upload requested refresh**
       AppLogger.log(
@@ -1322,26 +1327,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         final loggedInUserId = globalAuthState.userData?['id'] ??
             globalAuthState.userData?['googleId'];
 
-        // **FIX: Load profile if userData is null OR if userId doesn't match**
-        if (loggedInUserId != null) {
-          final currentUserId = activeManager.userData?['id'] ??
-              activeManager.userData?['googleId'];
-          // Compare as strings to avoid type mismatch issues
-          final currentUserIdStr = currentUserId?.toString();
-          final loggedInUserIdStr = loggedInUserId.toString();
+          // **FIX: Load profile if userData is null OR if userId doesn't match OR if data is partial (fallback)**
+          if (loggedInUserId != null) {
+            final currentUserId = activeManager.userData?['id'] ??
+                activeManager.userData?['googleId'];
+            // Compare as strings to avoid type mismatch issues
+            final currentUserIdStr = currentUserId?.toString();
+            final loggedInUserIdStr = loggedInUserId.toString();
 
-          if (activeManager.userData == null ||
-              currentUserIdStr == null ||
-              currentUserIdStr != loggedInUserIdStr) {
-            AppLogger.log(
-                '🔄 ProfileScreen: Syncing with logged in user: $loggedInUserIdStr (currentUserId: $currentUserIdStr, hasUserData: ${activeManager.userData != null})');
-            // Use _loadData with forceRefresh to ensure fresh data after sign-in
-            _loadData(forceRefresh: true).catchError((e) {
+            final bool shouldRefresh = activeManager.userData == null ||
+                currentUserIdStr == null ||
+                currentUserIdStr != loggedInUserIdStr ||
+                activeManager.isDataPartial;
+
+            if (shouldRefresh) {
               AppLogger.log(
-                  '⚠️ ProfileScreen: Error loading profile after sync: $e');
-            });
+                  '🔄 ProfileScreen: Syncing with logged in user (Reasons: null:${activeManager.userData == null}, mismatch:${currentUserIdStr != loggedInUserIdStr}, partial:${activeManager.isDataPartial})');
+              // Use _loadData with forceRefresh to ensure fresh data after sign-in or fallback
+              _loadData(forceRefresh: true).catchError((e) {
+                AppLogger.log(
+                    '⚠️ ProfileScreen: Error loading profile after sync: $e');
+              });
+            }
           }
-        }
         // If viewing someone else's profile (widget.userId is provided),
         // only sync if the logged in user matches the viewed profile
         else if (widget.userId != null && loggedInUserId != null) {

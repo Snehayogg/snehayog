@@ -36,6 +36,7 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
   final ScrollController _scrollController = ScrollController();
 
   List<VideoModel> _videos = [];
+  List<VideoModel> get videos => _videos;
   bool _isLoading = true;
   bool _hasMore = true;
   int _currentPage = 1;

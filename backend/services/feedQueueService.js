@@ -361,6 +361,14 @@ class FeedQueueService {
           } catch(e) {/* ignore */}
       }
 
+      // **NEW: E. Skip History (Filter out what they didn't like)**
+      try {
+        const skipHistory = await WatchHistory.find({ userId, isSkip: true }).select('videoId').lean();
+        if (skipHistory.length > 0) {
+          skipHistory.forEach(h => seenVideoIds.add(h.videoId.toString()));
+        }
+      } catch (e) { /* ignore */ }
+
       // Fetch Hashes from Redis for O(1) in-memory Filtering
       const seenHashesSet = await redisService.getSetMembers(hashKey);
 

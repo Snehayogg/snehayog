@@ -180,4 +180,102 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     _isScreenVisible = false;
     _ensureWakelockForVisibility();
   }
+
+  void _onSmartDubTap(VideoModel video) {
+    final videoId = video.id;
+
+    // 1. Check if already completed and has dubbed URL
+    final currentResult = _dubbingResultsVN[videoId]?.value;
+    if (currentResult != null &&
+        currentResult.status == DubbingStatus.completed &&
+        currentResult.dubbedUrl != null) {
+      AppLogger.log('🎙️ VideoFeedAdvanced: Already dubbed. Opening language selector.');
+      _showLanguageSelector(context, video);
+      return;
+    }
+
+    // 2. If already processing, offer cancellation
+    if (currentResult != null &&
+        !currentResult.isDone &&
+        currentResult.status != DubbingStatus.idle) {
+       showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Cancel Dubbing?', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Dubbing is in progress. Do you want to cancel it?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep Going', style: TextStyle(color: Colors.white54)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel Dub', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        ),
+      ).then((confirmed) {
+        if (confirmed == true && mounted) {
+          _dubbingSubscriptions[videoId]?.cancel();
+          _dubbingSubscriptions.remove(videoId);
+          _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
+          AppLogger.log('🛑 Dubbing cancelled by user for $videoId');
+        }
+      });
+      return;
+    }
+
+    // 3. Start dubbing request
+    _dubbingSubscriptions[videoId]?.cancel();
+
+    final resultVN = _getOrCreateNotifier<DubbingResult>(
+      _dubbingResultsVN,
+      videoId,
+      const DubbingResult(status: DubbingStatus.idle),
+    );
+
+    final sub = _dubbingService.requestDub(videoId).listen((result) {
+      if (!mounted) return;
+      resultVN.value = result;
+
+      // Show feedback snackbars for terminal states
+      if (result.status == DubbingStatus.completed) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dubbing successful! Tap to play dubbed version.'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (result.status == DubbingStatus.notSuitable) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No vocal detected. Not suitable for dubbing.'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (result.status == DubbingStatus.failed) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.error ?? 'Dubbing failed. Please try again.'),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+
+    _dubbingSubscriptions[videoId] = sub;
+  }
+
 }

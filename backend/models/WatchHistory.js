@@ -36,6 +36,11 @@ const WatchHistorySchema = new mongoose.Schema({
     type: Boolean,
     default: false // Whether user watched the full video
   },
+  isSkip: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   watchCount: {
     type: Number,
     default: 1 // Number of times user watched this video

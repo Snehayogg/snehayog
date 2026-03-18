@@ -34,6 +34,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   late CarouselAdManager _carouselAdManager;
   final VideoControllerManager _videoControllerManager =
       VideoControllerManager();
+  final DubbingService _dubbingService = DubbingService();
 
   // Cached providers & media query
   MainController? _mainController;
@@ -142,6 +143,8 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
 
   // Disposal subscription
   StreamSubscription<String>? _poolDisposalSubscription;
+  final Map<String, StreamSubscription<DubbingResult>> _dubbingSubscriptions = {};
+  final Map<String, ValueNotifier<DubbingResult>> _dubbingResultsVN = {};
 
   // Retained controllers for refresh
 

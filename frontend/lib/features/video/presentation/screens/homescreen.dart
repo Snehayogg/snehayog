@@ -310,7 +310,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
         }
       }
 
-      final restoredIndex = await mainController.restoreLastTabIndex();
     } catch (e) {
       print('❌ MainScreen: Error restoring tab index: $e');
     }
@@ -460,10 +459,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final vayuState = _vayuScreenKey.currentState;
           if (vayuState != null && vayuState.mounted) {
-            // Access _videos via dynamic since it's private in VayuScreenState
-            final videos = (vayuState as dynamic)._videos as List?;
+            // Access videos via public getter
+            final videos = vayuState.videos;
             if (videos == null || videos.isEmpty) {
-              print('🔄 MainScreen: Vayu list is empty, triggering auto-load');
               vayuState.refreshVideos();
             }
           }
@@ -472,9 +470,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
       // If switching to profile tab, ensure profile data is loaded
       if (index == 4) { // Profile is now index 4
-        print(
-            '🔄 Homescreen: Switching to profile tab - ensuring profile data is loaded');
-
         // Force immediate data load when profile tab is selected
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final profileScreenState = _profileScreenKey.currentState;
@@ -482,7 +477,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
             try {
               // Call the public method through dynamic to avoid type casting issues
               (profileScreenState as dynamic).onProfileTabSelected();
-              print('✅ Homescreen: Successfully triggered profile data load');
             } catch (e) {
               print('⚠️ Homescreen: Error calling onProfileTabSelected: $e');
             }

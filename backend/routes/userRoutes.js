@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Follower from '../models/Follower.js';
 import SavedVideo from '../models/SavedVideo.js';
@@ -54,6 +55,46 @@ const invalidateProfileCache = async (userIds) => {
     } catch (err) {
       console.error('❌ Redis cache invalidate error:', err.message);
     }
+  }
+};
+
+/**
+ * **NEW: Logic to synchronize user performance counters**
+ * Recalculates followerCount, followingCount, savedVideosCount, and videos array.
+ * @param {string} userId - MongoDB _id of the user
+ */
+const syncUserCounters = async (userId) => {
+  try {
+    if (!userId) return;
+    
+    // Import models directly since they are already imported at the top
+    // 1. Calculate counts in parallel
+    const [followerCount, followingCount, savedVideosCount, videoIds] = await Promise.all([
+      Follower.countDocuments({ following: userId }),
+      Follower.countDocuments({ follower: userId }),
+      SavedVideo.countDocuments({ user: userId }),
+      mongoose.model('Video').find({ uploader: userId }).select('_id').lean().then(docs => docs.map(d => d._id))
+    ]);
+
+    // 2. Update User document atomically
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        followerCount,
+        followingCount,
+        savedVideosCount,
+        videos: videoIds
+      }
+    });
+
+    console.log(`✅ syncUserCounters: Synced ${userId} (Fow: ${followerCount}, Fol: ${followingCount}, SV: ${savedVideosCount}, V: ${videoIds.length})`);
+    
+    // 3. Invalidate relevant caches
+    await invalidateProfileCache(userId);
+    
+    return { followerCount, followingCount, savedVideosCount, videoCount: videos.length };
+  } catch (err) {
+    console.error(`❌ syncUserCounters Error for ${userId}:`, err.message);
+    throw err;
   }
 };
 
@@ -158,6 +199,13 @@ router.get('/profile', verifyToken, async (req, res) => {
       return res.status(404).json({ 
         error: 'User not found'
       });
+    }
+
+    // **FIX: Automatic Sync for 0-count profiles**
+    // If counts are 0, trigger a background sync to ensure accuracy
+    if (currentUser.followerCount === 0 || currentUser.followingCount === 0 || (currentUser.videos || []).length === 0) {
+      console.log(`ℹ️ GET /profile: Triggering background sync for ${currentUser.googleId} due to zero counts`);
+      syncUserCounters(currentUser._id).catch(() => {});
     }
     
     // **SAFE: Wrap rank call so any failure doesn't cause a 500**
@@ -290,107 +338,100 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
       }
     }
 
-    // Get user's following list (array of ObjectIds)
-    const followingIds = currentUser.following || [];
-    console.log('💰 Top Earners API: Following IDs:', followingIds);
+    // **FIXED: Get following list from Follower collection (user.following is deprecated)**
+    const followerDocs = await Follower.find({ follower: currentUser._id }).select('following').lean();
+    const followingIds = followerDocs.map(f => f.following);
+    
+    console.log('💰 Top Earners API: Following IDs from Doc:', followingIds);
     console.log('💰 Top Earners API: Following count:', followingIds.length);
+
+    // **DEBUG: Check if all following IDs exist in User collection**
+    const followedUsersCount = await User.countDocuments({ _id: { $in: followingIds } });
+    console.log(`💰 Top Earners API: Found ${followedUsersCount}/${followingIds.length} users in DB`);
 
     if (followingIds.length === 0) {
       console.log('ℹ️ Top Earners API: User is not following anyone');
       return res.json({ topEarners: [], message: 'Not following anyone' });
     }
 
-    console.log(`💰 Top Earners API: Calculating earnings for ${followingIds.length} users in following list`);
+    // Calculate earnings for each user in following list
+    // **OPTIMIZED: Use a single aggregation to calculate earnings for ALL following users in one query**
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
 
-    // Import AdImpression model
+    // Import models
     const AdImpression = (await import('../models/AdImpression.js')).default;
     const Video = (await import('../models/Video.js')).default;
 
-    // Get all users that current user is following
+    // 1. Get user metadata and video count
     const followingUsers = await User.find({
       _id: { $in: followingIds }
-    }).select('googleId name email profilePic');
+    }).select('googleId name email profilePic videos').lean();
 
-    if (followingUsers.length === 0) {
-      return res.json({ topEarners: [] });
-    }
-
-    // Calculate earnings for each user in following list
-    const earningsPromises = followingUsers.map(async (user) => {
-      try {
-        // Get user's videos
-        const userVideos = await Video.find({ uploader: user._id }).select('_id');
-        const videoIds = userVideos.map(v => v._id);
-
-        if (videoIds.length === 0) {
-          return {
-            userId: user.googleId,
-            name: user.name,
-            email: user.email,
-            profilePic: user.profilePic || null,
-            totalEarnings: 0,
-            videoCount: 0
-          };
+    // 2. Aggregate earnings for all following users at once
+    const earningsStats = await AdImpression.aggregate([
+      { 
+        $match: { 
+          creatorId: { $in: followingIds },
+          isViewed: true,
+          timestamp: { $gte: startOfMonth }
+        } 
+      },
+      {
+        $group: {
+          _id: { creator: '$creatorId', adType: '$adType' },
+          totalViews: { 
+            $sum: { $cond: [{ $gt: ['$viewCount', 0] }, '$viewCount', 1] } 
+          }
         }
-
-        // Count ad impressions
-        const bannerImpressions = await AdImpression.countDocuments({
-          videoId: { $in: videoIds },
-          adType: 'banner',
-          impressionType: 'view'
-        });
-
-        const carouselImpressions = await AdImpression.countDocuments({
-          videoId: { $in: videoIds },
-          adType: 'carousel',
-          impressionType: 'view'
-        });
-
-        // Calculate revenue (same logic as revenue API)
-        const bannerCpm = 10; // ₹10 per 1000 impressions
-        const carouselCpm = 30; // ₹30 per 1000 impressions
-        
-        const bannerRevenueINR = (bannerImpressions / 1000) * bannerCpm;
-        const carouselRevenueINR = (carouselImpressions / 1000) * carouselCpm;
-        const totalRevenueINR = bannerRevenueINR + carouselRevenueINR;
-        const creatorRevenueINR = totalRevenueINR * 0.80; // 80% to creator
-
-        return {
-          userId: user.googleId,
-          name: user.name,
-          email: user.email,
-          profilePic: user.profilePic || null,
-          totalEarnings: creatorRevenueINR,
-          videoCount: videoIds.length,
-          bannerImpressions,
-          carouselImpressions
-        };
-      } catch (err) {
-        console.error(`❌ Error calculating earnings for user ${user.googleId}:`, err);
-        return null;
+      },
+      {
+        $group: {
+          _id: '$_id.creator',
+          bannerViews: {
+            $sum: { $cond: [{ $eq: ['$_id.adType', 'banner'] }, '$totalViews', 0] }
+          },
+          carouselViews: {
+            $sum: { $cond: [{ $eq: ['$_id.adType', 'carousel'] }, '$totalViews', 0] }
+          }
+        }
       }
+    ]);
+
+    // 3. Create a map for quick lookup
+    const bannerCpm = 10;
+    const carouselCpm = 30;
+    const creatorShare = 0.80;
+
+    const earningsMap = new Map();
+    earningsStats.forEach(stat => {
+      const earnings = (
+        (stat.bannerViews / 1000) * bannerCpm + 
+        (stat.carouselViews / 1000) * carouselCpm
+      ) * creatorShare;
+      earningsMap.set(stat._id.toString(), earnings);
     });
 
-    // Wait for all calculations
-    const earningsResults = await Promise.all(earningsPromises);
-    
-    // Filter out null results and sort by earnings (descending)
-    const topEarners = earningsResults
-      .filter(result => result !== null && result.totalEarnings > 0)
-      .sort((a, b) => b.totalEarnings - a.totalEarnings)
-      .map((earner, index) => ({
-        userId: earner.userId,
-        name: earner.name,
-        profilePic: earner.profilePic,
-        rank: index + 1,
-        // Hide actual money and impressions for privacy
-        totalEarnings: 0, 
-        bannerImpressions: 0,
-        carouselImpressions: 0,
-        videoCount: earner.videoCount
-      }));
+    // 4. Combine metadata with earnings
+    const topEarners = followingUsers.map(user => {
+      const earnings = earningsMap.get(user._id.toString()) || 0;
+      return {
+        userId: user.googleId,
+        name: user.name,
+        profilePic: user.profilePic || null,
+        totalEarnings: earnings,
+        videoCount: user.videos?.length || 0
+      };
+    })
+    .sort((a, b) => b.totalEarnings - a.totalEarnings)
+    .map((earner, index) => ({
+      ...earner,
+      rank: index + 1,
+      // Mask actual earnings for privacy in this public-facing list
+      totalEarnings: 0
+    }));
 
-    console.log(`✅ Top Earners API: Found ${topEarners.length} top earners`);
+    console.log(`✅ Top Earners API: Found ${topEarners.length} top earners with optimized query`);
 
     const payload = {
       topEarners,
@@ -581,6 +622,10 @@ router.post('/follow', verifyToken, async (req, res) => {
 
     await invalidateProfileCache([currentUser.googleId, userToFollow.googleId]);
 
+    // **PROACTIVE SYNC: Ensure counts are perfectly accurate in background**
+    syncUserCounters(currentUser._id).catch(() => {});
+    syncUserCounters(userToFollow._id).catch(() => {});
+
     res.json({ 
       message: 'Successfully followed user',
       following: updatedCurrentUser.followingCount,
@@ -635,6 +680,10 @@ router.post('/unfollow', verifyToken, async (req, res) => {
     ]);
 
     await invalidateProfileCache([currentUser.googleId, userToUnfollow.googleId]);
+
+    // **PROACTIVE SYNC: Ensure counts are perfectly accurate in background**
+    syncUserCounters(currentUser._id).catch(() => {});
+    syncUserCounters(userToUnfollow._id).catch(() => {});
 
     res.json({ 
       message: 'Successfully unfollowed user',
@@ -732,7 +781,6 @@ router.post('/isfollowing/batch', verifyToken, async (req, res) => {
     const targetMongoIds = Array.from(targetMap.values());
 
     // Query Follower collection for all relationships at once
-    const Follower = mongoose.model('Follower');
     const existingFollows = await Follower.find({
       follower: currentUser._id,
       following: { $in: targetMongoIds }
@@ -927,5 +975,43 @@ router.get('/location-permission', verifyToken, async (req, res) => {
 });
 
 // Duplicate routes removed - moved before /:id route (see line 164)
+
+// ✅ Route to manually trigger profile sync
+router.post('/sync-profile', verifyToken, async (req, res) => {
+  try {
+    const googleId = req.user.googleId;
+    const user = await User.findOne({ googleId }).select('_id').lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const stats = await syncUserCounters(user._id);
+    res.json({ success: true, stats });
+  } catch (err) {
+    res.status(500).json({ error: 'Sync failed', details: err.message });
+  }
+});
+
+// ✅ Route to sync ALL user counters (Admin only)
+router.post('/sync-all-counters', async (req, res) => {
+  try {
+    // Check for admin key in headers
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey !== process.env.ADMIN_KEY) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const users = await User.find({}).select('_id').lean();
+    let count = 0;
+    
+    // Serial processing to avoid overwhelming DB, but could be chunked
+    for (const user of users) {
+      await syncUserCounters(user._id);
+      count++;
+    }
+
+    res.json({ success: true, processed: count });
+  } catch (err) {
+    res.status(500).json({ error: 'Bulk sync failed', details: err.message });
+  }
+});
 
 export default router;

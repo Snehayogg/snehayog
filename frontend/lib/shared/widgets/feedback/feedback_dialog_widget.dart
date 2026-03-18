@@ -85,33 +85,17 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
       if (response.statusCode == 201) {
         if (!mounted) return;
 
-        // Handle high ratings (4 or 5 stars)
+        // Handle high ratings (4 or 5 stars) — directly open Play Store
         if (_rating >= 4) {
-          Navigator.of(context).pop(); // Close dialog first
-
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Awesome!'),
-              content: const Text(
-                  'Since you liked the app, would you mind giving us a 5-star rating on the Google Play Store? It really helps us grow!'),
-              actions: [
-                AppButton(
-                  onPressed: () => Navigator.pop(context),
-                  label: 'Maybe Later',
-                  variant: AppButtonVariant.text,
-                ),
-                AppButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _launchPlayStore();
-                  },
-                  label: 'Rate Now',
-                  variant: AppButtonVariant.primary,
-                ),
-              ],
+          Navigator.of(context).pop(true); // Close dialog first
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Thanks! Taking you to the Play Store to rate us 🌟'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
             ),
           );
+          _launchPlayStore(); // Directly navigate to Play Store
         } else {
           Navigator.of(context).pop(true);
           ScaffoldMessenger.of(context).showSnackBar(
