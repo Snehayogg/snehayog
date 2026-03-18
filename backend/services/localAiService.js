@@ -58,11 +58,26 @@ class LocalAiService {
     const clipPath = path.join(tempDir, `clip_${Date.now()}.mp3`);
 
     return new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
-        .toFormat('mp3')
+      const isUrl = typeof videoPath === 'string' && videoPath.startsWith('http');
+      const command = ffmpeg(videoPath)
+        .toFormat('mp3');
+
+      if (isUrl) {
+        command.inputOptions([
+          '-reconnect 1',
+          '-reconnect_at_eof 1',
+          '-reconnect_streamed 1',
+          '-reconnect_delay_max 2'
+        ]);
+      }
+
+      command
         .outputOptions([`-t ${durationSeconds}`]) // Only first N seconds
         .on('end', () => resolve(clipPath))
-        .on('error', (err) => reject(err))
+        .on('error', (err, stdout, stderr) => {
+          console.error('❌ FFmpeg extraction error:', stderr);
+          reject(err);
+        })
         .save(clipPath);
     });
   }
@@ -105,12 +120,27 @@ class LocalAiService {
 
     // Convert to 16kHz Mono WAV (required by Whisper)
     await new Promise((resolve, reject) => {
-      ffmpeg(audioPath)
-        .toFormat('wav')
+      const isUrl = typeof audioPath === 'string' && audioPath.startsWith('http');
+      const command = ffmpeg(audioPath)
+        .toFormat('wav');
+
+      if (isUrl) {
+        command.inputOptions([
+          '-reconnect 1',
+          '-reconnect_at_eof 1',
+          '-reconnect_streamed 1',
+          '-reconnect_delay_max 2'
+        ]);
+      }
+
+      command
         .audioChannels(1)
         .audioFrequency(16000)
         .on('end', resolve)
-        .on('error', reject)
+        .on('error', (err, stdout, stderr) => {
+          console.error('❌ FFmpeg wave decode error:', stderr);
+          reject(err);
+        })
         .save(tempWavPath);
     });
 

@@ -207,11 +207,26 @@ class DubbingService {
     const audioPath = path.join(tempDir, `extracted_${Date.now()}.mp3`);
 
     return new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
-        .noVideo()
+      const isUrl = typeof videoPath === 'string' && videoPath.startsWith('http');
+      const command = ffmpeg(videoPath)
+        .noVideo();
+
+      if (isUrl) {
+        command.inputOptions([
+          '-reconnect 1',
+          '-reconnect_at_eof 1',
+          '-reconnect_streamed 1',
+          '-reconnect_delay_max 2'
+        ]);
+      }
+
+      command
         .toFormat('mp3')
         .on('end', () => resolve(audioPath))
-        .on('error', reject)
+        .on('error', (err, stdout, stderr) => {
+          console.error('❌ FFmpeg audio extraction error:', stderr);
+          reject(err);
+        })
         .save(audioPath);
     });
   }
@@ -222,11 +237,28 @@ class DubbingService {
     const outputPath = path.join(tempDir, `final_dubbed_${Date.now()}.mp4`);
 
     return new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
-        .input(audioPath)
+      const isUrl = typeof videoPath === 'string' && videoPath.startsWith('http');
+      const command = ffmpeg(videoPath);
+
+      if (isUrl) {
+        command.inputOptions([
+          '-reconnect 1',
+          '-reconnect_at_eof 1',
+          '-reconnect_streamed 1',
+          '-reconnect_delay_max 2'
+        ]);
+      }
+
+      // Add the second input AFTER setting options for the first one
+      command.input(audioPath);
+
+      command
         .outputOptions(['-c:v copy', '-map 0:v:0', '-map 1:a:0', '-shortest'])
         .on('end', () => resolve(outputPath))
-        .on('error', reject)
+        .on('error', (err, stdout, stderr) => {
+          console.error('❌ FFmpeg muxing error:', stderr);
+          reject(err);
+        })
         .save(outputPath);
     });
   }
