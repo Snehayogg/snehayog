@@ -8,7 +8,7 @@ import CreatorPayout from '../models/CreatorPayout.js';
 import AdImpression from '../models/AdImpression.js';
 import View from '../models/View.js';
 import { AD_CONFIG } from '../constants/index.js';
-import RecommendationService from '../services/recommendationService.js';
+import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 
 const router = express.Router();
 

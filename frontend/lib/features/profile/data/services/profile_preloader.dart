@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:vayu/features/profile/data/services/user_service.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 
@@ -215,3 +215,4 @@ class ProfilePreloader {
     _preloadedProfiles.remove(userId.trim());
   }
 }
+

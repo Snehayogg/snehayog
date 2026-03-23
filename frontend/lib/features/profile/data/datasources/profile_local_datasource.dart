@@ -1,4 +1,4 @@
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 
 class ProfileLocalDataSource {
   /// **Cache User Data - DISABLED**
@@ -31,3 +31,4 @@ class ProfileLocalDataSource {
     return;
   }
 }
+

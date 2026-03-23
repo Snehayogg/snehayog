@@ -13,9 +13,9 @@ import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  final ProfileStateManager stateManager;
+  final ProfileStateManager? stateManager;
 
-  const EditProfileScreen({super.key, required this.stateManager});
+  const EditProfileScreen({super.key, this.stateManager});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -24,21 +24,30 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late ProfileStateManager _effectiveStateManager;
 
   @override
   void initState() {
     super.initState();
+    
+    // Resolve stateManager: either from widget or from context
+    if (widget.stateManager != null) {
+      _effectiveStateManager = widget.stateManager!;
+    } else {
+      _effectiveStateManager = Provider.of<ProfileStateManager>(context, listen: false);
+    }
+
     // Initialize controller with current name
     // Using a post-frame callback to avoid building widget during build if notifyListeners is called
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.stateManager.startEditing();
+      _effectiveStateManager.startEditing();
     });
   }
 
   Future<void> _handleSave() async {
     if (_formKey.currentState!.validate()) {
       try {
-        await widget.stateManager.saveProfile();
+        await _effectiveStateManager.saveProfile();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -107,7 +116,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
 
       if (image != null) {
-        await widget.stateManager.updateProfilePhoto(image.path);
+        await _effectiveStateManager.updateProfilePhoto(image.path);
         // Assuming updateProfilePhoto updates the stateManager.userData['profilePic']
       }
     } catch (e) {
@@ -123,7 +132,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
-      value: widget.stateManager,
+      value: _effectiveStateManager,
       child: Scaffold(
         backgroundColor: AppColors.backgroundPrimary,
         appBar: AppBar(
@@ -135,7 +144,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             icon: const Icon(Icons.arrow_back_ios_new,
                 color: AppColors.textPrimary, size: 20),
             onPressed: () {
-              widget.stateManager.cancelEditing();
+              _effectiveStateManager.cancelEditing();
               Navigator.pop(context);
             },
           ),
@@ -183,7 +192,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           canPop: false,
           onPopInvokedWithResult: (didPop, result) async {
             if (didPop) return;
-            widget.stateManager.cancelEditing();
+            _effectiveStateManager.cancelEditing();
             if (context.mounted) Navigator.pop(context);
           },
           child: SingleChildScrollView(
@@ -355,6 +364,66 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               }
                               return null;
                             },
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                    left: 4.0, bottom: 8.0),
+                                child: Text(
+                                  'Link',
+                                  style: AppTypography.labelSmall.copyWith(
+                                    color: AppColors.textSecondary,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ),
+                              TextFormField(
+                                controller: manager.websiteController,
+                                style: AppTypography.bodyLarge.copyWith(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: AppTypography.weightMedium,
+                                ),
+                                keyboardType: TextInputType.url,
+                                decoration: InputDecoration(
+                                  hintText: 'https://yourwebsite.com',
+                                  hintStyle: const TextStyle(
+                                      color: AppColors.textTertiary),
+                                  prefixIcon: Icon(Icons.link_rounded,
+                                      color: AppColors.primary
+                                          .withValues(alpha: 0.7)),
+                                  filled: true,
+                                  fillColor: AppColors.backgroundSecondary,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 16),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.xl),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.borderPrimary),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.xl),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.primary, width: 1.5),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.xl),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.error, width: 1),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.xl),
+                                    borderSide: const BorderSide(
+                                        color: AppColors.error, width: 1.5),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       );

@@ -1,7 +1,7 @@
 import express from 'express';
 import { asyncHandler } from '../../middleware/errorHandler.js';
-import adService from '../../services/adService.js';
-import redisService from '../../services/redisService.js';
+import adService from '../../services/adServices/adService.js';
+import redisService from '../../services/caching/redisService.js';
 
 const router = express.Router();
 

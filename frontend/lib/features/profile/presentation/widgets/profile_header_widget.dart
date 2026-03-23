@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/core/providers/user_data_providers.dart';
@@ -101,6 +102,43 @@ class ProfileHeaderWidget extends ConsumerWidget {
               color: AppColors.textSecondary,
             ),
           ),
+          if (stateManager.userData?['websiteUrl'] != null &&
+              stateManager.userData!['websiteUrl'].toString().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () async {
+                final urlStr = stateManager.userData!['websiteUrl'].toString();
+                final uri = Uri.tryParse(urlStr.startsWith('http')
+                    ? urlStr
+                    : 'https://$urlStr');
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.link,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      stateManager.userData!['websiteUrl'],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _buildActionButtons(stateManager),
         ],

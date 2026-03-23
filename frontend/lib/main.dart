@@ -6,10 +6,10 @@ import 'package:firebase_core/firebase_core.dart'; // Ensure Firebase is importe
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:async';
-import 'package:vayu/features/video/presentation/screens/homescreen.dart';
+import 'package:vayu/features/video/feed/presentation/screens/homescreen.dart';
 import 'package:vayu/features/onboarding/presentation/screens/splash_screen.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:vayu/features/video/presentation/screens/video_screen.dart';
+import 'package:vayu/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
 import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
@@ -20,12 +20,13 @@ import 'package:vayu/features/onboarding/data/services/gallery_permission_servic
 import 'package:vayu/features/onboarding/presentation/screens/welcome_onboarding_screen.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
+import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:vayu/core/providers/video_providers.dart';
 import 'package:vayu/shared/services/error_logging_service.dart';
+import 'package:vayu/shared/services/deep_link_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,10 +107,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     ErrorLoggingService.logAppLifecycle('started');
+    
+    // Initialize Deep Link Service
+    DeepLinkService().initialize();
   }
 
   @override
   void dispose() {
+    DeepLinkService().dispose();
     _sub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -510,3 +515,4 @@ class AppNavigatorObserver extends NavigatorObserver {
     } catch (_) {}
   }
 }
+

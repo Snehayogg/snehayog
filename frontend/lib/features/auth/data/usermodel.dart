@@ -10,6 +10,7 @@ class UserModel {
   final DateTime? createdAt;
   final String? bio;
   final String? location;
+  final String? websiteUrl;
 
   UserModel({
     required this.id,
@@ -23,6 +24,7 @@ class UserModel {
     this.createdAt,
     this.bio,
     this.location,
+    this.websiteUrl,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -59,6 +61,7 @@ class UserModel {
         
         bio: json['bio']?.toString(),
         location: json['location']?.toString(),
+        websiteUrl: json['websiteUrl']?.toString(),
       );
     } catch (e) {
       // Return a safe minimal fallback if parsing utterly fails
@@ -85,6 +88,7 @@ class UserModel {
       'createdAt': createdAt?.toIso8601String(),
       'bio': bio,
       'location': location,
+      'websiteUrl': websiteUrl,
     };
   }
 
@@ -100,6 +104,7 @@ class UserModel {
     DateTime? createdAt,
     String? bio,
     String? location,
+    String? websiteUrl,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -113,6 +118,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       bio: bio ?? this.bio,
       location: location ?? this.location,
+      websiteUrl: websiteUrl ?? this.websiteUrl,
     );
   }
 }

@@ -26,6 +26,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Automatic Redirection for Referral Links -->
+    <script>
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const ref = urlParams.get('ref');
+            const isAndroid = /Android/i.test(navigator.userAgent);
+            
+            // If it's a referral link and we're on Android, redirect to Play Store
+            // This acts as a fallback if the app isn't installed.
+            if (ref && isAndroid) {
+                // Short delay to ensure browser doesn't block the redirect
+                setTimeout(function() {
+                    window.location.href = "https://play.google.com/store/apps/details?id=com.snehayog.app";
+                }, 500);
+            }
+        })();
+    </script>
     
     <style>
         :root {

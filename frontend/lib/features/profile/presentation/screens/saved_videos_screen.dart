@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/services/video_service.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/video/presentation/screens/video_screen.dart';
+import 'package:vayu/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_screen.dart';
-import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayu/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
+import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'dart:ui';
 
 class SavedVideosScreen extends StatefulWidget {
@@ -257,3 +257,4 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
     );
   }
 }
+

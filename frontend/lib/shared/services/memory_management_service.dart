@@ -1,6 +1,6 @@
 // Removed unused import
 import 'package:vayu/shared/utils/enhanced_controller_disposal.dart';
-import 'package:vayu/features/video/presentation/managers/video_controller_manager.dart';
+import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'dart:async';
 
 /// Memory Management Service
@@ -153,3 +153,4 @@ class MemoryManagementService {
 
 /// Global memory management service instance
 final memoryManagementService = MemoryManagementService();
+

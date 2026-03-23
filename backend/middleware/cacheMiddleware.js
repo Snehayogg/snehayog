@@ -1,4 +1,4 @@
-import redisService from '../services/redisService.js';
+import redisService from '../services/caching/redisService.js';
 
 /**
  * Cache Middleware for Express routes

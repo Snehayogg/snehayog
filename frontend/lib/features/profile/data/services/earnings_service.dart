@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
@@ -138,3 +138,4 @@ class EarningsService {
       return 0.0;
   }
 }
+

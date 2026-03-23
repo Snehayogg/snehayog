@@ -1,7 +1,7 @@
 import express from 'express';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { validatePaymentData } from '../../middleware/errorHandler.js';
-import adService from '../../services/adService.js';
+import adService from '../../services/adServices/adService.js';
 import User from '../../models/User.js';
 import Video from '../../models/Video.js';
 import { verifyToken } from '../../utils/verifytoken.js';

@@ -5,7 +5,7 @@
  * requested API version (X-API-Version header).
  */
 
-import cloudflareR2Service from '../../services/cloudflareR2Service.js';
+import cloudflareR2Service from '../../services/uploadServices/cloudflareR2Service.js';
 
 export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   if (!video) return null;

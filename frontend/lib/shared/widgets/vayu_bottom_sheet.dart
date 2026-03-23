@@ -77,6 +77,7 @@ class VayuBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return ClipRRect(
       borderRadius: BorderRadius.vertical(
         top: Radius.circular(AppRadius.xl),
@@ -116,19 +117,19 @@ class VayuBottomSheet extends StatelessWidget {
                   Container(
                     width: 40,
                     height: 4,
-                    margin: EdgeInsets.symmetric(vertical: AppSpacing.spacing3),
+                    margin: EdgeInsets.symmetric(vertical: isLandscape ? 8 : AppSpacing.spacing3),
                     decoration: BoxDecoration(
                       color: AppColors.textTertiary.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      borderRadius: BorderRadius.circular(100), // Fixed pill radius
                     ),
                   ),
                 if (title != null || actions != null)
                   Padding(
                     padding: EdgeInsets.fromLTRB(
-                      AppSpacing.spacing5,
-                      AppSpacing.spacing2,
-                      AppSpacing.spacing3,
-                      AppSpacing.spacing2,
+                      isLandscape ? 16 : AppSpacing.spacing5,
+                      isLandscape ? 8 : AppSpacing.spacing2,
+                      isLandscape ? 12 : AppSpacing.spacing3,
+                      isLandscape ? 8 : AppSpacing.spacing2,
                     ),
                     child: Row(
                       children: [
@@ -137,7 +138,9 @@ class VayuBottomSheet extends StatelessWidget {
                             child: Text(
                               title!,
                               style: TextStyle(
-                                fontSize: AppTypography.fontSizeXL,
+                                fontSize: MediaQuery.of(context).orientation == Orientation.landscape 
+                                    ? 20.0 
+                                    : AppTypography.fontSizeXL,
                                 fontWeight: AppTypography.weightBold,
                                 color: AppColors.textPrimary,
                               ),
@@ -158,7 +161,7 @@ class VayuBottomSheet extends StatelessWidget {
                       color: AppColors.white.withValues(alpha: 0.05)),
                 Flexible(
                   child: Padding(
-                    padding: padding ?? EdgeInsets.all(AppSpacing.spacing5),
+                    padding: padding ?? EdgeInsets.all(isLandscape ? 16 : AppSpacing.spacing5),
                     child: child,
                   ),
                 ),

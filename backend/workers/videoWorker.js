@@ -1,17 +1,18 @@
 import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import Video from '../models/Video.js';
-import hybridVideoService from '../services/hybridVideoService.js';
-import cloudflareR2Service from '../services/cloudflareR2Service.js';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { redisOptions } from '../services/queueService.js';
+import hybridVideoService from '../services/uploadServices/hybridVideoService.js';
+import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
+import queueService from '../services/yugFeedServices/queueService.js';
+import { redisOptions } from '../services/yugFeedServices/queueService.js'; // Updated path for redisOptions
 import User from '../models/User.js';
-import redisService from '../services/redisService.js';
+import redisService from '../services/caching/redisService.js';
 import { invalidateCache, VideoCacheKeys } from '../middleware/cacheMiddleware.js';
-import RecommendationService from '../services/recommendationService.js';
-import localModerationService from '../services/localModerationService.js';
+import recommendationService from '../services/yugFeedServices/recommendationService.js';
+import moderationService from '../services/uploadServices/localModerationService.js';
 
 dotenv.config();
 

@@ -1,7 +1,7 @@
-import '../../features/video/data/datasources/video_remote_datasource.dart';
-import '../../features/video/data/repositories/video_repository_impl.dart';
-import '../../features/video/domain/repositories/video_repository.dart';
-import 'package:vayu/features/video/presentation/managers/video_provider.dart';
+import 'package:vayu/features/video/core/data/datasources/video_remote_datasource.dart';
+import 'package:vayu/features/video/core/data/repositories/video_repository_impl.dart';
+import 'package:vayu/features/video/core/domain/repositories/video_repository.dart';
+import 'package:vayu/features/video/core/presentation/managers/video_provider.dart';
 
 /// Simple service locator for dependency injection
 /// This provides a lightweight alternative to external DI libraries
@@ -34,3 +34,4 @@ class ServiceLocator {
 
 /// Global service locator instance
 final serviceLocator = ServiceLocator();
+

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/video/presentation/screens/video_screen.dart';
-import 'package:vayu/features/video/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/presentation/screens/video_screen.dart';
+import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
 import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/features/video/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
+import 'package:vayu/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayu/shared/utils/format_utils.dart';
+import 'package:vayu/features/video/edit/presentation/screens/edit_video_details.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -48,16 +50,6 @@ class ProfileVideosWidget extends StatelessWidget {
     });
   }
 
-  String _formatViews(int views) {
-    if (views >= 1000000) {
-      return '${(views / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
-    } else if (views >= 1000) {
-      return '${(views / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
-    } else {
-      return views.toString();
-    }
-  }
-
   bool _isVideoProcessing(VideoModel video) {
     final status = video.processingStatus.toLowerCase();
     return video.isOptimistic ||
@@ -69,6 +61,50 @@ class ProfileVideosWidget extends StatelessWidget {
   String _processingLabel(VideoModel video) {
     final progress = video.processingProgress.clamp(0, 100);
     return 'Processing $progress%';
+  }
+
+  Widget _buildCrossPostStatus(VideoModel video) {
+    if (video.crossPostStatus == null || video.crossPostStatus!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: video.crossPostStatus!.entries.map((entry) {
+          final platform = entry.key;
+          final status = entry.value.toLowerCase();
+          
+          IconData icon;
+          Color iconColor;
+          
+          switch (platform) {
+            case 'youtube': icon = Icons.play_circle_filled; break;
+            case 'instagram': icon = Icons.camera_alt; break;
+            case 'facebook': icon = Icons.facebook; break;
+            case 'linkedin': icon = Icons.work; break;
+            default: icon = Icons.share;
+          }
+
+          switch (status) {
+            case 'completed': iconColor = Colors.green; break;
+            case 'failed': iconColor = Colors.red; break;
+            case 'processing': iconColor = Colors.orange; break;
+            default: iconColor = Colors.white70;
+          }
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+            child: Icon(icon, size: 12, color: iconColor),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   /// **FIXED: Keep normalization only for navigation routing (which player to use)**
@@ -426,7 +462,7 @@ class ProfileVideosWidget extends StatelessWidget {
                 if (isSeries)
                   Positioned(
                     top: 8,
-                    right: 8,
+                    right: (manager.isOwner && !manager.isSelecting && _normalizedVideoType(video) == 'vayu') ? 36 : 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 3),
@@ -492,62 +528,48 @@ class ProfileVideosWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (isProcessing)
+                // Cross Post Status
+                if (!isProcessing && video.crossPostStatus != null)
                   Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _processingLabel(video),
-                        style: const TextStyle(
-                          color: AppColors.textInverse,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                    top: 8,
+                    left: 8,
+                    child: _buildCrossPostStatus(video),
+                  ),
+                
+                // EDIT ICON (For Vayu/Long-form only, if owner)
+                if (manager.isOwner && !manager.isSelecting && _normalizedVideoType(video) == 'vayu')
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () async {
+                        final result = await Navigator.push<Map<String, dynamic>>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditVideoDetails(video: video),
+                          ),
+                        );
+                        
+                         if (result != null) {
+                           // Fully refresh state to show updated tags/title
+                           manager.refreshData();
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.edit_outlined,
+                          color: Colors.white,
+                          size: 16,
                         ),
                       ),
                     ),
                   ),
 
-                // Views Overlay
-                if (!isProcessing)
-                  Positioned(
-                    bottom: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.visibility_rounded,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatViews(video.views),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 // Selection Overlay
                 if (isSelected)
                   Positioned.fill(
@@ -574,6 +596,36 @@ class ProfileVideosWidget extends StatelessWidget {
                             size: 24,
                           ),
                         ),
+                      ),
+                    ),
+                  ),
+
+                // Video views count
+                if (!isProcessing)
+                  Positioned(
+                    bottom: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.play_arrow_outlined,
+                              color: Colors.white, size: 12),
+                          const SizedBox(width: 2),
+                          Text(
+                            FormatUtils.formatViews(video.views),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -741,3 +793,4 @@ class ProfileVideosWidget extends StatelessWidget {
     );
   }
 }
+

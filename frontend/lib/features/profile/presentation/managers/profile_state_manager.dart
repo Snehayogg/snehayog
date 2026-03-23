@@ -4,13 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/features/video/presentation/managers/video_provider.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/presentation/managers/video_provider.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
 import 'package:vayu/features/profile/data/services/user_service.dart';
 import 'package:vayu/features/profile/data/services/payment_setup_service.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
@@ -67,6 +67,7 @@ class ProfileStateManager extends ChangeNotifier {
 
   // Controllers
   final TextEditingController nameController = TextEditingController();
+  final TextEditingController websiteController = TextEditingController();
 
   // Cache configuration removed
 
@@ -253,7 +254,11 @@ class ProfileStateManager extends ChangeNotifier {
       }
       
       _userData = Map<String, dynamic>.from(normalizedData);
+      AppLogger.log('🔄 ProfileStateManager: Final _userData keys: ${_userData?.keys.toList()}');
+      AppLogger.log('🔗 ProfileStateManager: Final websiteUrl: ${_userData?['websiteUrl']}');
+      
       nameController.text = _userData?['name']?.toString() ?? '';
+      websiteController.text = _userData?['websiteUrl']?.toString() ?? '';
 
       _isProfileLoading = false;
       _isLoading = false;
@@ -885,6 +890,7 @@ class ProfileStateManager extends ChangeNotifier {
     if (_userData != null) {
       _isEditing = true;
       nameController.text = _userData!['name'] ?? '';
+      websiteController.text = _userData!['websiteUrl'] ?? '';
       notifyListenersSafe();
     }
   }
@@ -892,6 +898,7 @@ class ProfileStateManager extends ChangeNotifier {
   void cancelEditing() {
     _isEditing = false;
     nameController.clear();
+    websiteController.clear();
     notifyListenersSafe();
   }
 
@@ -902,14 +909,17 @@ class ProfileStateManager extends ChangeNotifier {
         notifyListenersSafe();
 
         final newName = nameController.text.trim();
-        await _saveProfileData(newName, _userData!['profilePic']);
+        final newWebsite = websiteController.text.trim();
+        await _saveProfileData(newName, _userData!['profilePic'], newWebsite);
 
         _userData!['name'] = newName;
+        _userData!['websiteUrl'] = newWebsite;
         _isEditing = false;
         _isLoading = false;
         notifyListenersSafe();
 
         nameController.clear();
+        websiteController.clear();
         notifyListenersSafe();
       } catch (e) {
         _isLoading = false;
@@ -930,7 +940,8 @@ class ProfileStateManager extends ChangeNotifier {
           // Already a URL, just save it
           AppLogger.log(
               '✅ ProfileStateManager: Photo is already a URL, saving directly');
-          await _saveProfileData(_userData!['name'], profilePicPath);
+          await _saveProfileData(
+              _userData!['name'], profilePicPath, _userData!['websiteUrl']);
           _userData!['profilePic'] = profilePicPath;
           _isPhotoLoading = false;
           notifyListenersSafe();
@@ -950,7 +961,8 @@ class ProfileStateManager extends ChangeNotifier {
             '✅ ProfileStateManager: Photo uploaded successfully: $uploadedUrl');
 
         // Now save the URL to backend
-        await _saveProfileData(_userData!['name'], uploadedUrl);
+        await _saveProfileData(
+            _userData!['name'], uploadedUrl, _userData!['websiteUrl']);
         _userData!['profilePic'] = uploadedUrl;
         _isPhotoLoading = false;
         notifyListenersSafe();
@@ -1211,7 +1223,8 @@ class ProfileStateManager extends ChangeNotifier {
   // These were removed because backend is now the source of truth and
   // we don't want to override backend data with old SharedPreferences values
 
-  Future<void> _saveProfileData(String name, String? profilePic) async {
+  Future<void> _saveProfileData(
+      String name, String? profilePic, String? websiteUrl) async {
     try {
       AppLogger.log(
           '💾 ProfileStateManager: Saving profile data to backend...');
@@ -1231,6 +1244,7 @@ class ProfileStateManager extends ChangeNotifier {
         googleId: googleId,
         name: name,
         profilePic: profilePic,
+        websiteUrl: websiteUrl,
       );
 
       if (success) {
@@ -1246,6 +1260,7 @@ class ProfileStateManager extends ChangeNotifier {
             'name': name,
             'email': _userData?['email'] ?? '',
             'profilePic': profilePic ?? _userData?['profilePic'] ?? '',
+            'websiteUrl': websiteUrl ?? _userData?['websiteUrl'] ?? '',
           };
           await prefs.setString(
               'fallback_user', jsonEncode(updatedFallbackData));
@@ -1265,8 +1280,14 @@ class ProfileStateManager extends ChangeNotifier {
               '🧹 ProfileStateManager: Cleared SmartCache after profile update');
         }
 
+        // **NEW: Invalidate AuthService memory cache to prevent stale data in other parts of the app**
+        AuthService().clearMemoryCache();
+        AppLogger.log(
+            '🧹 ProfileStateManager: Cleared AuthService memory cache after profile update');
+
         // Update local state immediately
         _userData?['name'] = name;
+        _userData?['websiteUrl'] = websiteUrl;
         if (profilePic != null) {
           _userData?['profilePic'] = profilePic;
         }
@@ -1313,6 +1334,7 @@ class ProfileStateManager extends ChangeNotifier {
 
     // Reset controllers
     nameController.clear();
+    websiteController.clear();
 
     // Clear smart cache
     if (_smartCacheInitialized) {
@@ -1946,3 +1968,4 @@ class ProfileStateManager extends ChangeNotifier {
     super.dispose();
   }
 }
+

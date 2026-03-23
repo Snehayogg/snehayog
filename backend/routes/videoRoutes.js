@@ -33,6 +33,8 @@ router.get('/', videoController.getFeed);
 router.get('/user/:googleId', passiveVerifyToken, videoController.getUserVideos);
 router.get('/saved', verifyToken, videoController.getSavedVideos);
 router.get('/:id', videoController.getVideoById);
+router.get('/creator/analytics/:userId', verifyToken, videoController.getCreatorAnalytics);
+
 
 /**
  * Video Interaction Routes

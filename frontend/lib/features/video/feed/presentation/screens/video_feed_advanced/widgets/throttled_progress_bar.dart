@@ -1,0 +1,228 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+import 'package:flutter/services.dart';
+import 'package:vayu/core/design/colors.dart';
+
+class ThrottledProgressBar extends StatefulWidget {
+  final VideoPlayerController controller;
+  final double screenWidth;
+  final Function(dynamic) onSeek;
+
+  const ThrottledProgressBar({
+    Key? key,
+    required this.controller,
+    required this.screenWidth,
+    required this.onSeek,
+  }) : super(key: key);
+
+  @override
+  State<ThrottledProgressBar> createState() => _ThrottledProgressBarState();
+}
+
+class _ThrottledProgressBarState extends State<ThrottledProgressBar> {
+  double _progress = 0.0;
+  bool _isDragging = false; // **NEW: Track if user is currently seeking**
+  Timer? _updateTimer;
+  DateTime _lastUpdate = DateTime.now();
+  double _lastVibrateProgress = 0.0; // **NEW: Track last haptic position**
+  static const Duration _updateInterval = Duration(milliseconds: 33); // ~30fps
+
+  @override
+  void initState() {
+    super.initState();
+    _updateProgress();
+    widget.controller.addListener(_onControllerUpdate);
+  }
+
+  @override
+  void didUpdateWidget(ThrottledProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      // **CRITICAL: Swap listeners when controller changes (e.g. after Dubbing)**
+      try {
+        oldWidget.controller.removeListener(_onControllerUpdate);
+      } catch (_) {
+        // Old controller might already be disposed
+      }
+      _updateProgress(); // Sync to new controller state
+      widget.controller.addListener(_onControllerUpdate);
+    }
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    try {
+      widget.controller.removeListener(_onControllerUpdate);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  void _onControllerUpdate() {
+    // **NEW: Don't update progress from controller while dragging/seeking**
+    if (_isDragging) return;
+
+    final now = DateTime.now();
+    final timeSinceLastUpdate = now.difference(_lastUpdate);
+
+    if (timeSinceLastUpdate >= _updateInterval) {
+      _updateProgress();
+      _lastUpdate = now;
+    } else {
+      _updateTimer?.cancel();
+      final remainingTime = _updateInterval - timeSinceLastUpdate;
+      _updateTimer = Timer(remainingTime, () {
+        if (mounted) {
+          _updateProgress();
+          _lastUpdate = DateTime.now();
+        }
+      });
+    }
+  }
+
+  void _updateProgress() {
+    if (!mounted) return;
+    Duration duration;
+    Duration position;
+    try {
+      if (!widget.controller.value.isInitialized) return;
+      duration = widget.controller.value.duration;
+      position = widget.controller.value.position;
+    } catch (_) {
+      // Controller was likely disposed; ignore updates.
+      return;
+    }
+    final totalMs = duration.inMilliseconds;
+    final posMs = position.inMilliseconds;
+    final newProgress = totalMs > 0 ? (posMs / totalMs).clamp(0.0, 1.0) : 0.0;
+
+    if ((newProgress - _progress).abs() > 0.001) {
+      setState(() {
+        _progress = newProgress;
+      });
+    }
+  }
+
+  void _handleSeekUpdate(dynamic details) {
+    // Calculate new progress based on touch/drag position
+    // We use globalPosition.dx but map it to the local RenderBox to ensure accuracy
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final Offset localPosition = renderBox.globalToLocal(
+        details is DragUpdateDetails
+            ? details.globalPosition
+            : (details as TapDownDetails).globalPosition);
+
+    final newProgress = (localPosition.dx / widget.screenWidth).clamp(0.0, 1.0);
+
+    setState(() {
+      _progress = newProgress;
+    });
+
+    widget.onSeek(details);
+
+    // **HAPTIC: Vibrate when reaching start or end**
+    if (newProgress <= 0.0 || newProgress >= 1.0) {
+      if ((newProgress - _lastVibrateProgress).abs() > 0.01) {
+        HapticFeedback.vibrate(); // **STRONGER: Distinct vibration at ends**
+        _lastVibrateProgress = newProgress;
+      }
+    } else if ((newProgress - _lastVibrateProgress).abs() >= 0.02) {
+      // **NEW: Increased frequency (2% notches) and stronger feel (lightImpact)**
+      HapticFeedback.lightImpact();
+      _lastVibrateProgress = newProgress;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) {
+        setState(() {
+          _isDragging = true;
+          _lastVibrateProgress =
+              _progress; // **FIX: Reset on touch to prevent dead zones**
+        });
+        HapticFeedback.mediumImpact(); // **STRONGER: Initial touch feedback**
+        _handleSeekUpdate(details);
+      },
+      onTapUp: (_) => setState(() => _isDragging = false),
+      onTapCancel: () => setState(() => _isDragging = false),
+      onHorizontalDragStart: (details) {
+        setState(() {
+          _isDragging = true;
+          _lastVibrateProgress = _progress; // **FIX: Reset on drag start**
+        });
+        HapticFeedback.mediumImpact();
+      },
+      onHorizontalDragUpdate: (details) => _handleSeekUpdate(details),
+      onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+      onHorizontalDragCancel: () => setState(() => _isDragging = false),
+      child: Container(
+        height:
+            19, // **TIGHTENED hit target to prevent accidental touch from above**
+        color: Colors.transparent,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            // 1. Background track (Height animates, width is constant)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              height: _isDragging ? 6 : 2,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color:
+                    AppColors.white.withValues(alpha: _isDragging ? 0.3 : 0.2),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+
+            // 2. Progress bar filled portion
+            // We use a regular Positioned width to avoid animation flicker during seek
+            Positioned(
+              left: 0,
+              width: widget.screenWidth * _progress,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                height: _isDragging ? 6 : 2, // Height animates on hold
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+
+            // 3. Seek handle (thumb)
+            // Positioned updates instantly (no animation)
+            Positioned(
+              left: ((widget.screenWidth * _progress) - (_isDragging ? 7 : 1.5))
+                  .clamp(0.0, widget.screenWidth - (_isDragging ? 14 : 3)),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOutCubic,
+                width: _isDragging ? 10 : 3, // Size animates on hold
+                height: _isDragging ? 8 : 2,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                  boxShadow: _isDragging
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

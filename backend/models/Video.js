@@ -241,6 +241,24 @@ const videoSchema = new mongoose.Schema({
     type: Map,
     of: String,
     default: {}
+  },
+  
+  // **NEW: Multi-Platform Cross-Posting Status**
+  // Tracks the status of publishing to external platforms (youtube, instagram, facebook, linkedin)
+  crossPostStatus: {
+    type: Map,
+    of: String,
+    default: {} // e.g. { youtube: 'pending', instagram: 'completed', facebook: 'failed' }
+  },
+  crossPostDetails: {
+    type: Map,
+    of: mongoose.Schema.Types.Mixed,
+    default: {} // Stores platform-specific info like video IDs or error messages
+  },
+  crossPostProgress: {
+    type: Map,
+    of: Number,
+    default: {} // e.g. { youtube: 45, instagram: 100 }
   }
 }, {
   timestamps: true

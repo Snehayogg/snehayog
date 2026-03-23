@@ -153,6 +153,37 @@ const UserSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     }
+  },
+  
+  // **NEW: Social Media Accounts for Cross-Posting**
+  // Stores OAuth tokens and basic profile info for linked accounts
+  socialAccounts: {
+    youtube: {
+      connected: { type: Boolean, default: false },
+      accessToken: String,
+      refreshToken: String,
+      expiryDate: Number,
+      channelId: String,
+      channelTitle: String
+    },
+    instagram: {
+      connected: { type: Boolean, default: false },
+      accessToken: String,
+      instagramUserId: String,
+      userName: String
+    },
+    facebook: {
+      connected: { type: Boolean, default: false },
+      accessToken: String,
+      pageId: String,
+      pageName: String
+    },
+    linkedin: {
+      connected: { type: Boolean, default: false },
+      accessToken: String,
+      urn: String,
+      name: String
+    }
   }
 }, {
   timestamps: true

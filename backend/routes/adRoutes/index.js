@@ -6,7 +6,7 @@ import analyticsRoutes from './analyticsRoutes.js';
 import userRoutes from './userRoutes.js';
 import validationRoutes from './validationRoutes.js';
 import impressionRoutes from './impressionRoutes.js';
-import adTargetingRoutes from '../adTargetingRoutes.js';
+import adTargetingRoutes from './adTargetingRoutes.js';
 
 const router = express.Router();
 

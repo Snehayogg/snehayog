@@ -4,7 +4,7 @@ import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/features/agent/data/autonomous_agent_service.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/features/auth/data/usermodel.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';
 
 // Simple model for chat messages
@@ -446,3 +446,4 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     );
   }
 }
+

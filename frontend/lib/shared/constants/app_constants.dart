@@ -43,4 +43,7 @@ class AppConstants {
   // **DEPRECATED: Use videoViewCountThreshold or adViewCountThreshold instead**
   @Deprecated('Use videoViewCountThreshold or adViewCountThreshold')
   static const Duration viewCountThreshold = videoViewCountThreshold;
+
+  // **NEW: UI Labels**
+  static const String audioButtonLabel = 'Audio';
 }

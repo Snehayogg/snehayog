@@ -7,7 +7,7 @@ import 'package:vayu/features/ads/data/carousel_ad_model.dart';
 import 'package:vayu/features/ads/data/services/carousel_ad_service.dart';
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
-// import 'package:vayu/features/video/data/services/video_service.dart'; // Unused import removed
+// import 'package:vayu/features/video/core/data/services/video_service.dart'; // Unused import removed
 // import 'package:url_launcher/url_launcher.dart'; // Unused import removed
 import 'package:vayu/shared/services/share_service.dart';
 import 'package:vayu/core/design/colors.dart';
@@ -921,3 +921,4 @@ class _CarouselVideoAdItemState extends State<_CarouselVideoAdItem> {
     );
   }
 }
+

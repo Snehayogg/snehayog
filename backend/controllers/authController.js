@@ -59,7 +59,7 @@ export const googleSignIn = async (req, res) => {
 
     // **NEW: Merge Guest History from Device ID to User ID**
     if (deviceId && deviceId !== 'anon') {
-      import('../services/feedQueueService.js').then(module => {
+      import('../services/yugFeedServices/feedQueueService.js').then(module => {
         const FeedQueueService = module.default;
         FeedQueueService.mergeGuestHistory(deviceId, user.googleId).catch(err => {
           console.error('⚠️ AuthController: mergeGuestHistory error:', err.message);

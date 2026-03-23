@@ -7,15 +7,15 @@ import View from '../models/View.js';
 import WatchHistory from '../models/WatchHistory.js';
 import FeedHistory from '../models/FeedHistory.js';
 import AdImpression from '../models/AdImpression.js';
-import redisService from '../services/redisService.js';
-import FeedQueueService from '../services/feedQueueService.js';
-import RecommendationService from '../services/recommendationService.js';
-import queueService from '../services/queueService.js';
+import redisService from '../services/caching/redisService.js';
+import FeedQueueService from '../services/yugFeedServices/feedQueueService.js';
+import RecommendationService from '../services/yugFeedServices/recommendationService.js';
+import queueService from '../services/yugFeedServices/queueService.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
 import { AD_CONFIG } from '../constants/index.js';
 import { calculateVideoHash, convertLikedByToGoogleIds } from '../utils/videoUtils.js';
 import { serializeVideo, serializeVideos } from '../utils/serializers/videoSerializer.js';
-import cloudflareR2Service from '../services/cloudflareR2Service.js';
+import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
 
 let hybridVideoService;
 
@@ -277,7 +277,7 @@ export const uploadVideo = async (req, res) => {
 
     // 6. Determine video type based on aspect ratio (landscape vs portrait)
     if (!hybridVideoService) {
-      const { default: service } = await import('../services/hybridVideoService.js');
+      const { default: service } = await import('../services/uploadServices/hybridVideoService.js');
       hybridVideoService = service;
     }
 
@@ -365,7 +365,7 @@ export const uploadVideo = async (req, res) => {
     (async () => {
       try {
         // Cloudflare R2 Upload & Queueing
-        const { default: cloudflareR2Service } = await import('../services/cloudflareR2Service.js');
+        const { default: cloudflareR2Service } = await import('../services/uploadServices/cloudflareR2Service.js');
         await cloudflareR2Service.uploadFileToR2(tempFilePath, rawVideoKey, tempMimeType);
         
         await queueService.addVideoJob({
@@ -376,6 +376,8 @@ export const uploadVideo = async (req, res) => {
         });
 
         console.log(`✅ Upload: Background processing complete for video ${video._id}`);
+
+        // Auto-trigger Dubbing removed (sunsetted)
       } catch (bgError) {
         console.error(`❌ Upload: Background processing failed for video ${video._id}:`, bgError);
       } finally {
@@ -707,85 +709,37 @@ export const getFeed = async (req, res) => {
     let hasMore = false;
     let total = 0;
 
-    if (type === 'vayu') {
-      // **PROGRESSIVE LOADING: Use standard pagination for Vayu (Long-form)**
-      // Bypass FeedQueueService to ensure the user can scroll through ALL videos
+    // **UNIFIED FEED: Use Queue-based system for ALL video types (Yog & Vayu)**
+    console.log(`📡 Feed Request - type: ${type}, user: ${userIdentifier}, limit: ${limitNum}`);
+    
+    // Clear queue if requested (pull-to-refresh)
+    if (clearSession === 'true') {
+      console.log(`🧹 Clearing ${type} queue for refresh`);
+      await FeedQueueService.clearQueue(userIdentifier, type);
+    }
+    
+    finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
+    console.log(`✅ Queue Results: ${finalVideos.length} videos`);
+    
+    // Fallback if queue is empty or something failed
+    if (finalVideos.length === 0) {
+      console.log('⚠️ Queue empty, using fallback pagination');
       const skip = (pageNum - 1) * limitNum;
-      
       const query = { 
-        videoType: 'vayu',
+        videoType: type,
         processingStatus: 'completed'
       };
-
-      // Check if there are ANY vayu videos in the database
-      const totalVayuCount = await Video.countDocuments({ videoType: 'vayu', processingStatus: 'completed' });
-      console.log('📊 Total Vayu videos in DB:', totalVayuCount);
       
-      // Also check landscape videos that might be misclassified
-      const landscapeVideos = await Video.find({ 
-        processingStatus: 'completed',
-        aspectRatio: { $gt: 1.0 }
-      }).select('videoName videoType aspectRatio duration').limit(5).lean();
-      
-      console.log('🎬 Landscape videos (AR > 1.0):', landscapeVideos.length);
-      if (landscapeVideos.length > 0) {
-        landscapeVideos.forEach((v, i) => {
-          console.log(`  ${i+1}. ${v.videoName} | Type: ${v.videoType} | AR: ${v.aspectRatio?.toFixed(2)} | Duration: ${v.duration}s`);
-        });
-      }
-
-      // Exclude own videos from feed if user is logged in
-      if (userId && userId !== 'anon' && userId !== 'undefined') {
-        const user = await User.findOne({ googleId: userId }).select('_id').lean();
-        if (user) {
-          console.log('👤 User found, excluding own videos from feed:', user._id);
-          query.uploader = { $ne: user._id };
-        }
-      } else {
-        console.log('ℹ️ No valid user, showing all videos');
-      }
-
-      console.log('📊 Vayu Query:', JSON.stringify(query));
-      [finalVideos, total] = await Promise.all([
-        Video.find(query)
-          .populate('uploader', 'name profilePic googleId')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limitNum)
-          .lean(),
-        Video.countDocuments(query)
-      ]);
-
-      console.log(`✅ Vayu Results: ${finalVideos.length} videos, Total: ${total}`);
-      if (finalVideos.length > 0) {
-        finalVideos.forEach((v, i) => {
-          console.log(`  ${i+1}. ${v.videoName} | Type: ${v.videoType} | AR: ${v.aspectRatio?.toFixed(2)} | Duration: ${v.duration}s`);
-        });
-      }
-
-      hasMore = skip + finalVideos.length < total;
-    } else {
-      // **DISCOVERY FEED: Use Queue-based system for Yog (Short-form)**
-      console.log('🧘 Yog Feed Request - type:', type, 'userIdentifier:', userIdentifier, 'limit:', limitNum);
-      
-      // Clear queue if requested (pull-to-refresh)
-      if (clearSession === 'true') {
-        console.log('🧹 Clearing Yog queue for refresh');
-        await FeedQueueService.clearQueue(userIdentifier, type);
-      }
-      
-      finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
-      console.log(`✅ Yog Queue Results: ${finalVideos.length} videos`);
-      if (finalVideos.length > 0) {
-        finalVideos.forEach((v, i) => {
-          console.log(`  ${i+1}. ${v.videoName} | Type: ${v.videoType} | AR: ${v.aspectRatio?.toFixed(2)} | Duration: ${v.duration}s`);
-        });
-      } else {
-        console.log('⚠️ Yog Queue returned NO videos!');
-      }
-      hasMore = finalVideos.length > 0;
-      total = 9999;
+      finalVideos = await Video.find(query)
+        .populate('uploader', 'name profilePic googleId')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean();
     }
+
+    hasMore = finalVideos.length > 0;
+    total = 9999; // Queue-based feeds use continuous loading
     
     // **NEW: Enforce max 2 consecutive videos per creator across all feed types**
     finalVideos = RecommendationService.enforceMaxConsecutive(finalVideos, 2);
@@ -1488,7 +1442,7 @@ export const updateVideo = async (req, res) => {
   try {
     const videoId = req.params.id;
     const googleId = req.user.googleId;
-    const { videoName } = req.body;
+    const { videoName, link, tags } = req.body;
 
     if (!videoName || videoName.trim() === '') {
       return res.status(400).json({ error: 'Video name is required' });
@@ -1507,6 +1461,20 @@ export const updateVideo = async (req, res) => {
 
     // Update metadata
     video.videoName = videoName.trim();
+    
+    // Optional fields
+    if (link !== undefined) {
+      video.link = link.trim();
+    }
+
+    if (tags !== undefined) {
+      if (Array.isArray(tags)) {
+        video.tags = tags.map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      } else if (typeof tags === 'string') {
+        video.tags = tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      }
+    }
+
     video.updatedAt = new Date();
     await video.save();
 
@@ -1657,5 +1625,164 @@ export const syncUserVideoArrays = async (req, res) => {
     res.json({ success: true, updatedUsers: totalUpdated });
   } catch (error) {
     res.status(500).json({ error: 'Sync failed' });
+  }
+};
+
+/**
+ * Creator Analytics Controller
+ * Aggregates stats for all videos owned by a creator
+ */
+export const getCreatorAnalytics = async (req, res) => {
+  try {
+    const { userId } = req.params; // This is the Google ID
+    
+    // Find internal user ID
+    const user = await User.findOne({ googleId: userId }).select('_id').lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const creatorId = user._id;
+
+    // 1. Get all videos for this creator
+    const videos = await Video.find({ uploader: creatorId }).lean();
+    if (!videos || videos.length === 0) {
+      return res.json({
+        core: { totalViews: 0, totalShares: 0, totalWatchTime: 0, avgWatchDuration: 0, skipRate: 0 },
+        topVideos: [],
+        dailyPerformance: [],
+        audience: { topLocations: [], activeTimes: [], newVsReturning: { new: 0, returning: 0 } }
+      });
+    }
+
+    const videoIds = videos.map(v => v._id);
+
+    // 2. Aggregate core metrics
+    const totalViews = videos.reduce((sum, v) => sum + (v.views || 0), 0);
+    const totalShares = videos.reduce((sum, v) => sum + (v.shares || 0), 0);
+    const totalSkips = videos.reduce((sum, v) => sum + (v.skipCount || 0), 0);
+    
+    // Aggregating from WatchHistory for more accurate duration/retention
+    const watchStats = await WatchHistory.aggregate([
+      { $match: { videoId: { $in: videoIds } } },
+      { 
+        $group: { 
+          _id: null, 
+          totalDuration: { $sum: "$watchDuration" },
+          avgDuration: { $avg: "$watchDuration" },
+          count: { $sum: 1 }
+        } 
+      }
+    ]);
+
+    const totalWatchTime = watchStats[0]?.totalDuration || 0;
+    const avgWatchDuration = watchStats[0]?.avgDuration || 0;
+    const skipRate = totalViews > 0 ? (totalSkips / totalViews) : 0;
+
+    // 3. Top Performing Videos (by views)
+    const topVideos = [...videos]
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 5)
+      .map(v => ({
+        id: v._id,
+        title: v.videoName,
+        views: v.views || 0,
+        shares: v.shares || 0,
+        watchTime: v.cachedWatchTime || 0
+      }));
+
+    // 4. Daily Performance (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const dailyStats = await WatchHistory.aggregate([
+      { 
+        $match: { 
+          videoId: { $in: videoIds },
+          watchedAt: { $gte: sevenDaysAgo }
+        } 
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$watchedAt" } },
+          views: { $sum: 1 },
+          watchTime: { $sum: "$watchDuration" }
+        }
+      },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    // 5. Audience Insights (Mocking geo for now as View doesn't have location yet)
+    // In a real scenario, we'd add location to the View/WatchHistory model
+    const topLocations = [
+      { name: 'India', value: 85 },
+      { name: 'USA', value: 5 },
+      { name: 'Canada', value: 3 },
+      { name: 'UK', value: 2 },
+      { name: 'Others', value: 5 }
+    ];
+
+    // New vs Returning viewers
+    const viewerStats = await WatchHistory.aggregate([
+      { $match: { videoId: { $in: videoIds } } },
+      {
+        $group: {
+          _id: "$userId",
+          watchCount: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          returning: { $sum: { $cond: [{ $gt: ["$watchCount", 1] }, 1, 0] } },
+          total: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const returningCount = viewerStats[0]?.returning || 0;
+    const totalViewers = viewerStats[0]?.total || 0;
+    const newCount = totalViewers - returningCount;
+
+    // Active times (by hour)
+    const hourlyStats = await WatchHistory.aggregate([
+      { $match: { videoId: { $in: videoIds } } },
+      {
+        $group: {
+          _id: { $hour: "$watchedAt" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    res.json({
+      core: {
+        totalViews,
+        totalShares,
+        totalWatchTime: Math.round(totalWatchTime / 60), // in minutes
+        avgWatchDuration: Math.round(avgWatchDuration), // in seconds
+        skipRate: parseFloat(skipRate.toFixed(2))
+      },
+      topVideos,
+      dailyPerformance: dailyStats.map(s => ({
+        date: s._id,
+        views: s.views,
+        watchTime: Math.round(s.watchTime / 60)
+      })),
+      audience: {
+        topLocations,
+        newVsReturning: {
+          new: newCount,
+          returning: returningCount
+        },
+        activeTimes: hourlyStats.map(h => ({
+          hour: h._id,
+          count: h.count
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error in getCreatorAnalytics:', error);
+    res.status(500).json({ error: 'Failed to fetch creator analytics' });
   }
 };

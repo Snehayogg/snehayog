@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 class VideoEngagementRanker {
@@ -190,3 +190,4 @@ class _RecencyStats {
     return _RecencyStats(minMillis: minMillis, maxMillis: maxMillis);
   }
 }
+

@@ -1,7 +1,7 @@
 import 'package:share_plus/share_plus.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/features/ads/data/carousel_ad_model.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
+import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 class ShareService {
@@ -58,3 +58,4 @@ class ShareService {
     }
   }
 }
+

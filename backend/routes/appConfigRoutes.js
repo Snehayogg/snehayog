@@ -2,7 +2,7 @@ import express from 'express';
 import { apiVersioning } from '../middleware/apiVersioning.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import AppConfig from '../models/AppConfig.js';
-import redisService from '../services/redisService.js';
+import redisService from '../services/caching/redisService.js';
 
 const router = express.Router();
 

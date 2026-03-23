@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 /// **LocalGalleryService: Manages retrieval of videos from the device's gallery**
@@ -118,3 +118,4 @@ class LocalGalleryService {
 }
 
 final localGalleryService = LocalGalleryService();
+

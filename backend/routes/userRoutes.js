@@ -5,9 +5,9 @@ import Follower from '../models/Follower.js';
 import SavedVideo from '../models/SavedVideo.js';
 import { verifyToken, passiveVerifyToken } from '../utils/verifytoken.js'; // Added passiveVerifyToken
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
-import redisService from '../services/redisService.js';
+import redisService from '../services/caching/redisService.js';
 import { getGlobalLeaderboard } from '../controllers/videoController.js';
-import RecommendationService from '../services/recommendationService.js';
+import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 
 const router = express.Router();
 

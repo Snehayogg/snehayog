@@ -6,6 +6,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://dl.cloudsmith.io/public/arthenica/ffmpeg-kit/maven/") }
         maven { url = uri("https://oss.sonatype.org/content/repositories/releases") }
         maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
     }

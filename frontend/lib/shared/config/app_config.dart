@@ -19,7 +19,7 @@ class AppConfig {
 
   // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
   // Make sure your phone/emulator is on the same Wi‑Fi network
-  static const String _localIpBaseUrl = 'http://192.168.0.198:5001';
+  static const String _localIpBaseUrl = 'http://192.168.0.197:5001';
 
   // Local development server (localhost) - for web
   static const String _localWebBaseUrl = 'http://localhost:5001';

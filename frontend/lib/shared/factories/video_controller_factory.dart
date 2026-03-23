@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/services/video_player_config_service.dart';
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:vayu/shared/services/hls_warmup_service.dart';
-import 'package:vayu/features/video/data/services/video_cache_proxy_service.dart';
+import 'package:vayu/features/video/core/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 /// Factory for creating VideoPlayerController instances with optimized configuration
@@ -192,3 +192,4 @@ class VideoControllerFactory {
     return createControllerWithQuality(video, 'high_quality');
   }
 }
+

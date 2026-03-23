@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/features/profile/data/services/user_service.dart';
-import 'package:vayu/features/video/data/services/video_service.dart';
-import 'package:vayu/features/video/video_model.dart';
+import 'package:vayu/features/video/core/data/services/video_service.dart';
+import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 
 /// **BACKGROUND PROFILE PRELOADER**
@@ -230,3 +230,4 @@ class BackgroundProfilePreloader {
     AppLogger.log('🧹 BackgroundProfilePreloader: Disposed');
   }
 }
+

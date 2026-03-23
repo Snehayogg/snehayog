@@ -261,6 +261,7 @@ class UserService {
     required String googleId,
     required String name,
     String? profilePic,
+    String? websiteUrl,
   }) async {
     final response = await httpClientService.post(
       Uri.parse('${NetworkHelper.usersEndpoint}/update-profile'),
@@ -271,6 +272,7 @@ class UserService {
         'googleId': googleId,
         'name': name,
         if (profilePic != null) 'profilePic': profilePic,
+        if (websiteUrl != null) 'websiteUrl': websiteUrl,
       }),
     );
 
@@ -345,6 +347,7 @@ class UserService {
               : null,
           bio: data['bio'],
           location: data['location'],
+          websiteUrl: data['websiteUrl']?.toString(),
         );
       } else {
         AppLogger.log(

@@ -1,6 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
-import redisService from '../services/redisService.js';
+import redisService from '../services/caching/redisService.js';
 
 /**
  * Rate Limiter Configuration
