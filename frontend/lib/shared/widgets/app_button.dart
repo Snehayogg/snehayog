@@ -136,14 +136,17 @@ class AppButton extends StatelessWidget {
         ] else if (icon != null) ...[
           SizedBox(width: AppSpacing.spacing2),
         ],
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.inter(
-            fontSize: fontSize,
-            fontWeight: AppTypography.weightSemiBold,
-            color: foregroundColor,
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: fontSize,
+              fontWeight: AppTypography.weightSemiBold,
+              color: foregroundColor,
+            ),
           ),
         ),
       ],

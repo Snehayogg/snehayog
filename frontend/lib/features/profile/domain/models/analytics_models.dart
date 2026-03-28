@@ -31,6 +31,8 @@ class CoreAnalytics {
   final int totalWatchTime; // in minutes
   final int avgWatchDuration; // in seconds
   final double skipRate;
+  final int viewsGrowth;
+  final int watchTimeGrowth;
 
   CoreAnalytics({
     required this.totalViews,
@@ -38,6 +40,8 @@ class CoreAnalytics {
     required this.totalWatchTime,
     required this.avgWatchDuration,
     required this.skipRate,
+    required this.viewsGrowth,
+    required this.watchTimeGrowth,
   });
 
   factory CoreAnalytics.fromJson(Map<String, dynamic> json) {
@@ -47,6 +51,8 @@ class CoreAnalytics {
       totalWatchTime: json['totalWatchTime'] ?? 0,
       avgWatchDuration: json['avgWatchDuration'] ?? 0,
       skipRate: (json['skipRate'] ?? 0.0).toDouble(),
+      viewsGrowth: json['viewsGrowth'] ?? 0,
+      watchTimeGrowth: json['watchTimeGrowth'] ?? 0,
     );
   }
 }

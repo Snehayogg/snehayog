@@ -50,7 +50,18 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       
       // Prefetch initial 150KB chunk for instant playback (approx 5s at 400kbps)
       videoCacheProxy.prefetchInitialChunk(currentUrl, kilobytes: 150).catchError((_){});
+
+      // **PROACTIVE PROFILE PRELOAD: Target only the current creator to focus bandwidth**
+      // By pre-fetching here, we ensure SmartCache is warm when user taps on profile.
+      final creatorId = currentVideo.uploader.googleId?.isNotEmpty == true
+          ? currentVideo.uploader.googleId!
+          : currentVideo.uploader.id;
+      
+      if (creatorId.isNotEmpty && creatorId.toLowerCase() != 'unknown') {
+        ProfilePreloader().preloadProfile(creatorId);
+      }
     }
+
     
     // Still preload controller normally (initializes player)
     _preloadVideo(_currentIndex);

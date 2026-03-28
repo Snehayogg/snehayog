@@ -29,6 +29,7 @@ import 'package:vayu/shared/models/app_activity.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/video/upload/presentation/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/features/video/upload/presentation/screens/make_episode_screen.dart';
+import 'package:vayu/features/profile/presentation/screens/linked_accounts_screen.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -1758,6 +1759,82 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         );
   }
 
+  void _showYouTubeConnectBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const HugeIcon(
+                icon: HugeIcons.strokeRoundedYoutube,
+                color: Color(0xFFFF0000),
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                AppText.get('crosspost_youtube_connect_title'),
+                style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                AppText.get('crosspost_youtube_connect_desc'),
+                style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              AppButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LinkedAccountsScreen()),
+                  ).then((_) {
+                    // Check connection status again when returning
+                    if (!mounted) return;
+                    final stateManager = ref.read(profileStateManagerProvider);
+                    final isConnected = stateManager.userData?['socialAccounts']?['youtube']?['connected'] ?? false;
+                    if (isConnected) {
+                       final current = List<String>.from(_selectedPlatforms.value);
+                       if (!current.contains('youtube')) {
+                         current.add('youtube');
+                         _selectedPlatforms.value = current;
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           SnackBar(
+                             content: Text(AppText.get('crosspost_youtube_success')),
+                             backgroundColor: AppColors.success,
+                           ),
+                         );
+                       }
+                    }
+                  });
+                },
+                label: AppText.get('crosspost_youtube_connect_button'),
+                variant: AppButtonVariant.primary,
+                isFullWidth: true,
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  AppText.get('crosspost_youtube_connect_later'),
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPlatformSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1798,6 +1875,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   }) {
     return InkWell(
       onTap: () {
+        if (platform == 'youtube') {
+          final stateManager = ref.read(profileStateManagerProvider);
+          final isConnected = stateManager.userData?['socialAccounts']?['youtube']?['connected'] ?? false;
+          if (!isConnected) {
+            _showYouTubeConnectBottomSheet();
+            return;
+          }
+        }
+
         final current = List<String>.from(_selectedPlatforms.value);
         if (current.contains(platform)) {
           current.remove(platform);

@@ -10,8 +10,8 @@ class VideoScreen extends ConsumerStatefulWidget {
   final int? initialIndex;
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
-  final String? videoType; // **NEW: Allow passing videoType**
-
+  final String? videoType;
+  final bool isMainYugTab; // **NEW: Flag to identify the primary Yug feed**
 
   const VideoScreen({
     Key? key,
@@ -19,6 +19,7 @@ class VideoScreen extends ConsumerStatefulWidget {
     this.initialVideos,
     this.initialVideoId,
     this.videoType,
+    this.isMainYugTab = false,
   }) : super(key: key);
 
   @override
@@ -118,6 +119,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
       initialVideos: widget.initialVideos,
       initialVideoId: widget.initialVideoId,
       videoType: videoType,
+      isMainYugTab: widget.isMainYugTab, // **NEW: Respect the flag from parent**
     );
   }
 }

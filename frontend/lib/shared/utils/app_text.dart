@@ -257,6 +257,24 @@ class AppText {
     'settings_token_usage': 'Use this token to authenticate with the Arcade Creator Web Portal.',
     'settings_token_copied': 'Token copied to clipboard',
     'settings_account_header': 'Account',
+    'settings_linked_accounts': 'Linked Accounts',
+
+    // Linked Accounts
+    'linked_accounts_title': 'Linked Accounts',
+    'linked_accounts_subtitle': 'Manage social accounts',
+    'linked_accounts_youtube': 'YouTube',
+    'linked_accounts_connect': 'Connect',
+    'linked_accounts_connected': 'Connected',
+    'linked_accounts_disconnect': 'Disconnect',
+    'linked_accounts_refresh_hint': 'Refresh your profile after connecting to see the updated status.',
+    'linked_accounts_opening_browser': 'Opening browser to connect YouTube...',
+    
+    // Cross-Posting Hinglish
+    'crosspost_youtube_connect_title': 'YouTube Channel Connect Karo!',
+    'crosspost_youtube_connect_desc': 'Video upload karte hi auto-post ho jayega YouTube par bhi. Zyada views pao aur apna time bachao. Bas ek baar connect karna hai.',
+    'crosspost_youtube_connect_button': 'YouTube Connect Karo',
+    'crosspost_youtube_connect_later': 'Baad mein karenge',
+    'crosspost_youtube_success': 'YouTube connect ho gaya! Ab ye video wahan bhi upload hoga.',
 
     // Errors
     'error_network': 'Network error. Please check your connection.',

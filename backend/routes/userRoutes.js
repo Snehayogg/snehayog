@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken'; // Added for token info endpoint
 import redisService from '../services/caching/redisService.js';
 import { getGlobalLeaderboard } from '../controllers/videoController.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
+import Notice from '../models/Notice.js';
 
 const router = express.Router();
 
@@ -191,7 +192,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     // **IDENTITY OPTIMIZATION: Use req.user._id if available**
     const query = req.user?._id ? { _id: req.user._id } : { googleId: currentUserId };
     const currentUser = await User.findOne(query)
-      .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+      .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
       .lean();
     
     if (!currentUser) {
@@ -255,6 +256,53 @@ router.get('/profile', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Get profile error:', err);
     res.status(500).json({ error: 'Failed to get profile', details: err.message });
+  }
+});
+
+// **NEW: Route to fetch active notices for the user**
+router.get('/notices', verifyToken, async (req, res) => {
+  try {
+    const googleId = req.user.id;
+    
+    // Find notices for this user
+    const notices = await Notice.find({ userId: googleId }).lean();
+    
+    // Filter out expired ones (1 hour after seen)
+    const now = Date.now();
+    const hourInMs = 60 * 60 * 1000;
+    
+    const activeNotices = notices.filter(notice => {
+      if (!notice.firstSeenAt) return true; // Not seen yet
+      return (now - new Date(notice.firstSeenAt).getTime()) < hourInMs;
+    });
+
+    res.json({ success: true, notices: activeNotices });
+  } catch (error) {
+    console.error('❌ Error fetching notices:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch notices' });
+  }
+});
+
+// **NEW: Route to mark notice as seen**
+router.put('/notices/:id/seen', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const googleId = req.user.id;
+
+    const notice = await Notice.findOne({ _id: id, userId: googleId });
+    if (!notice) {
+      return res.status(404).json({ success: false, error: 'Notice not found' });
+    }
+
+    if (!notice.firstSeenAt) {
+      notice.firstSeenAt = new Date();
+      await notice.save();
+    }
+
+    res.json({ success: true, message: 'Notice marked as seen', notice });
+  } catch (error) {
+    console.error('❌ Error marking notice as seen:', error);
+    res.status(500).json({ success: false, error: 'Failed to mark notice as seen' });
   }
 });
 
@@ -462,7 +510,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
     
     // First try to find by Google ID (primary identifier)
     let user = await User.findOne({ googleId: id })
-      .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+      .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
       .lean();
 
     // If not found, try by MongoDB ObjectId
@@ -472,7 +520,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
         // **IDENTITY OPTIMIZATION: Support pre-resolved ObjectIds**
         if (mongoose.Types.ObjectId.isValid(id)) {
           user = await User.findById(id)
-            .select('_id googleId name email profilePic videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+            .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
             .lean();
         }
       } catch (e) {
@@ -538,7 +586,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
 // ✅ Route to update user profile (name and profilePic)
 router.post('/update-profile', async (req, res) => {
   try {
-    const { googleId, name, profilePic } = req.body;
+    const { googleId, name, profilePic, websiteUrl } = req.body;
     
     if (!googleId || !name) {
       return res.status(400).json({ error: 'Google ID and name are required' });
@@ -553,6 +601,9 @@ router.post('/update-profile', async (req, res) => {
     user.name = name;
     if (profilePic) {
       user.profilePic = profilePic;
+    }
+    if (websiteUrl !== undefined) {
+      user.websiteUrl = websiteUrl;
     }
 
     await user.save();

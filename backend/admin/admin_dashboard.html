@@ -1206,10 +1206,13 @@
                         <td>${formatCurrencyINR(currentMonthEarnings)}</td>
                         <td>${formatCurrencyINR(currentMonthGrossRevenue)}</td>
                         <td>
-    <button class="btn btn-primary btn-sm" onclick="sendPaymentNotification('${googleId}', '${name}')" title="Send Payment Notification" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px;">
-        🔔 Notify
-    </button>
-</td>
+                            <button class="btn btn-primary btn-sm" onclick="sendPaymentNotification('${googleId}', '${name}')" title="Send Payment Notification" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px;">
+                                🔔 Notify
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="sendCustomUserNotice('${googleId}', '${name}')" title="Send Official Warning/Notice" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">
+                                ⚠️ Notice
+                            </button>
+                        </td>
                         <td>${pendingCell}</td>
                         <td style="font-weight: bold; color: #28a745;">${formatCurrencyINR(currentMonthEarnings)}</td>
                         <td style="font-weight: bold; color: #ff9800;">${formatCurrencyINR(previousMonthEarnings)}</td>
@@ -2631,6 +2634,38 @@
                 </table>
             `;
         }
+        async function sendCustomUserNotice(googleId, name) {
+            const title = prompt(`Enter notice/warning for ${name}:`);
+            if (!title || title.trim() === "") return;
+
+            const type = confirm("Is this a WARNING? (OK for Warning, Cancel for Info/Notice)") ? "warning" : "notice";
+
+            if (!confirm(`Send this ${type} to ${name}?\n\n"${title}"`)) return;
+
+            try {
+                setLoading(true);
+                const response = await authorizedFetch(`${API_BASE}/admin/notices`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ googleId, title, type })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showSuccess('✅ Notice sent successfully!');
+                } else {
+                    showError('❌ Failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error sending notice:', error);
+                showError('❌ Error: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
     </script>
 </body>
 </html>

@@ -5,11 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
-import queueService from '../services/yugFeedServices/queueService.js';
+import { redisOptions } from '../services/yugFeedServices/queueService.js';
 import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
 import youtubeService from '../services/platforms/youtubeService.js';
-import metaService from '../services/platforms/metaService.js';
-import linkedinService from '../services/platforms/linkedinService.js';
 
 dotenv.config();
 
@@ -42,19 +40,12 @@ async function handlePublishingJob(job) {
     });
 
     // 2. Get video metadata to find the R2 key
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).populate('uploader');
     if (!video) throw new Error('Video not found');
+    
+    const user = await User.findOne({ googleId: userId });
+    if (!user) throw new Error('User not found');
 
-    // We use the HLS master playlist URL to derive the original video key if needed,
-    // but for most platforms, we can just use the public videoUrl or download it.
-    // Let's download a high-quality version from R2 to upload to the platform.
-    
-    const hlsUrl = video.hlsPlaylistUrl || video.videoUrl;
-    // Note: For YouTube/FB/IG, a direct URL is often enough, but YouTube insert requires a stream.
-    // So we download locally.
-    
-    // Check if we have an original file key. If not, we might need a different approach.
-    // For now, let's assume we can download from the public URL for the worker.
     const tempDir = path.join(process.cwd(), 'temp_social_uploads');
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     
@@ -62,11 +53,16 @@ async function handlePublishingJob(job) {
     
     // Download the video file
     console.log(`📥 Social Worker: Downloading video for ${platform}...`);
-    // Note: In this architecture, it's better to use cloudflareR2Service.downloadFile if we have the key.
-    // If not, we can use axios to download from the public URL.
-    // Since we don't have the original key in the job data, let's try to extract it or use axios.
-    if (video.videoUrl.includes('cdn.snehayog.site')) {
-        const key = video.videoUrl.split('/').pop();
+    
+    // **NEW: Use canonical MP4 key if available (much more reliable)**
+    if (video.canonicalMp4Key) {
+        console.log(`🔑 Using canonical MP4 key: ${video.canonicalMp4Key}`);
+        await cloudflareR2Service.downloadFile(video.canonicalMp4Key, localFilePath);
+    } else if (video.videoUrl.includes('cdn.snehayog.site')) {
+        // Fallback to parsing if canonical key is missing (for older videos)
+        const publicDomain = 'cdn.snehayog.site';
+        const key = video.videoUrl.split(publicDomain).pop().replace(/^\//, '');
+        console.log(`🔑 Parsed key from URL: ${key}`);
         await cloudflareR2Service.downloadFile(key, localFilePath);
     } else {
         // Fallback or handle different CDN
@@ -86,17 +82,8 @@ async function handlePublishingJob(job) {
               console.log(`📡 Social Worker: ${platform} upload progress for ${videoId}: ${progress}%`);
           }
       });
-    } else if (platform === 'instagram' || platform === 'facebook') {
-      // Meta prefers a public URL. R2 public URLs work perfectly.
-      result = await metaService.uploadReel(userId, platform, video.videoUrl, { caption: description });
-      
-      // Meta requires a second step: Publish after processing.
-      // We'll wait a bit or the worker can handle a delayed publish.
-      console.log(`⏳ Social Worker: Waiting for Meta processing for ${platform}...`);
-      await new Promise(resolve => setTimeout(resolve, 30000)); // 30s delay for Meta processing
-      
-      const publishResult = await metaService.publishReel(userId, platform, result.containerId);
-      result = { ...result, ...publishResult };
+    } else {
+      throw new Error(`Platform ${platform} not supported or removed`);
     }
 
     // 3. Update status to 'completed'

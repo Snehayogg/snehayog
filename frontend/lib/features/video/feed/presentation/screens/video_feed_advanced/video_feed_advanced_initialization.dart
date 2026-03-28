@@ -17,7 +17,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     // **FIX: For deep links without initialVideos, start at 0 but we'll correct it after video fetch**
     // Don't set initialPage here for deep links - we'll set it after fetching the video
 
-    _pageController = PageController(initialPage: initialPage);
+    _pageController = PageController(initialPage: initialPage, keepPage: false);
 
     _videoService = VideoService();
     _authService = AuthService();
@@ -47,6 +47,10 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         if (_firstFrameReady.containsKey(videoId)) {
           _firstFrameReady[videoId]?.value = false;
         }
+
+        // **CRITICAL FIX: Trigger UI rebuild to ensure VideoPlayer widgets 
+        // are removed before they can access the now-disposed controller.**
+        safeSetState(() {});
       }
     });
 

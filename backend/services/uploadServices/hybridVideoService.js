@@ -113,7 +113,12 @@ class HybridVideoService {
         videoName, 
         userId
       );
-      
+
+      // **NEW: Also upload a standard MP4 version for cross-posting (YouTube/Meta)**
+      console.log('📤 Uploading canonical MP4 version to R2...');
+      const mp4Key = `videos/${userId}/${videoName}_optimized_${Date.now()}.mp4`;
+      const r2Mp4Result = await cloudflareR2Service.uploadFileToR2(absoluteVideoPath, mp4Key, 'video/mp4');
+
       // Cleanup temp files
       if (isRemoteFile) {
           await cloudflareR2Service.cleanupLocalFile(absoluteVideoPath);
@@ -128,6 +133,8 @@ class HybridVideoService {
         success: true,
         videoUrl: r2HLSResult.playlistUrl,
         thumbnailUrl: r2ThumbnailUrl || '',
+        canonicalMp4Url: r2Mp4Result.url,
+        canonicalMp4Key: mp4Key,
         format: 'HLS (Adaptive Stream)',
         quality: `${originalVideoInfo.height}p (balanced)`,
         storage: 'Cloudflare R2',

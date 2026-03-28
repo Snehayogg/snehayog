@@ -88,7 +88,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
         setState(() => _revenueData = freshRevenueData);
       }
     } catch (e) {
-      AppLogger.log('⚠️ Revenue load failed: $e');
+      AppLogger.log('⚠️ Engagement load failed: $e');
     }
   }
 
@@ -114,7 +114,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
           elevation: 0,
           bottom: const TabBar(
             tabs: [
-              Tab(text: "Revenue"),
+              Tab(text: "Engagement"),
               Tab(text: "Analytics"),
             ],
             indicatorColor: AppColors.primary,
@@ -201,7 +201,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   }
 
   Widget _buildRevenueTab() {
-    if (_revenueData == null) return const Center(child: Text("No revenue data available"));
+    if (_revenueData == null) return const Center(child: Text("No engagement data available"));
 
     return RefreshIndicator(
       onRefresh: () => _loadAllData(forceRefresh: true),
@@ -242,12 +242,14 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
                   value: _analytics!.core.totalViews.toString(), 
                   icon: Icons.visibility,
                   color: AppColors.primary,
+                  growth: _analytics!.core.viewsGrowth,
                 ),
                 AnalyticsStatCard(
                   label: "Watch Time", 
                   value: "${_analytics!.core.totalWatchTime}m", 
                   icon: Icons.access_time,
                   color: Colors.orange,
+                  growth: _analytics!.core.watchTimeGrowth,
                 ),
                 AnalyticsStatCard(
                   label: "Shares", 
@@ -260,6 +262,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
                   value: "${(_analytics!.core.skipRate * 100).toStringAsFixed(1)}%", 
                   icon: Icons.skip_next,
                   color: Colors.redAccent,
+                  onTap: _showSkipRateGuide,
                 ),
               ],
             ),
@@ -271,7 +274,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
             TopVideosList(videos: _analytics!.topVideos),
 
             AppSpacing.vSpace24,
-            Text("Audience Insights", style: AppTypography.titleMedium),
+            Text("Viewer Insights", style: AppTypography.titleMedium),
             AppSpacing.vSpace12,
             AudienceInsightCard(
               title: "New vs Returning Viewers", 
@@ -285,7 +288,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
             ),
             AppSpacing.vSpace16,
             AudienceInsightCard(
-              title: "Top Countries", 
+              title: "Top States", 
               content: Column(
                 children: _analytics!.audience.topLocations.map((l) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
@@ -306,6 +309,80 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
     );
   }
 
+  void _showSkipRateGuide() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Small handle for aesthetic
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: AppColors.borderPrimary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  const Icon(Icons.ads_click, color: AppColors.primary, size: 28),
+                  AppSpacing.hSpace12,
+                  Text("Skip Rate Kya Hai?", style: AppTypography.titleLarge),
+                ],
+              ),
+              AppSpacing.vSpace16,
+              const Text(
+                "Agar aapka skip rate 25% hai, toh iska matlab hai ki 25% log aapke video ko bina dekhe skip kar rahe hain.",
+                style: TextStyle(fontSize: 15, color: AppColors.textPrimary, height: 1.4),
+              ),
+              AppSpacing.vSpace24,
+              _buildGuideItem("🔥 Excellent (<20%)", "Dhamakedar content! Audience aapka video poora dekh rahi hai.", Colors.green),
+              _buildGuideItem("✅ Good (20-40%)", "Kafi accha hook hai. Use consistently maintain karein.", Colors.blue),
+              _buildGuideItem("⚠️ Average (40-60%)", "Pehle 3-5 seconds (The Hook) ko aur interesting banayein.", Colors.orange),
+              _buildGuideItem("❌ Critical (>70%)", "Log turant skip kar rahe hain. Naya format ya visuals try karein!", Colors.red),
+              AppSpacing.vSpace24,
+              SizedBox(
+                width: double.infinity,
+                child: AppButton(
+                  onPressed: () => Navigator.pop(context),
+                  label: "Samajh Gaya!",
+                ),
+              ),
+              // Extra space for bottom safety
+              AppSpacing.vSpace16,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuideItem(String label, String tip, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(tip, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMiniStat(String label, String value) {
     return Column(
       children: [
@@ -318,7 +395,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   Widget _buildRevenueOverviewCard() {
     final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
-    final grossRevenue = thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
+    final grossPoints = thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
 
     return Container(
       padding: EdgeInsets.all(AppSpacing.spacing5),
@@ -329,20 +406,20 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
       ),
       child: Column(
         children: [
-          const Text("Creator Earnings (This Month)", style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+          const Text("Creator Performance Points", style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
           AppSpacing.vSpace8,
           Text(
-            "₹${thisMonth.toStringAsFixed(2)}",
+            thisMonth.toStringAsFixed(1),
             style: AppTypography.displaySmall.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
           ),
           AppSpacing.vSpace24,
           Row(
             children: [
               Expanded(
-                child: _buildRevenueStat("Gross Revenue", "₹${grossRevenue.toStringAsFixed(2)}", Icons.receipt_long),
+                child: _buildRevenueStat("Total Points", grossPoints.toStringAsFixed(1), Icons.stars),
               ),
               Expanded(
-                child: _buildRevenueStat("Last Month", "₹${lastMonth.toStringAsFixed(2)}", Icons.history),
+                child: _buildRevenueStat("Last Period", lastMonth.toStringAsFixed(1), Icons.history),
               ),
             ],
           ),
@@ -369,7 +446,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Revenue Breakdown", style: AppTypography.titleMedium),
+        Text("Engagement Breakdown", style: AppTypography.titleMedium),
         AppSpacing.vSpace12,
         Container(
           padding: EdgeInsets.all(AppSpacing.spacing4),
@@ -380,9 +457,9 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
           ),
           child: Column(
             children: [
-              _buildBreakdownRow("Your Share (80%)", "₹${thisMonth.toStringAsFixed(2)}", AppColors.success),
+              _buildBreakdownRow("Creator Points", thisMonth.toStringAsFixed(1), AppColors.success),
               const Divider(height: 24),
-              _buildBreakdownRow("Platform Fee (20%)", "₹${(thisMonth * 0.25).toStringAsFixed(2)}", AppColors.textSecondary),
+              _buildBreakdownRow("Platform Support", (thisMonth * 0.25).toStringAsFixed(1), AppColors.textSecondary),
             ],
           ),
         ),

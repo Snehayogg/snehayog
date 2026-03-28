@@ -167,7 +167,9 @@ class SmartCacheManager {
 
   /// Initialize consolidated smart cache manager
   Future<void> initialize() async {
+    if (_isInitialized) return;
     if (!Features.smartVideoCaching.isEnabled) {
+
       AppLogger.log('🚫 SmartCacheManager: Smart caching disabled');
       return;
     }

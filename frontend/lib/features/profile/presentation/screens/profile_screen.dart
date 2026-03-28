@@ -1,5 +1,4 @@
 import 'package:hugeicons/hugeicons.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayu/core/providers/profile_providers.dart';
@@ -33,7 +31,6 @@ import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 
 import 'package:vayu/features/profile/presentation/screens/edit_profile_screen.dart';
-import 'package:vayu/features/profile/presentation/widgets/game_creator_dashboard.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
@@ -46,7 +43,6 @@ import 'package:vayu/features/profile/presentation/widgets/top_earners_grid.dart
 import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_header_widget.dart';
 
-import 'package:vayu/core/providers/game_providers.dart';
 import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/core/providers/navigation_providers.dart';
 
@@ -211,7 +207,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         AppLogger.log(
             '⚠️ ProfileScreen: Detected stale user data in manager, clearing and reloading...');
         _stateManager.clearData();
-        if (mounted) ref.read(gameCreatorManagerProvider).clearData();
       }
       
       if (_stateManager.isDataPartial && !isStaleData) {
@@ -270,7 +265,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         AppLogger.log(
             '🔄 ProfileScreen: FORCE REFRESH - bypassing ALL cache, fetching fresh data from server');
         _stateManager.clearData();
-        if (mounted) ref.read(gameCreatorManagerProvider).clearData();
       } else {
         // Step 1: Try cache first
         final cachedData = await _loadCachedProfileData();
@@ -279,8 +273,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
 
           _stateManager.setUserData(cachedData);
-          await _loadVideosFromCache(); 
-          _isLoading.value = false;
+          _isLoading.value = false; // Show profile header instantly
+          _loadVideosFromCache(); // Load videos in background
+
 
           if (widget.userId == null) {
             Future.microtask(() async {
@@ -575,8 +570,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         // Continue with refresh even if SmartCache clearing fails
       }
 
-      // **CRITICAL: Set loading state BEFORE fetching - user should see loading indicator**
-      _isLoading.value = true;
+      // **REMOVED: Do NOT set _isLoading.value = true here - RefreshIndicator shows its own spinner**
+      // _isLoading.value = true;
       _error.value = null;
 
       // **CRITICAL: Force refresh user data - this COMPLETELY bypasses cache**
@@ -607,13 +602,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         // Silent fail
       });
 
-      _isLoading.value = false;
+      // **NEW: Refresh referral stats on manual refresh**
+      await _loadReferralStats();
+      await _fetchVerifiedReferralStats();
+
+      // _isLoading.value = false; // Not needed if not set to true
       AppLogger.log(
           '✅ ProfileScreen: Manual refresh completed - ALL data fetched fresh from server (NO CACHE USED)');
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error during refresh: $e');
       _error.value = '${AppText.get('error_refresh')}: ${e.toString()}';
-      _isLoading.value = false;
+      // _isLoading.value = false;
     }
   }
 
@@ -1237,7 +1236,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       child: p.MultiProvider(
         providers: [
           p.ChangeNotifierProvider<ProfileStateManager>.value(value: activeManager),
-          p.ChangeNotifierProvider<GameCreatorManager>.value(value: ref.watch(gameCreatorManagerProvider)),
         ],
         child: Stack(
         children: [
@@ -1472,26 +1470,72 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
 
     // If we reach here, we have user data and can show the profile
-    if (ref.watch(gameCreatorManagerProvider).isCreatorMode) {
-      return const GameCreatorDashboard();
-    }
 
     return NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return _buildProfileHeaderSlivers(context, manager, authController);
-        },
-        body: RefreshIndicator(
-          onRefresh: _refreshData,
-          child: TabBarView(
-            physics: const BouncingScrollPhysics(),
-            dragStartBehavior: DragStartBehavior.down,
-            controller: _tabController,
-            children: [
-              Builder(builder: (context) => _buildTabContent(0, manager, context)),
-              Builder(builder: (context) => _buildTabContent(1, manager, context)),
-              Builder(builder: (context) => _buildTabContent(2, manager, context)),
-            ],
+      physics: const AlwaysScrollableScrollPhysics(),
+      headerSliverBuilder: (context, innerBoxIsScrolled) {
+        return _buildProfileHeaderSlivers(context, manager, authController);
+      },
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        // **FIX: Ensure notifications from nested scrollables also trigger refresh**
+        notificationPredicate: (notification) => notification.depth >= 0,
+        child: TabBarView(
+          physics: const BouncingScrollPhysics(),
+          dragStartBehavior: DragStartBehavior.down,
+          controller: _tabController,
+          children: [
+            Builder(builder: (context) => _buildTabContent(0, manager, context)),
+            Builder(builder: (context) => _buildTabContent(1, manager, context)),
+            Builder(builder: (context) => _buildTabContent(2, manager, context)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoticeBanner(ProfileStateManager manager) {
+    final notice = manager.activeNotice!;
+    final isWarning = notice.isWarning;
+
+    // Mark as seen once displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (notice.firstSeenAt == null) {
+        manager.markNoticeAsSeen();
+      }
+    });
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isWarning ? Colors.red.shade50 : Colors.blue.shade50,
+        border: Border(
+          bottom: BorderSide(
+            color: isWarning ? Colors.red.shade200 : Colors.blue.shade200,
+            width: 1,
           ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isWarning ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+            color: isWarning ? Colors.red.shade700 : Colors.blue.shade700,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              notice.title,
+              style: TextStyle(
+                color: isWarning ? Colors.red.shade900 : Colors.blue.shade900,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1510,6 +1554,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       },
       child: CustomScrollView(
         key: PageStorageKey<String>('profile_tab_$index'),
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverOverlapInjector(
             handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
@@ -1557,6 +1602,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   List<Widget> _buildProfileHeaderSlivers(
       BuildContext context, ProfileStateManager manager, GoogleSignInController authController) {
     final List<Widget> slivers = [];
+
+    if (manager.activeNotice != null) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _buildNoticeBanner(manager),
+        ),
+      );
+    }
 
     // Debug Token Refresh Test (Only in Debug Mode) omitted for brevity in this replace call, 
     // assuming it's already there or can be simplified. I'll keep it for completeness if possible.

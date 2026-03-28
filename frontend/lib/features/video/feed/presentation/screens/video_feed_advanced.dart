@@ -84,6 +84,7 @@ class VideoFeedAdvanced extends ConsumerStatefulWidget {
   final List<VideoModel>? initialVideos;
   final String? initialVideoId;
   final String? videoType;
+  final bool isMainYugTab; // **NEW: Flag to identify the primary Yug feed**
   // Removed forceAutoplay; we'll infer autoplay from initialVideos presence
 
   const VideoFeedAdvanced({
@@ -91,7 +92,8 @@ class VideoFeedAdvanced extends ConsumerStatefulWidget {
     this.initialIndex,
     this.initialVideos,
     this.initialVideoId,
-    this.videoType, // **NEW: Accept videoType parameter**
+    this.videoType,
+    this.isMainYugTab = false, // **NEW: Flag to identify the primary Yug feed**
   }) : super(key: key);
 
   @override
@@ -114,8 +116,8 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
-    _loadVideos();
+    // Removed redundant PageController and _loadVideos initialization.
+    // These are now handled exclusively in _initializeServices() to prevent race conditions.
 
     // **NEW: Restore last viewed video index (Main Feed only)**
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -712,13 +714,22 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     }
 
     // **ENHANCED: Allow autoplay for profile videos and deep links**
+    // BUT: If this is the main Yug tab, we MUST strictly check if it's the active tab.
+    // This prevents "millisecond audio leaks" when toggling fullscreen/controls in Vayu.
+    final bool isVideoTabActive = (_mainController?.currentIndex ?? 0) == 0;
+    
+    if (widget.isMainYugTab && !isVideoTabActive) {
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): Main Yug tab is not active'); */
+      return false;
+    }
+
     if (_openedFromProfile || _openedFromDeepLink) {
       /* AppLogger.log(
         '✅ Autoplay allowed ($reason): ${_openedFromProfile ? "opened from profile" : "opened from deep link"}',
       ); */
       return true;
     }
-    final bool isVideoTabActive = (_mainController?.currentIndex ?? 0) == 0;
+
     if (!isVideoTabActive) {
       /* AppLogger.log(
         '⏸️ Autoplay suppressed ($reason): Yug tab not active',

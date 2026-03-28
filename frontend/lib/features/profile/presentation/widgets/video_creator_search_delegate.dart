@@ -583,12 +583,12 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
   Widget _buildVayuVideoCard(BuildContext context, VideoModel video, List<VideoModel> allVideos) {
     return GestureDetector(
       onTap: () {
-        close(context, null);
+        // DON'T call close(context, null) to allow back navigation to search
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => VayuLongFormPlayerScreen(
               video: video,
-              relatedVideos: allVideos,
+              relatedVideos: allVideos.where((v) => v.id != video.id).toList(),
             ),
           ),
         );
@@ -685,7 +685,7 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
     return GestureDetector(
       onTap: () {
-        close(context, null);
+        // DON'T call close(context, null) to allow back navigation to search
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => VideoScreen(

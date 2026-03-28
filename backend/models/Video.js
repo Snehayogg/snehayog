@@ -259,6 +259,17 @@ const videoSchema = new mongoose.Schema({
     type: Map,
     of: Number,
     default: {} // e.g. { youtube: 45, instagram: 100 }
+  },
+  
+  // **NEW: Canonical MP4 storage for cross-posting**
+  // Stores a standard MP4 version of the video for external platforms
+  canonicalMp4Url: {
+    type: String,
+    description: 'Public URL to optimized MP4 version for external publishing'
+  },
+  canonicalMp4Key: {
+    type: String,
+    description: 'R2 Key for optimized MP4 version'
   }
 }, {
   timestamps: true

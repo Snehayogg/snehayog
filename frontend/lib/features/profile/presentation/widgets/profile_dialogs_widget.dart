@@ -13,6 +13,8 @@ import 'package:vayu/core/design/typography.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayu/features/profile/presentation/screens/linked_accounts_screen.dart';
+import 'package:vayu/shared/utils/app_text.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -94,6 +96,23 @@ class ProfileDialogsWidget {
                       Navigator.of(context, rootNavigator: true).push(
                         MaterialPageRoute(
                           builder: (context) => const CreatorRevenueScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                if (isViewingOwnProfile)
+                  _buildSettingsTile(
+                    context: context,
+                    icon: Icons.link,
+                    title: AppText.get('settings_linked_accounts',
+                        fallback: 'Linked Accounts'),
+                    subtitle: AppText.get('linked_accounts_subtitle',
+                        fallback: 'Manage social accounts'),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      Navigator.of(context, rootNavigator: true).push(
+                        MaterialPageRoute(
+                          builder: (context) => const LinkedAccountsScreen(),
                         ),
                       );
                     },

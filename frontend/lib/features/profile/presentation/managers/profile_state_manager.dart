@@ -12,6 +12,8 @@ import 'package:vayu/features/profile/data/services/user_service.dart';
 import 'package:vayu/features/profile/data/services/payment_setup_service.dart';
 import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
+import 'package:vayu/features/profile/data/models/notice_model.dart';
+import 'package:vayu/features/profile/data/services/notice_service.dart';
 
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
@@ -23,6 +25,7 @@ class ProfileStateManager extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final UserService _userService = UserService();
   final PaymentSetupService _paymentSetupService = PaymentSetupService();
+  final NoticeService _noticeService = NoticeService();
 
   final SmartCacheManager _smartCacheManager = SmartCacheManager();
   bool _smartCacheInitialized = false;
@@ -56,6 +59,10 @@ class ProfileStateManager extends ChangeNotifier {
   bool _isVideosLoading = false;
   final Set<String> _selectedVideoIds = {};
   String? _requestedUserId;
+
+  // Notice state
+  NoticeModel? _activeNotice;
+  bool _isNoticeLoading = false;
 
   // Earnings state
   double _cachedEarnings = 0.0;
@@ -103,6 +110,8 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isFetchingMore => _isFetchingMore;
   bool get hasMoreVideos => _hasMoreVideos;
   bool get isSignedIn => _authService.currentUserId != null;
+  NoticeModel? get activeNotice => _activeNotice;
+  bool get isNoticeLoading => _isNoticeLoading;
 
   /// **NEW: Check if the current user data is partial (fallback or missing metrics)**
   bool get isDataPartial {
@@ -262,6 +271,14 @@ class ProfileStateManager extends ChangeNotifier {
 
       _isProfileLoading = false;
       _isLoading = false;
+
+      // Fetch notices if this is my profile
+      if (isMyProfile) {
+        _fetchActiveNotice();
+      } else {
+        _activeNotice = null; // Clear if viewing other profile
+      }
+
       notifyListenersSafe();
     } catch (e) {
       AppLogger.log('❌ ProfileStateManager: Error loading user data: $e');
@@ -1955,6 +1972,42 @@ class ProfileStateManager extends ChangeNotifier {
         '✅ ProfileStateManager: Updated follower count for $trimmedUserId: $currentFollowers → $newFollowers (${increment ? 'increment' : 'decrement'})');
 
     notifyListenersSafe();
+  }
+
+  // Cleanup
+  Future<void> _fetchActiveNotice() async {
+    try {
+      _isNoticeLoading = true;
+      // No notify here to avoid flutter build conflict if called during build
+
+      final notices = await _noticeService.fetchNotices();
+      if (notices.isNotEmpty) {
+        // Just take the latest one for now
+        _activeNotice = notices.last;
+
+        // If it was already seen but expired, clear it
+        if (_activeNotice!.isExpired) {
+          _activeNotice = null;
+        }
+      } else {
+        _activeNotice = null;
+      }
+
+      _isNoticeLoading = false;
+      notifyListenersSafe();
+    } catch (e) {
+      AppLogger.log('⚠️ ProfileStateManager: Error fetching notices: $e');
+      _isNoticeLoading = false;
+    }
+  }
+
+  Future<void> markNoticeAsSeen() async {
+    if (_activeNotice == null) return;
+    try {
+      await _noticeService.markAsSeen(_activeNotice!.id);
+    } catch (e) {
+      AppLogger.log('⚠️ ProfileStateManager: Error marking notice as seen: $e');
+    }
   }
 
   // Cleanup

@@ -181,10 +181,8 @@ class ProfilePreloader {
     // **OPTIMIZATION: Start preloading in background (non-blocking)**
     // Navigation will happen, ProfileScreen will load from cache or fetch
     preloadProfile(userId);
-
-    // Small delay to allow preload to start
-    await Future.delayed(const Duration(milliseconds: 50));
   }
+
 
   /// **CHECK IF PROFILE IS CACHED**
   /// **OPTIMIZED: Uses SmartCacheManager**

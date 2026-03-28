@@ -9,39 +9,77 @@ class AnalyticsStatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
   final Color color;
+  final int? growth;
 
   const AnalyticsStatCard({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
+    this.onTap,
     this.color = AppColors.primary,
+    this.growth,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(AppSpacing.spacing4),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSecondary,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.borderPrimary),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 20),
-          AppSpacing.vSpace8,
-          Text(
-            value,
-            style: AppTypography.titleLarge.copyWith(fontWeight: AppTypography.weightBold),
-          ),
-          Text(
-            label,
-            style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Container(
+        padding: EdgeInsets.all(AppSpacing.spacing4),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundSecondary,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.borderPrimary),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 20),
+            AppSpacing.vSpace8,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  value,
+                  style: AppTypography.titleLarge.copyWith(fontWeight: AppTypography.weightBold),
+                ),
+                if (growth != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (growth! >= 0 ? Colors.green : Colors.red).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          growth! >= 0 ? Icons.trending_up : Icons.trending_down,
+                          size: 12,
+                          color: growth! >= 0 ? Colors.green : Colors.red,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          "${growth!.abs()}%",
+                          style: AppTypography.labelSmall.copyWith(
+                            color: growth! >= 0 ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            Text(
+              label,
+              style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }

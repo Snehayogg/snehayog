@@ -1646,23 +1646,23 @@ export const getCreatorAnalytics = async (req, res) => {
     const videos = await Video.find({ uploader: creatorId }).lean();
     if (!videos || videos.length === 0) {
       return res.json({
-        core: { totalViews: 0, totalShares: 0, totalWatchTime: 0, avgWatchDuration: 0, skipRate: 0 },
+        core: { totalViews: 0, totalShares: 0, totalWatchTime: 0, avgWatchDuration: 0, skipRate: 0, viewsGrowth: 0, watchTimeGrowth: 0 },
         topVideos: [],
         dailyPerformance: [],
         audience: { topLocations: [], activeTimes: [], newVsReturning: { new: 0, returning: 0 } }
       });
     }
 
-    const videoIds = videos.map(v => v._id);
+    const videoIdsValue = videos.map(v => v._id);
 
     // 2. Aggregate core metrics
-    const totalViews = videos.reduce((sum, v) => sum + (v.views || 0), 0);
-    const totalShares = videos.reduce((sum, v) => sum + (v.shares || 0), 0);
-    const totalSkips = videos.reduce((sum, v) => sum + (v.skipCount || 0), 0);
+    const overallViews = videos.reduce((sum, v) => sum + (v.views || 0), 0);
+    const overallShares = videos.reduce((sum, v) => sum + (v.shares || 0), 0);
+    const overallSkips = videos.reduce((sum, v) => sum + (v.skipCount || 0), 0);
     
     // Aggregating from WatchHistory for more accurate duration/retention
     const watchStats = await WatchHistory.aggregate([
-      { $match: { videoId: { $in: videoIds } } },
+      { $match: { videoId: { $in: videoIdsValue } } },
       { 
         $group: { 
           _id: null, 
@@ -1673,12 +1673,12 @@ export const getCreatorAnalytics = async (req, res) => {
       }
     ]);
 
-    const totalWatchTime = watchStats[0]?.totalDuration || 0;
-    const avgWatchDuration = watchStats[0]?.avgDuration || 0;
-    const skipRate = totalViews > 0 ? (totalSkips / totalViews) : 0;
+    const overallWatchTime = watchStats[0]?.totalDuration || 0;
+    const overallAvgDuration = watchStats[0]?.avgDuration || 0;
+    const overallSkipRate = overallViews > 0 ? (overallSkips / overallViews) : 0;
 
     // 3. Top Performing Videos (by views)
-    const topVideos = [...videos]
+    const sortedTopVideos = [...videos]
       .sort((a, b) => (b.views || 0) - (a.views || 0))
       .slice(0, 5)
       .map(v => ({
@@ -1689,15 +1689,18 @@ export const getCreatorAnalytics = async (req, res) => {
         watchTime: v.cachedWatchTime || 0
       }));
 
-    // 4. Daily Performance (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // 4. Daily Performance and Growth (last 14 days)
+    const today = new Date();
+    const fourteenDaysDate = new Date();
+    fourteenDaysDate.setDate(today.getDate() - 14);
+    const sevenDaysDate = new Date();
+    sevenDaysDate.setDate(today.getDate() - 7);
 
-    const dailyStats = await WatchHistory.aggregate([
+    const dailyPerformanceStats = await WatchHistory.aggregate([
       { 
         $match: { 
-          videoId: { $in: videoIds },
-          watchedAt: { $gte: sevenDaysAgo }
+          videoId: { $in: videoIdsValue },
+          watchedAt: { $gte: fourteenDaysDate }
         } 
       },
       {
@@ -1710,19 +1713,68 @@ export const getCreatorAnalytics = async (req, res) => {
       { $sort: { "_id": 1 } }
     ]);
 
-    // 5. Audience Insights (Mocking geo for now as View doesn't have location yet)
-    // In a real scenario, we'd add location to the View/WatchHistory model
-    const topLocations = [
-      { name: 'India', value: 85 },
-      { name: 'USA', value: 5 },
-      { name: 'Canada', value: 3 },
-      { name: 'UK', value: 2 },
-      { name: 'Others', value: 5 }
-    ];
+    let currViews = 0;
+    let prevViews = 0;
+    let currWatch = 0;
+    let prevWatch = 0;
 
-    // New vs Returning viewers
-    const viewerStats = await WatchHistory.aggregate([
-      { $match: { videoId: { $in: videoIds } } },
+    dailyPerformanceStats.forEach(stat => {
+      const statDate = new Date(stat._id);
+      if (statDate >= sevenDaysDate) {
+        currViews += stat.views;
+        currWatch += stat.watchTime;
+      } else {
+        prevViews += stat.views;
+        prevWatch += stat.watchTime;
+      }
+    });
+
+    const calcGrowth = (curr, prev) => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    const viewsGrowthRate = calcGrowth(currViews, prevViews);
+    const watchTimeGrowthRate = calcGrowth(currWatch, prevWatch);
+
+    const sparklineData = dailyPerformanceStats
+      .filter(s => new Date(s._id) >= sevenDaysDate)
+      .map(s => ({
+        date: s._id,
+        views: s.views,
+        watchTime: Math.round(s.watchTime / 60)
+      }));
+
+    // 5. Audience Insights (Real Data)
+    const topLocationsData = await WatchHistory.aggregate([
+      { $match: { videoId: { $in: videoIdsValue } } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: 'googleId',
+          as: 'viewer'
+        }
+      },
+      { $unwind: { path: "$viewer", preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: "$viewer.location.state",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 5 }
+    ]);
+
+    const totalAudienceViews = topLocationsData.reduce((acc, curr) => acc + curr.count, 0);
+    const finalTopLocations = topLocationsData.map(stat => ({
+      name: stat._id || "Others",
+      value: totalAudienceViews > 0 ? Math.round((stat.count / totalAudienceViews) * 100) : 0
+    }));
+
+    const retentionStats = await WatchHistory.aggregate([
+      { $match: { videoId: { $in: videoIdsValue } } },
       {
         $group: {
           _id: "$userId",
@@ -1738,13 +1790,12 @@ export const getCreatorAnalytics = async (req, res) => {
       }
     ]);
 
-    const returningCount = viewerStats[0]?.returning || 0;
-    const totalViewers = viewerStats[0]?.total || 0;
-    const newCount = totalViewers - returningCount;
+    const countReturning = retentionStats[0]?.returning || 0;
+    const countTotal = retentionStats[0]?.total || 0;
+    const countNew = countTotal - countReturning;
 
-    // Active times (by hour)
-    const hourlyStats = await WatchHistory.aggregate([
-      { $match: { videoId: { $in: videoIds } } },
+    const activeViewingHours = await WatchHistory.aggregate([
+      { $match: { videoId: { $in: videoIdsValue } } },
       {
         $group: {
           _id: { $hour: "$watchedAt" },
@@ -1754,30 +1805,30 @@ export const getCreatorAnalytics = async (req, res) => {
       { $sort: { "_id": 1 } }
     ]);
 
+    const hourlyMap = Array.from({ length: 24 }, (_, i) => {
+      const stat = activeViewingHours.find(h => h._id === i);
+      return { hour: i, count: stat ? stat.count : 0 };
+    });
+
     res.json({
       core: {
-        totalViews,
-        totalShares,
-        totalWatchTime: Math.round(totalWatchTime / 60), // in minutes
-        avgWatchDuration: Math.round(avgWatchDuration), // in seconds
-        skipRate: parseFloat(skipRate.toFixed(2))
+        totalViews: overallViews || 0,
+        totalShares: overallShares || 0,
+        totalWatchTime: Math.round(overallWatchTime / 60),
+        avgWatchDuration: Math.round(overallAvgDuration),
+        skipRate: parseFloat(overallSkipRate.toFixed(2)),
+        viewsGrowth: Math.round(viewsGrowthRate),
+        watchTimeGrowth: Math.round(watchTimeGrowthRate)
       },
-      topVideos,
-      dailyPerformance: dailyStats.map(s => ({
-        date: s._id,
-        views: s.views,
-        watchTime: Math.round(s.watchTime / 60)
-      })),
+      topVideos: sortedTopVideos,
+      dailyPerformance: sparklineData,
       audience: {
-        topLocations,
+        topLocations: finalTopLocations.length > 0 ? finalTopLocations : [{ name: "Global", value: 100 }],
+        activeTimes: hourlyMap,
         newVsReturning: {
-          new: newCount,
-          returning: returningCount
-        },
-        activeTimes: hourlyStats.map(h => ({
-          hour: h._id,
-          count: h.count
-        }))
+          new: countNew,
+          returning: countReturning
+        }
       }
     });
 

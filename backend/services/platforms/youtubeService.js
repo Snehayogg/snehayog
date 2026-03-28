@@ -42,7 +42,7 @@ class YouTubeService {
       this.oauth2Client.redirectUri = redirectUri;
       const { tokens } = await this.oauth2Client.getToken(code);
       
-      const user = await User.findById(userId);
+      const user = await User.findOne({ googleId: userId });
       if (!user) throw new Error('User not found');
 
       // Get channel info
@@ -82,7 +82,7 @@ class YouTubeService {
    */
   async uploadVideo(userId, filePath, metadata, onProgress = null) {
     try {
-      const user = await User.findById(userId);
+      const user = await User.findOne({ googleId: userId });
       if (!user || !user.socialAccounts?.youtube?.connected) {
         throw new Error('YouTube account not connected');
       }

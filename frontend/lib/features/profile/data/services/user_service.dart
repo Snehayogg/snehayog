@@ -359,6 +359,37 @@ class UserService {
       return null;
     }
   }
+
+  /// Get YouTube auth URL
+  Future<String?> getYouTubeAuthUrl() async {
+    try {
+      final userData = await _authService.getUserData();
+      final token = userData?['token'];
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await httpClientService.get(
+        Uri.parse('${NetworkHelper.apiBaseUrl}/auth/youtube'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['authUrl'];
+      } else {
+        AppLogger.log(
+            'Failed to get YouTube auth URL. Status: ${response.statusCode}, Body: ${response.body}');
+        throw Exception('Failed to get YouTube auth URL');
+      }
+    } catch (e) {
+      AppLogger.log('Error getting YouTube auth URL: $e');
+      rethrow;
+    }
+  }
 }
 
 /// **NEW: FollowManager for better follow state management**

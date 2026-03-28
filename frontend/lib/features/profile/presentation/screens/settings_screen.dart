@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/design/spacing.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayu/features/profile/presentation/screens/saved_videos_screen.dart';
+import 'package:vayu/features/profile/presentation/screens/linked_accounts_screen.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/shared/utils/app_text.dart';
@@ -44,7 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : ListView.separated(
               padding: EdgeInsets.all(AppSpacing.spacing4),
-              itemCount: 2,
+              itemCount: 3,
               separatorBuilder: (_, __) =>
                   SizedBox(height: AppSpacing.spacing4),
               itemBuilder: (context, index) {
@@ -59,6 +59,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         context,
                         MaterialPageRoute(
                             builder: (context) => const SavedVideosScreen()),
+                      );
+                    },
+                  );
+                } else if (index == 1) {
+                  return _buildActionTile(
+                    title: AppText.get('settings_linked_accounts',
+                        fallback: 'Linked Accounts'),
+                    icon: Icons.link,
+                    color: AppColors.textPrimary,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const LinkedAccountsScreen()),
                       );
                     },
                   );

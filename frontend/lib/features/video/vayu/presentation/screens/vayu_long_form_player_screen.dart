@@ -22,6 +22,7 @@ import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/shared/factories/video_controller_factory.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -94,7 +95,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Duration _scrubbingDelta = Duration.zero;
   double _horizontalDragTotal = 0.0;
   bool _isForward = true;
-  Timer? _hideControlsTimer;
+  Timer? _controlsTimer; // Renamed from _hideControlsTimer
+  bool _isScrollingLocked = false; // **NEW: State for locking PageView scroll**
 
   // Gesture state
   double _brightnessValue = 0.5;
@@ -163,7 +165,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           _initializePlayer(initialIdx);
         } else {
           // Fallback to restoration ONLY if the selected video isn't in the list (rare)
-          // or if we were to support launch-without-video in the future.
           final mainController = ref.read(mainControllerProvider);
           final lastIndex = await mainController.getLastViewedVideoIndex(1); // 1 = Vayu
           if (lastIndex > 0 && lastIndex < _videos.length) {
@@ -275,6 +276,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   Future<void> _handleFirstTimeScrollHint(SharedPreferences prefs) async {
+    // Disable hint for pushed player (e.g. from Search/Profile)
+    if (_videos.length > 1 && widget.relatedVideos.isNotEmpty) return;
+
     await Future.delayed(const Duration(milliseconds: 2000));
     if (!mounted || _currentIndex != 0 || _videos.length <= 1) return;
 
@@ -418,6 +422,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     if (index == _currentIndex) {
       _enableWakelock();
       _resumePlayback(index);
+      
+      // **NEW: Start autohide timer if controls are shown on initial load**
+      if (_showControls) {
+        _startHideControlsTimer();
+      }
+
       try {
         _brightnessValue = await ScreenBrightness().application;
         final vol = await FlutterVolumeController.getVolume();
@@ -445,15 +455,18 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     // Save current position before cleaning up
     _savePlaybackPosition(_currentIndex);
     
-    // Local cleanup
+    // Local cleanup: Stop playback but don't dispose shared controllers globally
     _controllers.forEach((index, c) {
-      final videoId = _videos[index].id;
-      _controllerPool.disposeController(videoId);
+      try {
+        c?.pause();
+        c?.setVolume(0.0);
+      } catch (_) {}
     });
+    
     _chewieControllers.forEach((index, c) => c?.dispose());
     
     _pageController.dispose();
-    _hideControlsTimer?.cancel();
+    _controlsTimer?.cancel(); // Changed from _hideControlsTimer
     _overlayTimer?.cancel();
     _aspectRatioOverlayTimer?.cancel();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -495,8 +508,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final delta = details.primaryDelta! / size.height * 1.5;
 
     if (isLeftSide) {
-      _brightnessValue = (_brightnessValue - delta).clamp(0.0, 1.0);
+       _brightnessValue = (_brightnessValue - delta).clamp(0.0, 1.0);
       ScreenBrightness().setApplicationScreenBrightness(_brightnessValue);
+      // No overlay for brightness as requested
     } else {
       _volumeValue = (_volumeValue - delta).clamp(0.0, 1.0);
       FlutterVolumeController.setVolume(_volumeValue);
@@ -505,8 +519,16 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _resetOverlayTimer();
   }
 
-  void _handleVerticalDragEnd() => _resetOverlayTimer();
-  void _resetOverlayTimer() { _overlayTimer?.cancel(); _overlayTimer = Timer(const Duration(seconds: 2), () {}); }
+  void _handleVerticalDragEnd() {
+    _resetOverlayTimer();
+    _overlayTimer = Timer(const Duration(milliseconds: 500), () {
+      // No-op - overlay removed
+    });
+  }
+  
+  void _resetOverlayTimer() { 
+    _overlayTimer?.cancel(); 
+  }
 
   void _handleTap() {
     setState(() => _showControls = !_showControls);
@@ -517,8 +539,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   void _startHideControlsTimer() {
-    _hideControlsTimer?.cancel();
-    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+    _controlsTimer?.cancel(); // Changed from _hideControlsTimer
+    _controlsTimer = Timer(const Duration(seconds: 3), () { // Changed from _hideControlsTimer
       if (mounted) {
         setState(() => _showControls = false);
         if (MediaQuery.of(context).orientation == Orientation.landscape) {
@@ -528,7 +550,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     });
   }
 
-  Future<void> _savePlaybackPosition(int index) async {
+  void _savePlaybackPosition(int index) async {
     final controller = _controllers[index];
     if (controller != null && controller.value.isInitialized) {
       _prefs ??= await SharedPreferences.getInstance();
@@ -567,8 +589,26 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       _startHideControlsTimer(); 
     } else { 
       setState(() => _showControls = true); 
-      _hideControlsTimer?.cancel(); 
+      _controlsTimer?.cancel(); // Changed from _hideControlsTimer
     }
+  }
+
+  void _showSnackBar(String message, {Duration? duration}) {
+    if (!mounted) return;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+        duration: duration ?? const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.surfacePrimary.withOpacity(0.9),
+        width: isLandscape ? 340.0 : null, // Limit width in landscape
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 6,
+      ),
+    );
   }
 
   void _hideControlsWithDelay() {
@@ -613,7 +653,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       final isSaved = await _videoService.toggleSave(video.id);
       setState(() { video.isSaved = isSaved; _isSaving = false; });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isSaved ? 'Video saved' : 'Video removed'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating));
+        _showSnackBar(isSaved ? 'Video saved to collection' : 'Video removed from collection', duration: const Duration(seconds: 2));
       }
     } catch (e) { setState(() => _isSaving = false); }
   }
@@ -676,7 +716,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         alignment: Alignment.center,
         heightFactor: 1.0,
         child: Container(
-          constraints: BoxConstraints(maxWidth: isLandscape ? MediaQuery.of(context).size.width * 0.5 : double.infinity),
+          constraints: BoxConstraints(maxWidth: isLandscape ? 380.0 : double.infinity),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -795,7 +835,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         alignment: Alignment.center,
         heightFactor: 1.0,
         child: Container(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).orientation == Orientation.landscape ? MediaQuery.of(context).size.width * 0.4 : double.infinity),
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).orientation == Orientation.landscape ? 380.0 : double.infinity),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -969,13 +1009,13 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         _onDeviceDubbingService.cancelDubbing(video.videoUrl);
         _dubbingSubscriptions[videoId]?.cancel();
         _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dubbing cancelled.')));
+        _showSnackBar('Dubbing cancelled.');
       }
       return;
     }
 
     setState(() => _isDubbingProgressVisible = true);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Dubbing started for ${targetLang.toUpperCase()}...')));
+    _showSnackBar('Dubbing started for ${targetLang.toUpperCase()}...');
     final resultVN = _getOrCreateNotifier<DubbingResult>(_dubbingResultsVN, videoId, const DubbingResult(status: DubbingStatus.checking));
     _dubbingSubscriptions[videoId]?.cancel();
     
@@ -983,7 +1023,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       if (!mounted) return;
       resultVN.value = result;
       if (result.status == DubbingStatus.completed) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dubbing completed successfully!')));
+        _showSnackBar('Dubbing completed successfully!');
         if (result.dubbedUrl != null) {
           final vIndex = _videos.indexWhere((v) => v.id == videoId);
           if (vIndex != -1) {
@@ -1003,7 +1043,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         }
       } else if (result.status == DubbingStatus.failed) {
         if (mounted && result.error?.contains('Cancelled') != true) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI Dubbing failed: ${result.error ?? "Unknown error"}')));
+          _showSnackBar('AI Dubbing failed: ${result.error ?? "Unknown error"}');
         }
       }
     });
@@ -1021,22 +1061,26 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final String detectedSource = hasEnglishDub ? 'Hindi' : (hasHindiDub ? 'English' : 'Original');
 
     VayuBottomSheet.show<void>(
-      context: context,
+      context: context, 
       title: 'Audio Language',
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).orientation == Orientation.landscape 
-              ? MediaQuery.of(context).size.width * 0.4 
-              : double.infinity
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildLanguageOption(context, video, '$detectedSource (Original)', 'default', badge: 'Original'),
-            _buildLanguageOption(context, video, 'English', 'english', badge: hasEnglishDub ? 'Dubbed' : null, available: hasEnglishDub),
-            _buildLanguageOption(context, video, 'Hindi', 'hindi', badge: hasHindiDub ? 'Dubbed' : null, available: hasHindiDub),
-          ],
+      child: Align(
+        alignment: Alignment.center,
+        heightFactor: 1.0,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).orientation == Orientation.landscape 
+                ? 380.0 
+                : double.infinity
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildLanguageOption(context, video, '$detectedSource (Original)', 'default', badge: 'Original'),
+              _buildLanguageOption(context, video, 'English', 'english', badge: hasEnglishDub ? 'Dubbed' : null, available: hasEnglishDub),
+              _buildLanguageOption(context, video, 'Hindi', 'hindi', badge: hasHindiDub ? 'Dubbed' : null, available: hasHindiDub),
+            ],
+          ),
         ),
       ),
     );
@@ -1055,7 +1099,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           color: isSelected ? AppColors.primary : AppColors.textPrimary, 
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
         )),
-        if (badge != null) ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: Text(badge, style: const TextStyle(fontSize: 10, color: AppColors.primary)))]
+        if (badge != null) ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text(badge, style: const TextStyle(fontSize: 10, color: AppColors.primary)))]
       ]),
       trailing: isSelected ? const Icon(Icons.check, color: AppColors.primary) : (!available ? Icon(Icons.psychology_outlined, color: AppColors.textTertiary, size: isLandscape ? 16 : 16.w) : null),
       onTap: () { 
@@ -1084,16 +1128,32 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   Widget _buildScrubbingOverlay() {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Container(padding: EdgeInsets.symmetric(horizontal: isLandscape ? 16 : 16.w, vertical: isLandscape ? 8 : 8.h), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(isLandscape ? 100 : 100.r)), child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(_isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: isLandscape ? 32 : 32.w),
-        SizedBox(width: isLandscape ? 12 : 12.w),
-        Text('${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 24 : 24.sp, fontWeight: FontWeight.bold)),
-      ])),
-      SizedBox(height: isLandscape ? 12 : 12.h),
-      Text(_formatDuration(_scrubbingTargetTime), style: TextStyle(color: Colors.white, fontSize: isLandscape ? 18 : 18.sp, fontWeight: FontWeight.bold)),
-    ]));
+    return Align(
+      alignment: _isForward ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: isLandscape ? 60 : 40.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min, 
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: isLandscape ? 16 : 16.w, vertical: isLandscape ? 8 : 8.h), 
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(isLandscape ? 100 : 100.r)), 
+              child: Row(
+                mainAxisSize: MainAxisSize.min, 
+                children: [
+                  Icon(_isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: isLandscape ? 32 : 32.w),
+                  SizedBox(width: isLandscape ? 12 : 12.w),
+                  Text('${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 24 : 24.sp, fontWeight: FontWeight.bold)),
+                ]
+              )
+            ),
+          ]
+        ),
+      )
+    );
   }
+
+
 
   Widget _buildAspectRatioOverlay() {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
@@ -1123,7 +1183,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         body: Stack(children: [
           PageView.builder(
             controller: _pageController,
-            physics: const BouncingScrollPhysics(),
+            physics: _isScrollingLocked 
+                ? const NeverScrollableScrollPhysics() 
+                : const BouncingScrollPhysics(),
             scrollDirection: Axis.vertical,
             onPageChanged: _onPageChanged,
             itemCount: _videos.length,
@@ -1135,7 +1197,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
               child: _buildFeedItem(index)
             ),
           ),
-          if (!_hasSeenScrollHint) Positioned(bottom: isLandscape ? 80 : 140.h, left: 0, right: 0, child: IgnorePointer(child: AnimatedOpacity(opacity: _showScrollHintOverlay ? 1.0 : 0.0, duration: const Duration(milliseconds: 500), child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: isLandscape ? 24 : 24.w, vertical: isLandscape ? 12 : 12.h), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(isLandscape ? 30 : 30.r)), child: Text('Swipe up to watch more', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 16 : 16.sp, fontWeight: FontWeight.w600))))))),
+          if (!_hasSeenScrollHint) Positioned(bottom: isLandscape ? 80 : 140.h, left: 0, right: 0, child: IgnorePointer(child: AnimatedOpacity(opacity: _showScrollHintOverlay ? 1.0 : 0.0, duration: const Duration(milliseconds: 500), child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: isLandscape ? 24 : 24.w, vertical: isLandscape ? 12 : 12.h), decoration: BoxDecoration(color: Colors.black.withOpacity(0.65), borderRadius: BorderRadius.circular(isLandscape ? 30 : 30.r)), child: Text('Swipe up to watch more', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 16 : 16.sp, fontWeight: FontWeight.w600))))))),
         ]),
       ),
     );
@@ -1147,9 +1209,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: _showControls,
     isControlsLocked: _isControlsLocked, aspectRatioMode: _aspectRatioMode, showScrubbingOverlay: _showScrubbingOverlay,
     aspectRatioOverlayText: _aspectRatioOverlayText, onToggleFullScreen: _toggleFullScreen, onCycleAspectRatio: _cycleAspectRatioMode,
-    onHandleTap: _handleTap, onDoubleTapToSeek: _handleDoubleTapToSeek, onHorizontalDragEnd: _handleHorizontalDragEnd,
-    onVerticalDragUpdate: _handleVerticalDragUpdate, onVerticalDragEnd: _handleVerticalDragEnd, onUnifiedHorizontalDrag: _handleUnifiedHorizontalDrag,
-    buildAdSection: _buildAdSection, buildVideoInfo: _buildVideoInfo, buildChannelRow: _buildChannelRow,
+    onHandleTap: _handleTap, onDoubleTapToSeek: _handleDoubleTapToSeek,    onHorizontalDragEnd: _handleHorizontalDragEnd,
+    onVerticalDragUpdate: _handleVerticalDragUpdate, onVerticalDragEnd: _handleVerticalDragEnd, 
+    onUnifiedHorizontalDrag: _handleUnifiedHorizontalDrag,
+    onScrollingLock: (locked) {
+      if (mounted) setState(() => _isScrollingLocked = locked);
+    },
+    onShowSnackBar: _showSnackBar,
+    buildAdSection: _buildAdSection, 
+    buildVideoInfo: _buildVideoInfo, buildChannelRow: _buildChannelRow,
     buildScrubbingOverlay: _buildScrubbingOverlay, buildAspectRatioOverlay: _buildAspectRatioOverlay,
     buildCustomControls: _buildCustomControls, formatDuration: _formatDuration,
     buildDubbingProgress: _buildDubbingProgress,
@@ -1226,33 +1294,30 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         top: 0, right: 0, left: 0,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            isPortrait ? 0 : MediaQuery.of(context).viewPadding.left, 
-            MediaQuery.of(context).viewPadding.top, 
-            isPortrait ? 0 : MediaQuery.of(context).viewPadding.right, 
+            isPortrait ? 16 : MediaQuery.of(context).viewPadding.left + 16, 
+            isPortrait ? 8 : (MediaQuery.of(context).viewPadding.top + 8), 
+            isPortrait ? 16 : MediaQuery.of(context).viewPadding.right + 16, 
             0
           ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: isPortrait ? 16.w : 16, vertical: isPortrait ? 8.h : 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Empty space on the left to balance the More icon
-                const SizedBox(width: 30),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Empty space on the left to balance the More icon
+              const SizedBox(width: 30),
 
-                // More Options
-                IconButton(
-                  constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 20),
-                  onPressed: _showMoreOptions,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black26,
-                    padding: EdgeInsets.zero,
-                    fixedSize: Size(isPortrait ? 30.w : 30, isPortrait ? 30.w : 30),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+              // More Options
+              IconButton(
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 21),
+                onPressed: _showMoreOptions,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black26,
+                  padding: EdgeInsets.zero,
+                  fixedSize: Size(isPortrait ? 30.w : 30, isPortrait ? 30.w : 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1362,11 +1427,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             ],
           ),
         ),
-
-      // Dubbing Progress Overlay - REMOVED from here to be moved outside video stack
     ]);
   }
 
+  // Dubbing Progress Overlay - REMOVED from here to be moved outside video stack
   Widget _buildDubbingProgress(int index) {
     if (!_isDubbingProgressVisible) return const SizedBox.shrink();
     final videoId = _videos[index].id;
@@ -1390,93 +1454,147 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             margin: EdgeInsets.fromLTRB(horizontalMargin, 0, horizontalMargin, bottomMargin),
             padding: EdgeInsets.symmetric(horizontal: isLandscape ? 12.0 : 12.w, vertical: isLandscape ? 8.0 : 10.h),
             decoration: BoxDecoration(
-              color: isLandscape ? Colors.black87 : AppColors.backgroundSecondary.withValues(alpha: 0.9),
+              color: isLandscape ? Colors.black87 : AppColors.backgroundSecondary.withOpacity(0.9),
               borderRadius: BorderRadius.circular(isLandscape ? 12 : 12.r),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
+                  color: Colors.black.withOpacity(0.2),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
               ],
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2), width: 1),
+              border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'AI Dubbing: $statusText',
-                      style: TextStyle(
-                        color: isLandscape ? Colors.white : AppColors.textPrimary, 
-                        fontSize: isLandscape ? 12.0 : 12.sp, 
-                        fontWeight: FontWeight.bold
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _showCancelDubbingDialog(videoId),
+                        behavior: HitTestBehavior.opaque,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'AI Dubbing: $statusText',
+                                    style: TextStyle(
+                                      color: isLandscape ? Colors.white : AppColors.textPrimary, 
+                                      fontSize: isLandscape ? 12.0 : 12.sp, 
+                                      fontWeight: FontWeight.bold
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${result.progress}%',
+                                  style: TextStyle(
+                                    color: AppColors.primary, 
+                                    fontSize: isLandscape ? 12.0 : 12.sp, 
+                                    fontWeight: FontWeight.bold
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(isLandscape ? 4 : 4.r),
+                              child: LinearProgressIndicator(
+                                value: progressValue,
+                                backgroundColor: isLandscape ? Colors.white24 : AppColors.borderPrimary,
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                minHeight: isLandscape ? 4.0 : 4.h,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${result.progress}%',
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: () => setState(() => _isDubbingProgressVisible = false),
+                      child: Text(
+                        'Hide',
                         style: TextStyle(
-                          color: AppColors.primary, 
-                          fontSize: isLandscape ? 12.0 : 12.sp, 
-                          fontWeight: FontWeight.bold
+                          color: isLandscape ? Colors.white : AppColors.primary,
+                          fontSize: isLandscape ? 12.0 : 12.sp,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                          decorationColor: isLandscape ? Colors.white.withOpacity(0.5) : AppColors.primary.withOpacity(0.5),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      GestureDetector(
-                        onTap: () => setState(() => _isDubbingProgressVisible = false),
-                        child: Text(
-                          'Hide',
-                          style: TextStyle(
-                            color: isLandscape ? Colors.white : AppColors.primary,
-                            fontSize: isLandscape ? 12.0 : 12.sp,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.underline,
-                            decorationColor: isLandscape ? Colors.white.withValues(alpha: 0.5) : AppColors.primary.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      GestureDetector(
-                        onTap: () {
-                          _onDeviceDubbingService.cancelDubbing(_videos[index].videoUrl);
-                          _dubbingSubscriptions[videoId]?.cancel();
-                          _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dubbing cancelled.')));
-                        },
-                        child: Icon(
-                          Icons.close_rounded, 
-                          color: isLandscape ? Colors.white70 : AppColors.textTertiary, 
-                          size: isLandscape ? 16.0 : 16.w
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(isLandscape ? 4 : 4.r),
-                child: LinearProgressIndicator(
-                  value: progressValue,
-                  backgroundColor: isLandscape ? Colors.white12 : AppColors.primary.withValues(alpha: 0.05),
-                  color: AppColors.primary,
-                  minHeight: isLandscape ? 4.0 : 4.h,
+                    ),
+                  ],
                 ),
-              ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  void _showCancelDubbingDialog(String videoId) {
+    VayuBottomSheet.show<void>(
+      context: context,
+      title: 'Dubbing',
+      child: Align(
+        alignment: Alignment.center,
+        heightFactor: 1.0,
+        child: Container(
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).orientation == Orientation.landscape ? 380.0 : double.infinity),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Aap dubbing cancel karna chahte hain?',
+                style: AppTypography.bodyLarge.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      onPressed: () => Navigator.pop(context),
+                      label: 'Nahi',
+                      variant: AppButtonVariant.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: AppButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        final video = _videos.firstWhere((v) => v.id == videoId);
+                        _onDeviceDubbingService.cancelDubbing(video.videoUrl);
+                        _dubbingSubscriptions[videoId]?.cancel();
+                        _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
+                        if (mounted) {
+                          _showSnackBar('Dubbing cancelled.');
+                        }
+                      },
+                      label: 'Haan, Cancel Karein',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1503,6 +1621,8 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   final void Function(DragUpdateDetails) onVerticalDragUpdate;
   final VoidCallback onVerticalDragEnd;
   final void Function(double) onUnifiedHorizontalDrag;
+  final void Function(bool) onScrollingLock; // **NEW: Callback to lock/unlock parent scroll**
+  final void Function(String) onShowSnackBar; // **NEW: Callback for SnackBars**
   final Widget Function(int) buildAdSection;
   final Widget Function(int) buildVideoInfo;
   final Widget Function(int) buildChannelRow;
@@ -1518,10 +1638,14 @@ class VayuFeedItem extends ConsumerStatefulWidget {
     required this.isControlsLocked, required this.aspectRatioMode, required this.showScrubbingOverlay,
     this.aspectRatioOverlayText, required this.onToggleFullScreen, required this.onCycleAspectRatio,
     required this.onHandleTap, required this.onDoubleTapToSeek, required this.onHorizontalDragEnd,
-    required this.onVerticalDragUpdate, required this.onVerticalDragEnd, required this.onUnifiedHorizontalDrag,
-    required this.buildAdSection, required this.buildVideoInfo, required this.buildChannelRow,
+    required this.onVerticalDragUpdate, required this.onVerticalDragEnd,    required this.onUnifiedHorizontalDrag,
+    required this.onScrollingLock, // **NEW: Required callback**
+    required this.onShowSnackBar, // **NEW: Required callback**
+    required this.buildAdSection,
+    required this.buildVideoInfo, required this.buildChannelRow,
     required this.buildScrubbingOverlay, required this.buildAspectRatioOverlay,
-    required this.buildCustomControls, required this.buildDubbingProgress, required this.formatDuration,
+    required this.buildCustomControls, required this.buildDubbingProgress, 
+    required this.formatDuration,
   });
 
   @override
@@ -1559,11 +1683,11 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
     }
     return Column(children: [
       _buildVideoSection(orientation),
-      widget.buildDubbingProgress(widget.index),
       Expanded(child: SingleChildScrollView(child: Column(children: [
         SizedBox(height: 12.h), widget.buildAdSection(widget.index),
         SizedBox(height: 12.h), widget.buildVideoInfo(widget.index),
         SizedBox(height: 8.h), widget.buildChannelRow(widget.index),
+        SizedBox(height: 12.h), widget.buildDubbingProgress(widget.index),
         SizedBox(height: 48.h),
       ]))),
     ]);
@@ -1601,8 +1725,8 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
         Transform(
           alignment: Alignment.center,
           transform: Matrix4.identity()
-            ..translateByDouble(_offset.dx, _offset.dy, 0.0, 1.0)
-            ..scaleByDouble(_scale, _scale, 1.0, 1.0),
+            ..translate(_offset.dx, _offset.dy)
+            ..scale(_scale),
           child: SizedBox.expand(
             child: FittedBox(
               fit: widget.aspectRatioMode == AspectRatioMode.stretch || widget.aspectRatioMode == AspectRatioMode.ratio16x9
@@ -1623,9 +1747,16 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
         child: Listener(
           onPointerDown: (e) {
             _pointers++;
+            widget.onScrollingLock(true); // Lock parent scroll
           },
-          onPointerUp: (e) => _pointers--,
-          onPointerCancel: (e) => _pointers--,
+          onPointerUp: (e) {
+            if (_pointers > 0) _pointers--;
+            if (_pointers == 0) widget.onScrollingLock(false); // Unlock
+          },
+          onPointerCancel: (e) {
+            if (_pointers > 0) _pointers--;
+            if (_pointers == 0) widget.onScrollingLock(false); // Unlock
+          },
           child: GestureDetector(
             onTap: () {
               // Tap Guard: If we just started a multi-finger operation, ignore single tap
@@ -1647,9 +1778,6 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
               _dragHorizontalDeltaAccumulated = 0;
               _dragVerticalDeltaAccumulated = 0;
             },
-            // NEW: Add dummy vertical drag handlers to intercept PageView scrolling
-            onVerticalDragStart: (_) {},
-            onVerticalDragUpdate: (_) {},
             onScaleUpdate: (d) {
               if (widget.isControlsLocked) return;
 
@@ -1659,7 +1787,7 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
                 _activeGesture = GestureType.scale;
                 setState(() {
                   _scale = (_baseScale * d.scale).clamp(1.0, 5.0);
-                  _offset = Offset.zero; // NEW: Explicitly disable panning
+                  _offset = Offset.zero; 
                 });
                 return;
               }
@@ -1688,8 +1816,6 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
                 if (_activeGesture == GestureType.horizontal) {
                   widget.onUnifiedHorizontalDrag(dx);
                 } else if (_activeGesture == GestureType.vertical) {
-                  // Determine region for vertical gestures (Left = Brightness, Right = Volume)
-                  // Use a local focal point relative to the whole screen area
                   if (_scale == 1.0) {
                     widget.onVerticalDragUpdate(DragUpdateDetails(
                       localPosition: d.localFocalPoint,

@@ -18,6 +18,10 @@ const UserSchema = new mongoose.Schema({
   profilePic: {
     type: String
   },
+  websiteUrl: {
+    type: String,
+    trim: true
+  },
   videos: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Video'
@@ -35,21 +39,6 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // **DEPRECATED: Following arrays moved to 'Follower' collection**
-  /* following: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  followers: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }], */
-  // **DEPRECATED: Saved/Bookmarked Videos moved to 'SavedVideo' collection**
-  /* savedVideos: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Video'
-  }], */
-  // **NEW: Payment and Payout Preferences**
   preferredCurrency: {
     type: String,
     enum: ['INR', 'USD', 'EUR', 'GBP', 'CAD', 'AUD'],

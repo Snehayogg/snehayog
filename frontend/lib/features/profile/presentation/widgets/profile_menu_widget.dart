@@ -3,7 +3,6 @@ import 'package:vayu/core/design/spacing.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:provider/provider.dart';
 import 'package:vayu/features/profile/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/profile/presentation/managers/game_creator_manager.dart';
 import 'package:vayu/shared/services/auto_scroll_settings.dart';
 import 'package:vayu/features/profile/presentation/widgets/profile_dialogs_widget.dart';
 
@@ -63,7 +62,7 @@ class ProfileMenuWidget extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: EdgeInsets.all(AppSpacing.spacing5),
+                padding: EdgeInsets.all(AppSpacing.spacing3),
                 decoration: BoxDecoration(
                   color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
                   border: const Border(
@@ -89,8 +88,8 @@ class ProfileMenuWidget extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Consumer2<ProfileStateManager, GameCreatorManager>(
-                  builder: (context, stateManager, gameManager, child) {
+                child: Consumer<ProfileStateManager>(
+                  builder: (context, stateManager, child) {
                     List<Map<String, dynamic>> menuItems = [];
 
                     // Settings (New)
@@ -161,21 +160,6 @@ class ProfileMenuWidget extends StatelessWidget {
                         },
                       });
                     }
-
-                    // Creator Mode Toggle
-                    menuItems.add({
-                      'title': gameManager.isCreatorMode
-                          ? 'Video Studio'
-                          : 'Arcade Studio',
-                      'icon': gameManager.isCreatorMode
-                          ? HugeIcons.strokeRoundedVideo01
-                          : HugeIcons.strokeRoundedGameController01,
-                      'color': AppColors.primary,
-                      'onTap': () {
-                        Navigator.pop(context);
-                        gameManager.toggleCreatorMode();
-                      },
-                    });
 
                     // Report User
                     if (userId != null &&
@@ -258,9 +242,9 @@ class ProfileMenuWidget extends StatelessWidget {
                       ),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
-                        crossAxisSpacing: AppSpacing.spacing3,
-                        mainAxisSpacing: AppSpacing.spacing3,
-                        childAspectRatio: 1.1,
+                        crossAxisSpacing: AppSpacing.spacing2,
+                        mainAxisSpacing: AppSpacing.spacing2,
+                        childAspectRatio: 1.4,
                       ),
                       itemCount: menuItems.length,
                       itemBuilder: (context, index) {
@@ -277,7 +261,7 @@ class ProfileMenuWidget extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: EdgeInsets.all(AppSpacing.spacing5),
+                padding: EdgeInsets.all(AppSpacing.spacing3),
                 child: Text(
                   'Vayu v1.1.0',
                   style: AppTypography.labelSmall
@@ -316,7 +300,7 @@ class ProfileMenuWidget extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: EdgeInsets.all(AppSpacing.spacing2),
+                padding: EdgeInsets.all(AppSpacing.spacing1),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
@@ -327,7 +311,7 @@ class ProfileMenuWidget extends StatelessWidget {
                   size: 22,
                 ),
               ),
-              SizedBox(height: AppSpacing.spacing2),
+              SizedBox(height: AppSpacing.spacing1),
               Text(
                 title,
                 style: AppTypography.labelMedium.copyWith(

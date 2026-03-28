@@ -39,6 +39,15 @@ class DeepLinkService {
   void _handleUri(Uri uri) {
     AppLogger.log('🔗 DeepLinkService: Handling URI: $uri');
     
+    // Check for social success (vayu://auth/social-success?platform=youtube)
+    if (uri.path.contains('social-success')) {
+      final platform = uri.queryParameters['platform'];
+      AppLogger.log('🔗 DeepLinkService: Social connection success for $platform');
+      // No immediate action needed as user is likely in browser, 
+      // but we logged it for tracking.
+      return;
+    }
+
     // Check for referral code (?ref=CODE)
     if (uri.queryParameters.containsKey('ref') || uri.path.contains('ref=')) {
       String? refCode = uri.queryParameters['ref'];
