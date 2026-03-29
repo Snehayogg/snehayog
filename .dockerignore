@@ -1,21 +1,38 @@
-**/node_modules
-**/npm-debug.log
-**/.env
-**/.env.local
-**/.env.production
-**/.git
-**/.gitignore
-**/logs
-**/*.log
-**/temp
-**/uploads
-**/.DS_Store
-**/coverage
-**/.nyc_output
-**/README.md
-**/.vscode
-**/.idea
-**/*.swp
-**/*.swo
+# Node.js
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Frontend (Flutter/Web)
 frontend/
-.github/
+.dart_tool/
+.pub-cache/
+.pub/
+build/
+
+# Local Environment
+.env
+.env.local
+.env.production
+.env.development
+
+# Version Control
+.git
+.gitignore
+
+# IDEs
+.vscode/
+.idea/
+
+# Backend Temporary Files
+backend/logs/
+backend/temp/
+backend/uploads/
+backend/node_modules/
+temp_raw_downloads/
+temp_social_uploads/
+
+# Deployment
+fly.toml
+Dockerfile
+.dockerignore
