@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -61,6 +62,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
   final BackgroundProfilePreloader _profilePreloader =
       BackgroundProfilePreloader();
   bool _hasCheckedForUpdates = false;
+
+  // **LAZY TAB RESTORATION: Track which tabs have been restored**
+  final Set<int> _restoredTabs = {};
 
   Future<void> _refreshVideoList() async {
     try {
@@ -316,15 +320,16 @@ class _MainScreenState extends ConsumerState<MainScreen>
       final restoredIndex = await mainController.restoreLastTabIndex();
       AppLogger.log('🚀 MainScreen: Restored tab index to $restoredIndex');
 
-      // 3. Restore sub-routes for each tab
-      for (int i = 0; i < _navigatorKeys.length; i++) {
-        final savedRoute = await mainController.getPersistedSubRoute(i);
-        if (savedRoute != null) {
-          final routeName = savedRoute['routeName'] as String;
-          final args = savedRoute['args'] as Map<String, String>?;
-          _restoreSubRoute(i, routeName, args);
-        }
+      // 3. ONLY restore sub-route for the ACTIVE tab immediately
+      // This is a CRITICAL optimization for app resume latency.
+      final savedRoute = await mainController.getPersistedSubRoute(restoredIndex);
+      if (savedRoute != null) {
+        final routeName = savedRoute['routeName'] as String;
+        final args = savedRoute['args'] as Map<String, String>?;
+        _restoreSubRoute(restoredIndex, routeName, args);
       }
+      _restoredTabs.add(restoredIndex);
+      AppLogger.log('🚀 MainScreen: Restored sub-route for active tab $restoredIndex (other tabs deferred)');
 
     } catch (e) {
       AppLogger.log('❌ MainScreen: Error restoring tab index: $e');
@@ -534,6 +539,19 @@ class _MainScreenState extends ConsumerState<MainScreen>
             }
           }
         });
+      }
+
+      // **LAZY TAB RESTORATION: Restore sub-route on first visit if not already done**
+      if (!_restoredTabs.contains(index)) {
+        AppLogger.log('🔄 MainScreen: First visit to tab $index, checking for sub-route restoration');
+        unawaited(mainController.getPersistedSubRoute(index).then((savedRoute) {
+          if (savedRoute != null) {
+            final routeName = savedRoute['routeName'] as String;
+            final args = savedRoute['args'] as Map<String, String>?;
+            _restoreSubRoute(index, routeName, args);
+          }
+        }));
+        _restoredTabs.add(index);
       }
 
       // Change index - MainController will handle additional video control

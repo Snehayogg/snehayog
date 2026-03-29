@@ -32,6 +32,7 @@ import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/video/upload/presentation/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/features/video/upload/presentation/screens/make_episode_screen.dart';
 import 'package:vayu/features/profile/core/presentation/screens/linked_accounts_screen.dart';
+import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -85,13 +86,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     // Clear selection so user starts fresh
     _deselectVideo();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text(AppText.get('upload_cancelled', fallback: 'Upload cancelled')),
-        backgroundColor: AppColors.backgroundSecondary,
-      ),
-    );
+    if (mounted) {
+      VayuSnackBar.showInfo(context, AppText.get('upload_cancelled', fallback: 'Upload cancelled'));
+    }
   }
 
   /// Deselect current video and reset related fields
@@ -435,16 +432,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       }
       _showUploadForm.value = true;
 
-      // Notify user via a small snackbar instead of a disruptive dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppText.get('upload_resumed',
-              fallback: 'Upload progress restored')),
-          backgroundColor: AppColors.success.withValues(alpha: 0.8),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      _showUploadForm.value = true;
     }
   }
 
@@ -1282,6 +1270,17 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           appBar: AppBar(
             title: Text(AppText.get('upload_title')),
             centerTitle: true,
+            leading: ValueListenableBuilder<File?>(
+              valueListenable: _selectedVideo,
+              builder: (context, video, _) {
+                if (video == null) return const SizedBox.shrink();
+                return IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: _deselectVideo,
+                  tooltip: 'Cancel selection',
+                );
+              },
+            ),
             actions: [
               if (isSignedIn)
                 IconButton(

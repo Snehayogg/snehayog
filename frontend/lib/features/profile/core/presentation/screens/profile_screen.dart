@@ -11,6 +11,7 @@ import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/managers/smart_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:vayu/core/providers/profile_providers.dart';
 import 'package:vayu/features/video/core/data/services/video_cache_proxy_service.dart';
 import 'package:vayu/shared/services/profile_screen_logger.dart';
@@ -44,6 +45,7 @@ import 'package:vayu/features/profile/notices/presentation/widgets/notice_banner
 import 'package:vayu/features/profile/content/presentation/screens/profile_tabs/yug_grid_tab.dart';
 import 'package:vayu/features/profile/content/presentation/screens/profile_tabs/vayu_grid_tab.dart';
 import 'package:vayu/features/profile/content/presentation/screens/profile_tabs/about_user_tab.dart';
+import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 
 import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/core/providers/navigation_providers.dart';
@@ -464,13 +466,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               '⚠️ ProfileScreen: User data still not ready after waiting, skipping video load');
           // **FIX: Show error instead of silently failing**
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(AppText.get('error_load_videos')),
-                backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 3),
-              ),
-            );
+            VayuSnackBar.showWarning(context, AppText.get('error_load_videos'));
           }
           return;
         }
@@ -689,24 +685,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       await _clearProfileCache();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppText.get('profile_logout_success')),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        VayuSnackBar.showSuccess(context, AppText.get('profile_logout_success'));
       }
       ProfileScreenLogger.logLogoutSuccess();
     } catch (e) {
       ProfileScreenLogger.logLogoutError(e.toString());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppText.get('error_logout')}: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        VayuSnackBar.showError(context, '${AppText.get('error_logout')}: $e');
       }
     }
   }
@@ -735,36 +720,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         await _loadData(forceRefresh: true);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppText.get('profile_sign_in_success')),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          VayuSnackBar.showSuccess(context, AppText.get('profile_sign_in_success'));
         }
         ProfileScreenLogger.logGoogleSignInSuccess();
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text(authController.error ?? AppText.get('error_sign_in')),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+          VayuSnackBar.showError(context, authController.error ?? AppText.get('error_sign_in'));
         }
       }
     } catch (e) {
       ProfileScreenLogger.logGoogleSignInError(e.toString());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppText.get('error_sign_in')}: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        VayuSnackBar.showError(context, '${AppText.get('error_sign_in')}: $e');
       }
     } finally {
       if (mounted) setState(() => _isSigningIn = false);
@@ -879,24 +846,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppText.get('profile_updated_success')),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        VayuSnackBar.showSuccess(context, AppText.get('profile_updated_success'), duration: const Duration(seconds: 2));
       }
       ProfileScreenLogger.logProfileEditSaveSuccess();
     } catch (e) {
       ProfileScreenLogger.logProfileEditSaveError(e.toString());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppText.get('error_update_profile')}: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        VayuSnackBar.showError(context, '${AppText.get('error_update_profile')}: $e');
       }
     }
   }
@@ -920,13 +876,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         await _stateManager.deleteSelectedVideos();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppText.get('profile_videos_deleted')
-                  .replaceAll('{count}', '$initialCount')),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-            ),
+          VayuSnackBar.showSuccess(
+            context, 
+            AppText.get('profile_videos_deleted').replaceAll('{count}', '$initialCount'),
+            duration: const Duration(seconds: 3),
           );
         }
         ProfileScreenLogger.logVideoDeletionSuccess(count: initialCount);
@@ -938,17 +891,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     } catch (e) {
       ProfileScreenLogger.logVideoDeletionError(e.toString());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(_stateManager.error ?? AppText.get('error_delete_videos')),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: AppText.get('btn_retry', fallback: 'Retry'),
-              textColor: Colors.white,
-              onPressed: () => _handleDeleteSelectedVideos(),
-            ),
+        VayuSnackBar.showError(
+          context, 
+          _stateManager.error ?? AppText.get('error_delete_videos'),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: AppText.get('btn_retry', fallback: 'Retry'),
+            textColor: Colors.white,
+            onPressed: () => _handleDeleteSelectedVideos(),
           ),
         );
       }
@@ -1123,12 +1073,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
       if (image != null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppText.get('profile_photo_uploading')),
-              duration: const Duration(seconds: 1),
-            ),
-          );
+          VayuSnackBar.showInfo(context, AppText.get('profile_photo_uploading'), duration: const Duration(seconds: 1));
         }
 
         await _stateManager.updateProfilePhoto(image.path);
@@ -1141,24 +1086,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppText.get('profile_photo_updated')),
-              backgroundColor: Colors.green,
-            ),
-          );
+          VayuSnackBar.showSuccess(context, AppText.get('profile_photo_updated'));
         }
         ProfileScreenLogger.logProfilePhotoChangeSuccess();
       }
     } catch (e) {
       ProfileScreenLogger.logProfilePhotoChangeError(e.toString());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${AppText.get('error_change_photo')}: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        VayuSnackBar.showError(context, '${AppText.get('error_change_photo')}: $e');
       }
     }
   }
@@ -2168,7 +2103,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         // **SIMPLE: Check if cache is fresh (5 minutes)**
         if (age < const Duration(minutes: 5)) {
           // Cache is fresh and from current month - use it
-          return Map<String, dynamic>.from(json.decode(cachedDataJson));
+          // **OPTIMIZED: Use background isolate for non-blocking JSON decoding**
+          final decoded = await compute(_parseJsonData, cachedDataJson);
+          return Map<String, dynamic>.from(decoded);
         } else {
           // Cache is stale - clear it
           await prefs.remove(cacheKey);
@@ -2350,7 +2287,8 @@ class _EarningsBottomSheetContentState
       }
 
       if (cachedDataJson != null && isCacheValid) {
-        final Map<String, dynamic> revenueData = json.decode(cachedDataJson);
+        // **OPTIMIZED: Use background isolate for non-blocking JSON decoding**
+        final Map<String, dynamic> revenueData = await compute(_parseJsonData, cachedDataJson);
         if (revenueData.containsKey('videos')) {
            final List<dynamic> videoStatsList = revenueData['videos'] ?? [];
            
@@ -2596,6 +2534,11 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
     return false;
   }
+}
+
+/// **TOP-LEVEL: Handle JSON parsing in background isolate to prevent UI thread jank**
+Map<String, dynamic> _parseJsonData(String jsonString) {
+  return json.decode(jsonString) as Map<String, dynamic>;
 }
 
 

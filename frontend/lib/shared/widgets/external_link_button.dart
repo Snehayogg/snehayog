@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayu/shared/utils/url_utils.dart';
 
 class ExternalLinkButton extends StatelessWidget {
   final String url;
@@ -12,7 +13,12 @@ class ExternalLinkButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppButton(
       onPressed: () async {
-        final uri = Uri.tryParse(url.trim());
+        final enrichedUrl = UrlUtils.enrichUrl(
+          url.trim(),
+          source: 'vayug',
+          medium: 'visit_now',
+        );
+        final uri = Uri.tryParse(enrichedUrl);
         if (uri != null && await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {

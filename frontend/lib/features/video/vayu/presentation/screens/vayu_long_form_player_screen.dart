@@ -20,6 +20,7 @@ import 'package:vayu/features/video/dubbing/data/services/on_device_dubbing_serv
 import 'package:vayu/shared/widgets/follow_button_widget.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
@@ -593,22 +594,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     }
   }
 
-  void _showSnackBar(String message, {Duration? duration}) {
+  void _showSnackBar(String message, {Duration? duration, VayuSnackBarType type = VayuSnackBarType.info}) {
     if (!mounted) return;
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-        duration: duration ?? const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.surfacePrimary.withOpacity(0.9),
-        width: isLandscape ? 340.0 : null, // Limit width in landscape
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 6,
-      ),
-    );
+    VayuSnackBar.show(context, message, duration: duration ?? const Duration(seconds: 3), type: type);
   }
 
   void _hideControlsWithDelay() {
@@ -653,7 +641,11 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       final isSaved = await _videoService.toggleSave(video.id);
       setState(() { video.isSaved = isSaved; _isSaving = false; });
       if (mounted) {
-        _showSnackBar(isSaved ? 'Video saved to collection' : 'Video removed from collection', duration: const Duration(seconds: 2));
+        _showSnackBar(
+          isSaved ? 'Video saved to collection' : 'Video removed from collection', 
+          duration: const Duration(seconds: 2),
+          type: isSaved ? VayuSnackBarType.success : VayuSnackBarType.info,
+        );
       }
     } catch (e) { setState(() => _isSaving = false); }
   }
@@ -711,14 +703,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     await VayuBottomSheet.show<void>(
       context: context, 
       title: 'More Options',
-      padding: isLandscape ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8) : null,
-      child: Align(
-        alignment: Alignment.center,
-        heightFactor: 1.0,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: isLandscape ? 380.0 : double.infinity),
-          child: SingleChildScrollView(
-            child: Column(
+      maxWidth: isLandscape ? 380.0 : null,
+      padding: isLandscape ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4) : null,
+      child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
@@ -810,9 +797,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 if (!isLandscape) const SizedBox(height: 16),
               ],
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -829,32 +813,26 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   Future<void> _showPlaybackSpeedOptions() async {
     if (!mounted) return;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     await VayuBottomSheet.show<void>(
-      context: context, title: 'Playback speed',
-      child: Align(
-        alignment: Alignment.center,
-        heightFactor: 1.0,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).orientation == Orientation.landscape ? 380.0 : double.infinity),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: _playbackSpeedOptions.map((speed) {
-                final isSelected = speed == _playbackSpeed;
-                final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-                return ListTile(
-                  dense: true, 
-                  title: Text(_formatPlaybackSpeed(speed), style: TextStyle(
-                    fontSize: isLandscape ? 14.0 : null,
-                    color: isSelected ? AppColors.primary : AppColors.textPrimary, 
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
-                  )),
-                  onTap: () { Navigator.pop(context); _setPlaybackSpeed(speed); },
-                );
-              }).toList(),
-            ),
-          ),
-        ),
+      context: context, 
+      title: 'Playback speed',
+      maxWidth: isLandscape ? 380.0 : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: _playbackSpeedOptions.map((speed) {
+          final isSelected = speed == _playbackSpeed;
+          return ListTile(
+            dense: true, 
+            visualDensity: VisualDensity.compact,
+            title: Text(_formatPlaybackSpeed(speed), style: TextStyle(
+              fontSize: isLandscape ? 14.0 : null,
+              color: isSelected ? AppColors.primary : AppColors.textPrimary, 
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+            )),
+            onTap: () { Navigator.pop(context); _setPlaybackSpeed(speed); },
+          );
+        }).toList(),
       ),
     );
   }
@@ -1056,6 +1034,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   void _showLanguageSelector(BuildContext context, VideoModel video) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     final hasEnglishDub = video.dubbedUrls?.containsKey('english') ?? false;
     final hasHindiDub = video.dubbedUrls?.containsKey('hindi') ?? false;
     final String detectedSource = hasEnglishDub ? 'Hindi' : (hasHindiDub ? 'English' : 'Original');
@@ -1063,25 +1042,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     VayuBottomSheet.show<void>(
       context: context, 
       title: 'Audio Language',
-      child: Align(
-        alignment: Alignment.center,
-        heightFactor: 1.0,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).orientation == Orientation.landscape 
-                ? 380.0 
-                : double.infinity
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildLanguageOption(context, video, '$detectedSource (Original)', 'default', badge: 'Original'),
-              _buildLanguageOption(context, video, 'English', 'english', badge: hasEnglishDub ? 'Dubbed' : null, available: hasEnglishDub),
-              _buildLanguageOption(context, video, 'Hindi', 'hindi', badge: hasHindiDub ? 'Dubbed' : null, available: hasHindiDub),
-            ],
-          ),
-        ),
+      maxWidth: isLandscape ? 380.0 : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildLanguageOption(context, video, '$detectedSource (Original)', 'default', badge: 'Original'),
+          _buildLanguageOption(context, video, 'English', 'english', badge: hasEnglishDub ? 'Dubbed' : null, available: hasEnglishDub),
+          _buildLanguageOption(context, video, 'Hindi', 'hindi', badge: hasHindiDub ? 'Dubbed' : null, available: hasHindiDub),
+        ],
       ),
     );
   }
@@ -1093,9 +1062,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     
     return ListTile(
       dense: true,
+      visualDensity: VisualDensity.compact,
       title: Row(children: [
         Text(title, style: TextStyle(
-          fontSize: isLandscape ? 14.0 : null,
+          fontSize: isLandscape ? 13.0 : null,
           color: isSelected ? AppColors.primary : AppColors.textPrimary, 
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
         )),
@@ -1543,57 +1513,53 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   void _showCancelDubbingDialog(String videoId) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     VayuBottomSheet.show<void>(
       context: context,
       title: 'Dubbing',
-      child: Align(
-        alignment: Alignment.center,
-        heightFactor: 1.0,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).orientation == Orientation.landscape ? 380.0 : double.infinity),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      maxWidth: isLandscape ? 380.0 : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Aap dubbing cancel karna chahte hain?',
+            style: AppTypography.bodyLarge.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+              fontSize: isLandscape ? 14.0 : null,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Row(
             children: [
-              Text(
-                'Aap dubbing cancel karna chahte hain?',
-                style: AppTypography.bodyLarge.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: AppButton(
+                  onPressed: () => Navigator.pop(context),
+                  label: 'Nahi',
+                  variant: AppButtonVariant.secondary,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      onPressed: () => Navigator.pop(context),
-                      label: 'Nahi',
-                      variant: AppButtonVariant.secondary,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: AppButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        final video = _videos.firstWhere((v) => v.id == videoId);
-                        _onDeviceDubbingService.cancelDubbing(video.videoUrl);
-                        _dubbingSubscriptions[videoId]?.cancel();
-                        _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
-                        if (mounted) {
-                          _showSnackBar('Dubbing cancelled.');
-                        }
-                      },
-                      label: 'Haan, Cancel Karein',
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: AppButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    final video = _videos.firstWhere((v) => v.id == videoId);
+                    _onDeviceDubbingService.cancelDubbing(video.videoUrl);
+                    _dubbingSubscriptions[videoId]?.cancel();
+                    _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
+                    if (mounted) {
+                      _showSnackBar('Dubbing cancelled.');
+                    }
+                  },
+                  label: 'Haan, Cancel Karein',
+                ),
               ),
-              const SizedBox(height: 8),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }

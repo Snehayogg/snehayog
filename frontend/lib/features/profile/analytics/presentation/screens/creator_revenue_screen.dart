@@ -14,6 +14,7 @@ import 'package:vayu/features/auth/data/services/logout_service.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 
 // NEW IMPORTS
 import 'package:vayu/features/profile/analytics/data/services/analytics_service.dart';
@@ -243,6 +244,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
                   icon: Icons.visibility,
                   color: AppColors.primary,
                   growth: _analytics!.core.viewsGrowth,
+                  onTap: _showViewsGuide,
                 ),
                 AnalyticsStatCard(
                   label: "Watch Time", 
@@ -250,12 +252,14 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
                   icon: Icons.access_time,
                   color: Colors.orange,
                   growth: _analytics!.core.watchTimeGrowth,
+                  onTap: _showWatchTimeGuide,
                 ),
                 AnalyticsStatCard(
                   label: "Shares", 
-                  value: _analytics!.core.totalShares.toString(), 
                   icon: Icons.share,
                   color: Colors.blue,
+                  value: _analytics!.core.totalShares.toString(),
+                  onTap: _showSharesGuide,
                 ),
                 AnalyticsStatCard(
                   label: "Skip Rate", 
@@ -268,7 +272,11 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
             ),
             
             AppSpacing.vSpace24,
-            PerformanceChart(data: _analytics!.dailyPerformance, title: "Daily Performance (Views)"),
+            PerformanceChart(
+              data: _analytics!.dailyPerformance, 
+              title: "Daily Performance",
+              onTap: _showPerformanceGuide,
+            ),
             
             AppSpacing.vSpace24,
             TopVideosList(videos: _analytics!.topVideos),
@@ -310,74 +318,76 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   }
 
   void _showSkipRateGuide() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.backgroundPrimary,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Small handle for aesthetic
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: AppColors.borderPrimary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  const Icon(Icons.ads_click, color: AppColors.primary, size: 28),
-                  AppSpacing.hSpace12,
-                  Text("Skip Rate Kya Hai?", style: AppTypography.titleLarge),
-                ],
-              ),
-              AppSpacing.vSpace16,
-              const Text(
-                "Agar aapka skip rate 25% hai, toh iska matlab hai ki 25% log aapke video ko bina dekhe skip kar rahe hain.",
-                style: TextStyle(fontSize: 15, color: AppColors.textPrimary, height: 1.4),
-              ),
-              AppSpacing.vSpace24,
-              _buildGuideItem("🔥 Excellent (<20%)", "Dhamakedar content! Audience aapka video poora dekh rahi hai.", Colors.green),
-              _buildGuideItem("✅ Good (20-40%)", "Kafi accha hook hai. Use consistently maintain karein.", Colors.blue),
-              _buildGuideItem("⚠️ Average (40-60%)", "Pehle 3-5 seconds (The Hook) ko aur interesting banayein.", Colors.orange),
-              _buildGuideItem("❌ Critical (>70%)", "Log turant skip kar rahe hain. Naya format ya visuals try karein!", Colors.red),
-              AppSpacing.vSpace24,
-              SizedBox(
-                width: double.infinity,
-                child: AppButton(
-                  onPressed: () => Navigator.pop(context),
-                  label: "Samajh Gaya!",
-                ),
-              ),
-              // Extra space for bottom safety
-              AppSpacing.vSpace16,
-            ],
-          ),
-        ),
-      ),
+    _showGenericGuide(
+      title: "Skip Rate Kya Hai?",
+      icon: Icons.ads_click,
+      content: "Ye pichle 14 dino ka data hai. Ye dikhata hai ki kitne % log aapka video bina dekhe turant agla video dekhne chale gaye. Har din naya data judta hai aur sabse purana (15th day) ka data hat jata hai.",
     );
   }
 
-  Widget _buildGuideItem(String label, String tip, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  void _showViewsGuide() {
+    _showGenericGuide(
+      title: "Total Views Kya Hai?",
+      icon: Icons.visibility,
+      content: "Ye pichle 14 dino mein aaye total views hain. Ye data rozana update hota hai: pichle 14 dino ka total dikhane ke liye purana data hat-ta rehta hai.",
+    );
+  }
+
+  void _showWatchTimeGuide() {
+    _showGenericGuide(
+      title: "Watch Time Kya Hai?",
+      icon: Icons.access_time,
+      content: "Ye pichle 14 dino ka total Watch Time hai (minutes mein). Isse ye pata chalta hai ki pichle do hafton mein logon ne aapke content par kitna time bitaya.",
+    );
+  }
+
+  void _showSharesGuide() {
+    _showGenericGuide(
+      title: "Shares Kya Hai?",
+      icon: Icons.share,
+      content: "Ye pichle 14 dino mein hue total shares ka count hai. Har din ye chart pichle 14 dino ki snapshot dikhata hai.",
+    );
+  }
+
+  void _showPerformanceGuide() {
+    _showGenericGuide(
+      title: "Daily Performance Kya Hai?",
+      icon: Icons.bar_chart,
+      content: "Ye graph pichle 7 dino ki performance dikhata hai. Har ek bar ek din ko represent karta hai aur bar ki height ye dikhati hai ki us din kitne views aaye the.",
+    );
+  }
+
+  void _showGenericGuide({
+    required String title,
+    required IconData icon,
+    required String content,
+    List<Widget> items = const [],
+  }) {
+    VayuBottomSheet.show(
+      context: context,
+      title: title,
+      icon: icon,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-          Text(tip, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          Text(
+            content,
+            style: const TextStyle(fontSize: 15, color: AppColors.textPrimary, height: 1.4),
+          ),
+          if (items.isNotEmpty) ...[
+            AppSpacing.vSpace24,
+            ...items,
+          ],
+          AppSpacing.vSpace24,
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              onPressed: () => Navigator.pop(context),
+              label: "Samajh Gaya!",
+            ),
+          ),
+          AppSpacing.vSpace16,
         ],
       ),
     );

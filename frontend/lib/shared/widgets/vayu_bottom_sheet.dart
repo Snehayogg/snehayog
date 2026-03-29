@@ -2,27 +2,32 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/radius.dart';
-import 'package:vayu/core/design/spacing.dart';
 import 'package:vayu/core/design/typography.dart';
 
 class VayuBottomSheet extends StatelessWidget {
   final Widget child;
   final String? title;
+  final IconData? icon;
+  final Color? iconColor;
   final bool showHandle;
   final EdgeInsetsGeometry? padding;
   final List<Widget>? actions;
   final ScrollController? scrollController;
   final double? height;
+  final double? maxWidth;
 
   const VayuBottomSheet({
     super.key,
     required this.child,
     this.title,
+    this.icon,
+    this.iconColor,
     this.showHandle = true,
     this.padding,
     this.actions,
     this.scrollController,
     this.height,
+    this.maxWidth,
   });
 
   /// Static helper to show the bottom sheet with consistent styling.
@@ -30,6 +35,8 @@ class VayuBottomSheet extends StatelessWidget {
     required BuildContext context,
     required Widget child,
     String? title,
+    IconData? icon,
+    Color? iconColor,
     bool showHandle = true,
     bool isScrollControlled = true,
     EdgeInsetsGeometry? padding,
@@ -39,12 +46,13 @@ class VayuBottomSheet extends StatelessWidget {
     double maxChildSize = 0.9,
     bool useDraggable = false,
     double? height,
+    double? maxWidth,
   }) {
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: isScrollControlled,
       backgroundColor: Colors.transparent,
-      barrierColor: AppColors.overlayDark.withValues(alpha: 0.5),
+      barrierColor: AppColors.overlayDark.withValues(alpha: 0.6),
       builder: (context) {
         if (useDraggable) {
           return DraggableScrollableSheet(
@@ -54,21 +62,27 @@ class VayuBottomSheet extends StatelessWidget {
             expand: false,
             builder: (context, scrollController) => VayuBottomSheet(
               title: title,
+              icon: icon,
+              iconColor: iconColor,
               showHandle: showHandle,
               padding: padding,
               actions: actions,
               scrollController: scrollController,
               height: height,
+              maxWidth: maxWidth,
               child: child,
             ),
           );
         }
         return VayuBottomSheet(
           title: title,
+          icon: icon,
+          iconColor: iconColor,
           showHandle: showHandle,
           padding: padding,
           actions: actions,
           height: height,
+          maxWidth: maxWidth,
           child: child,
         );
       },
@@ -77,99 +91,104 @@ class VayuBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    return ClipRRect(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppRadius.xl),
-      ),
-      child: BackdropFilter(
-        filter: const ColorFilter.mode(
-          Colors.transparent,
-          BlendMode.srcOver,
-        ), // Necessary for some platforms
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            height: height,
-            decoration: BoxDecoration(
-              color: AppColors.surfacePrimary.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.vertical(
-                top: Radius.circular(AppRadius.xl),
-              ),
-              border: Border(
-                top: BorderSide(
-                  color: AppColors.white.withValues(alpha: 0.12),
-                  width: 1,
-                ),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showHandle)
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: EdgeInsets.symmetric(vertical: isLandscape ? 8 : AppSpacing.spacing3),
-                    decoration: BoxDecoration(
-                      color: AppColors.textTertiary.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(100), // Fixed pill radius
-                    ),
-                  ),
-                if (title != null || actions != null)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      isLandscape ? 16 : AppSpacing.spacing5,
-                      isLandscape ? 8 : AppSpacing.spacing2,
-                      isLandscape ? 12 : AppSpacing.spacing3,
-                      isLandscape ? 8 : AppSpacing.spacing2,
-                    ),
-                    child: Row(
-                      children: [
-                        if (title != null)
-                          Expanded(
-                            child: Text(
-                              title!,
-                              style: TextStyle(
-                                fontSize: MediaQuery.of(context).orientation == Orientation.landscape 
-                                    ? 20.0 
-                                    : AppTypography.fontSizeXL,
-                                fontWeight: AppTypography.weightBold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                        if (actions != null) ...actions!,
-                        IconButton(
-                          icon: const Icon(Icons.close,
-                              color: AppColors.textSecondary),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (title != null)
-                  Divider(
-                      height: 1,
-                      color: AppColors.white.withValues(alpha: 0.05)),
-                Flexible(
-                  child: Padding(
-                    padding: padding ?? EdgeInsets.all(isLandscape ? 16 : AppSpacing.spacing5),
-                    child: child,
-                  ),
-                ),
-              ],
-            ),
+    final effectiveMaxWidth = maxWidth ?? (isLandscape ? 420.0 : null);
+    final isFloating = isLandscape && effectiveMaxWidth != null;
+
+    Widget content = Container(
+      constraints: effectiveMaxWidth != null ? BoxConstraints(maxWidth: effectiveMaxWidth) : null,
+      decoration: BoxDecoration(
+        color: AppColors.backgroundPrimary,
+        borderRadius: isFloating 
+          ? BorderRadius.circular(28) // Floating card style
+          : BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        border: Border.all(
+          color: AppColors.borderPrimary.withValues(alpha: 0.5),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 24,
+            offset: const Offset(0, 4),
           ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (showHandle)
+              Center(
+                child: Container(
+                  width: 32,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.borderPrimary,
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                ),
+              ),
+            
+            // Header
+            if (title != null)
+              Padding(
+                padding: EdgeInsets.fromLTRB(20, showHandle ? 0 : 20, 12, 12),
+                child: Row(
+                  children: [
+                    if (icon != null) ...[
+                      Icon(icon, color: iconColor ?? AppColors.primary, size: 22),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: Text(
+                        title!,
+                        style: AppTypography.titleMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    if (actions != null) ...actions!,
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.textTertiary, size: 18),
+                      onPressed: () => Navigator.pop(context),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+            
+            // Main Content
+            Flexible(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                physics: const BouncingScrollPhysics(),
+                padding: padding ?? const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: child,
+              ),
+            ),
+          ],
         ),
       ),
     );
+
+    if (isFloating) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Material(
+            color: Colors.transparent,
+            child: content,
+          ),
+        ),
+      );
+    }
+
+    return content;
   }
 }

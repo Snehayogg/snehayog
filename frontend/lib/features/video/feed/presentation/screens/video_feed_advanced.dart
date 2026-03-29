@@ -61,6 +61,7 @@ import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayu/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayu/features/video/dubbing/data/services/on_device_dubbing_service.dart';
+import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -1586,13 +1587,11 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
   /// **SHOW SNACKBAR: Helper method**
   void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    if (isError) {
+      VayuSnackBar.showError(context, message);
+    } else {
+      VayuSnackBar.showSuccess(context, message);
+    }
   }
 
   /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad page (no rebuild)**
@@ -1682,24 +1681,10 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
       // Show loading state
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                ),
-                SizedBox(width: 12),
-                Text('Testing connection...'),
-              ],
-            ),
-            duration: Duration(seconds: 2),
-          ),
+        VayuSnackBar.showInfo(
+          context, 
+          'Testing connection...',
+          duration: const Duration(seconds: 2),
         );
       }
 
@@ -1731,22 +1716,10 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       AppLogger.log('❌ VideoFeedAdvanced: API connection test failed: $e');
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Connection failed: ${_getUserFriendlyErrorMessage(e)}',
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
+        VayuSnackBar.showError(
+          context, 
+          'Connection failed: ${_getUserFriendlyErrorMessage(e)}',
+          duration: const Duration(seconds: 3),
         );
       }
     }
@@ -2156,7 +2129,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
         _onDeviceDubbingService.cancelDubbing(video.videoUrl);
         _dubbingSubscriptions[videoId]?.cancel();
         resultVN.value = const DubbingResult(status: DubbingStatus.idle);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dubbing cancelled.')));
+        if (mounted) VayuSnackBar.showInfo(context, 'Dubbing cancelled.');
       }
       return;
     }

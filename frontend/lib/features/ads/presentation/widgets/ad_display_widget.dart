@@ -3,6 +3,7 @@ import 'package:vayu/features/ads/data/ad_model.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayu/shared/utils/url_utils.dart';
 
 class AdDisplayWidget extends StatefulWidget {
   final AdModel ad;
@@ -67,7 +68,14 @@ class _AdDisplayWidgetState extends State<AdDisplayWidget> {
 
       // Launch the ad link
       if (widget.ad.link != null && widget.ad.link!.isNotEmpty) {
-        final uri = Uri.parse(widget.ad.link!);
+        final enrichedUrl = UrlUtils.enrichUrl(
+          widget.ad.link!,
+          source: 'vayug',
+          medium: 'app_ad',
+          campaign: 'vayug_ads',
+          content: widget.ad.id,
+        );
+        final uri = Uri.parse(enrichedUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }

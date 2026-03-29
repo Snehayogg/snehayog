@@ -9,6 +9,7 @@ import 'package:vayu/core/providers/user_data_providers.dart';
 import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'package:vayu/shared/utils/app_text.dart';
+import 'package:vayu/shared/utils/url_utils.dart';
 
 class ProfileHeaderWidget extends ConsumerWidget {
   final bool isViewingOwnProfile;
@@ -108,9 +109,13 @@ class ProfileHeaderWidget extends ConsumerWidget {
             GestureDetector(
               onTap: () async {
                 final urlStr = stateManager.userData!['websiteUrl'].toString();
-                final uri = Uri.tryParse(urlStr.startsWith('http')
-                    ? urlStr
-                    : 'https://$urlStr');
+                final enrichedUrl = UrlUtils.enrichUrl(
+                  urlStr,
+                  source: 'vayug',
+                  medium: 'profile',
+                  campaign: 'creator_visit',
+                );
+                final uri = Uri.tryParse(enrichedUrl);
                 if (uri != null && await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 }

@@ -15,6 +15,7 @@ import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayu/features/profile/core/presentation/screens/linked_accounts_screen.dart';
 import 'package:vayu/shared/utils/app_text.dart';
+import 'package:vayu/shared/utils/url_utils.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -25,6 +26,7 @@ class ProfileDialogsWidget {
     VayuBottomSheet.show(
       context: context,
       title: 'Settings',
+      icon: Icons.settings_outlined,
       padding: EdgeInsets.zero,
       child: Consumer<ProfileStateManager>(
         builder: (context, stateManager, child) {
@@ -291,6 +293,7 @@ class ProfileDialogsWidget {
     VayuBottomSheet.show(
       context: context,
       title: 'Frequently Asked Questions',
+      icon: Icons.help_outline,
       useDraggable: true,
       initialChildSize: 0.9,
       minChildSize: 0.5,
@@ -436,52 +439,54 @@ class ProfileDialogsWidget {
     VayuBottomSheet.show(
       context: context,
       title: 'Legal & About',
-      padding: const EdgeInsets.all(20),
+      icon: Icons.gavel_rounded,
+      iconColor: AppColors.primary,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Policies and contact information',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           _buildLegalItem(
             context: context,
             title: 'Privacy Policy',
             icon: Icons.privacy_tip_outlined,
-            onTap: () => _launchURL('https://snehayog.site/privacy.html'),
+            onTap: () => _launchURL('https://snehayog.site/privacy.html', context: context),
           ),
           _buildLegalItem(
             context: context,
             title: 'Terms & Conditions',
             icon: Icons.description_outlined,
-            onTap: () => _launchURL('https://snehayog.site/terms.html'),
+            onTap: () => _launchURL('https://snehayog.site/terms.html', context: context),
           ),
           _buildLegalItem(
             context: context,
             title: 'Refund & Cancellation',
             icon: Icons.assignment_return_outlined,
-            onTap: () => _launchURL('https://snehayog.site/refund.html'),
+            onTap: () => _launchURL('https://snehayog.site/refund.html', context: context),
           ),
           _buildLegalItem(
             context: context,
             title: 'Contact Us',
             icon: Icons.contact_support_outlined,
-            onTap: () => _launchURL('https://snehayog.site/contact.html'),
+            onTap: () => _launchURL('https://snehayog.site/contact.html', context: context),
           ),
           _buildLegalItem(
             context: context,
             title: 'About Us',
             icon: Icons.info_outline_rounded,
-            onTap: () => _launchURL('https://snehayog.site/about.html'),
+            onTap: () => _launchURL('https://snehayog.site/about.html', context: context),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Center(
             child: Text(
               'Version 1.0.0',
               style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textTertiary),
+                  .copyWith(color: AppColors.textTertiary, fontSize: 11),
             ),
           ),
         ],
@@ -504,19 +509,33 @@ class ProfileDialogsWidget {
           color: AppColors.textPrimary,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 18),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
     );
   }
 
-  static Future<void> _launchURL(String url) async {
-    final Uri uri = Uri.parse(url);
+  static Future<void> _launchURL(String url, {BuildContext? context}) async {
+    // **FIX: Close bottom sheet immediately so user sees action**
+    if (context != null && context.mounted) {
+      Navigator.pop(context);
+    }
+
+    final enrichedUrl = UrlUtils.enrichUrl(
+      url,
+      source: 'vayug',
+      medium: 'internal_link',
+      campaign: 'legal_docs',
+    );
+    final Uri uri = Uri.parse(enrichedUrl);
     try {
-      // ignore: deprecated_member_use
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // **CRITICAL: Use externalApplication to force system browser**
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
     } catch (e) {
-      print('Could not launch $url : $e');
+      debugPrint('Could not launch $url : $e');
     }
   }
 
@@ -539,6 +558,7 @@ class ProfileDialogsWidget {
     await VayuBottomSheet.show(
       context: context,
       title: 'Creator Rewards Info',
+      icon: Icons.monetization_on_outlined,
       isScrollControlled: true,
       padding: EdgeInsets.zero,
       child: StatefulBuilder(
@@ -753,6 +773,7 @@ class ProfileDialogsWidget {
     VayuBottomSheet.show(
       context: context,
       title: 'Top Earners',
+      icon: Icons.emoji_events_outlined,
       child: const TopEarnersBottomSheet(),
     );
   }

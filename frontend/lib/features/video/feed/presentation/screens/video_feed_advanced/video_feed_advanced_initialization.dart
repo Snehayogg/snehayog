@@ -496,13 +496,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                   '❌ VideoFeedAdvanced: Video $targetVideoId not found in feed',
                 );
                 // Show snackbar to user
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Video not found. Showing feed instead.'),
-                    backgroundColor: Colors.orange,
-                    duration: Duration(seconds: 3),
-                  ),
-                );
+                _showSnackBar('Video not found. Showing feed instead.');
               }
             }
           }

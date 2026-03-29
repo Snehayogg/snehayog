@@ -90,7 +90,6 @@ class ProfileStateManager extends ChangeNotifier {
   bool _hasMoreVideos = true;
   static const int _pageSize = 1000;
 
-  // Getters
   List<VideoModel> get userVideos => _userVideos;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -98,13 +97,18 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isEditing => _isEditing;
   bool get isSelecting => _isSelecting;
   Set<String> get selectedVideoIds => _selectedVideoIds;
+
+  // **NEW: Performance Optimizations**
+  DateTime? _lastFullLoadTime;
+  static const Duration _refreshThreshold = Duration(minutes: 5);
+
+  bool get needsVideoRefresh => _needsVideoRefresh;
   bool get hasSelectedVideos => _selectedVideoIds.isNotEmpty;
   bool get isVideosLoading => _isVideosLoading;
   bool get isProfileLoading => _isProfileLoading;
   bool get isPhotoLoading => _isPhotoLoading;
   double get cachedEarnings => _cachedEarnings;
   bool get isEarningsLoading => _isEarningsLoading;
-  bool get needsVideoRefresh => _needsVideoRefresh;
   int get totalVideoCount => _totalVideoCount;
   bool get isFetchingMore => _isFetchingMore;
   bool get hasMoreVideos => _hasMoreVideos;
@@ -154,6 +158,16 @@ class ProfileStateManager extends ChangeNotifier {
       }
     }
     _requestedUserId = userId; // Store for isOwner check
+
+    // **OPTIMIZATION: Freshness Check**
+    // If not a force refresh and we have data that is fresh (< 5 mins), skip network call
+    if (!forceRefresh && _userData != null && _lastFullLoadTime != null) {
+      final timeSinceLoad = DateTime.now().difference(_lastFullLoadTime!);
+      if (timeSinceLoad < _refreshThreshold) {
+        AppLogger.log('⚡ ProfileStateManager: Data is fresh (${timeSinceLoad.inSeconds}s old), skipping network refresh');
+        return;
+      }
+    }
 
     if (!silent) {
       _isProfileLoading = true;
@@ -223,6 +237,12 @@ class ProfileStateManager extends ChangeNotifier {
       Map<String, dynamic>? userData;
 
       // **SMART CACHE (Memory)**
+      if (forceRefresh && _smartCacheInitialized) {
+        // If force refresh, clear the cache entry first to ensure we get fresh data from backend
+        await _smartCacheManager.clearCacheByPattern(cacheKey);
+        AppLogger.log('🧹 ProfileStateManager: Cleared SmartCache for $cacheKey due to forceRefresh');
+      }
+
       if (_smartCacheInitialized && !forceRefresh) {
         userData = await _smartCacheManager.get<Map<String, dynamic>>(
           cacheKey,
@@ -250,6 +270,19 @@ class ProfileStateManager extends ChangeNotifier {
         }
         return;
       }
+
+      _userData = userData;
+      _isLoading = false;
+      _isProfileLoading = false;
+      _error = null;
+      
+      // **NEW: Track last successful load time**
+      if (!silent || _lastFullLoadTime == null) {
+        _lastFullLoadTime = DateTime.now();
+      }
+
+      notifyListenersSafe();
+
 
       // **FIXED: Always normalize user data (even from cache)**
       // This ensures that preloaded data (cached by ProfilePreloader) has all required fields like googleId
@@ -706,10 +739,12 @@ class ProfileStateManager extends ChangeNotifier {
 
   /// Load earnings for the current video set
   /// **UPDATED: Aligns with Admin Dashboard & Revenue Screen (Current Month Earnings)**
-  Future<void> _loadEarnings({bool forceRefresh = false}) async {
+  Future<void> _loadEarnings({bool forceRefresh = false, bool silent = false}) async {
     try {
-      _isEarningsLoading = true;
-      notifyListenersSafe();
+      if (!silent) {
+        _isEarningsLoading = true;
+        notifyListenersSafe();
+      }
 
       if (_userVideos.isEmpty) {
         _cachedEarnings = 0.0;

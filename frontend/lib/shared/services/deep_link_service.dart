@@ -39,6 +39,17 @@ class DeepLinkService {
   void _handleUri(Uri uri) {
     AppLogger.log('🔗 DeepLinkService: Handling URI: $uri');
     
+    // **FIX: Ignore legal links to prevent circular interception when launching externally**
+    final path = uri.path.toLowerCase();
+    if (path.contains('/privacy.html') || 
+        path.contains('/terms.html') || 
+        path.contains('/refund.html') || 
+        path.contains('/contact.html') || 
+        path.contains('/about.html')) {
+      AppLogger.log('🔗 DeepLinkService: Ignoring legal link (should open in browser)');
+      return;
+    }
+
     // Check for social success (vayu://auth/social-success?platform=youtube)
     if (uri.path.contains('social-success')) {
       final platform = uri.queryParameters['platform'];
@@ -54,9 +65,9 @@ class DeepLinkService {
       
       // Fallback for weird URL formats
       if (refCode == null || refCode.isEmpty) {
-        final path = uri.path;
-        if (path.contains('ref=')) {
-          refCode = path.split('ref=').last.split('&').first;
+        final pathStr = uri.path;
+        if (pathStr.contains('ref=')) {
+          refCode = pathStr.split('ref=').last.split('&').first;
         }
       }
 

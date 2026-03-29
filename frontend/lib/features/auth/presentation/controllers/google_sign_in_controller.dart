@@ -159,26 +159,25 @@ class GoogleSignInController extends ChangeNotifier {
   /// **FIXED: Force refresh authentication state after account switch**
   Future<void> refreshAuthState() async {
     try {
-
-
-      _isLoading = true;
-      notifyListeners();
+      // **OPTIMIZED: Only show loader if we have NO data. Otherwise refresh silently.**
+      if (_userData == null) {
+        _isLoading = true;
+        notifyListeners();
+      }
 
       // **FIXED: Get fresh user data from AuthService**
-      _userData = await _authService.getUserData();
+      final freshData = await _authService.getUserData();
 
-      if (_userData != null) {
-
+      if (freshData != null) {
+        _userData = freshData;
         _error = null;
-      } else {
-
+      } else if (_userData == null) {
         _error = 'No authentication data found';
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-
       _error = e.toString();
       _isLoading = false;
       notifyListeners();

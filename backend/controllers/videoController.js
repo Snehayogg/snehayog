@@ -1122,7 +1122,17 @@ export const syncWatchEvents = async (req, res) => {
       // 1. Bulk update WatchHistory
       await WatchHistory.bulkWrite(ops, { ordered: false });
 
-      await Video.bulkWrite(videoOps, { ordered: false });
+      // 2. Define videoOps for Bulk update Video views
+      const videoOps = Object.entries(videoViewIncrements).map(([id, inc]) => ({
+        updateOne: {
+          filter: { _id: id },
+          update: { $inc: { views: inc } }
+        }
+      }));
+
+      if (videoOps.length > 0) {
+        await Video.bulkWrite(videoOps, { ordered: false });
+      }
 
       // **NEW: Track Daily Stats (Batch Processing)**
       // Collect per-creator aggregates from the batch
@@ -1695,6 +1705,7 @@ export const getCreatorAnalytics = async (req, res) => {
     let totalViews = 0;
     let totalWatchTime = 0;
     let totalSkips = 0;
+    let totalShares = 0; // **FIX: Use actual shares**
     let currViews = 0, prevViews = 0;
     let currWatch = 0, prevWatch = 0;
 
@@ -1702,6 +1713,7 @@ export const getCreatorAnalytics = async (req, res) => {
       totalViews += (stat.views || 0);
       totalWatchTime += (stat.watchTime || 0);
       totalSkips += (stat.skips || 0);
+      totalShares += (stat.shares || 0); // **FIX: Sum actual shares from daily stats**
 
       const statDate = new Date(stat.date);
       if (statDate >= sevenDaysAgo) {
@@ -1729,7 +1741,7 @@ export const getCreatorAnalytics = async (req, res) => {
       .map(s => ({
         date: s.date.toISOString().split('T')[0],
         views: s.views,
-        watchTime: Math.round(s.watchTime / 60)
+        watchTime: parseFloat((s.watchTime / 60).toFixed(1)) // **FIX: Show decimals for precision**
       }));
 
     // 3. Top Performing Videos (Keep as is, but we could also pre-compute)
@@ -1747,12 +1759,13 @@ export const getCreatorAnalytics = async (req, res) => {
       watchTime: v.cachedWatchTime || 0
     }));
 
-    // 4. Audience Insights (Falling back to aggregation for complex data, but with narrow filters)
-    const videoIdsValue = videos.map(v => v._id);
+    // 4. Audience Insights (Looking at ALL creator videos, not just top 5)
+    const allUserVideos = await Video.find({ uploader: creatorId }).select('_id').lean();
+    const allVideoIds = allUserVideos.map(v => v._id);
     
     // Top Locations
     const topLocationsData = await WatchHistory.aggregate([
-      { $match: { videoId: { $in: videoIdsValue } } },
+      { $match: { videoId: { $in: allVideoIds } } },
       { $lookup: { from: 'users', localField: 'userId', foreignField: 'googleId', as: 'viewer' } },
       { $unwind: "$viewer" },
       { $group: { _id: "$viewer.location.state", count: { $sum: 1 } } },
@@ -1767,7 +1780,7 @@ export const getCreatorAnalytics = async (req, res) => {
 
     // Retention (New vs Returning)
     const retentionStats = await WatchHistory.aggregate([
-      { $match: { videoId: { $in: videoIdsValue } } },
+      { $match: { videoId: { $in: allVideoIds } } },
       { $group: { _id: "$userId", watchCount: { $sum: 1 } } },
       { $group: { _id: null, returning: { $sum: { $cond: [{ $gt: ["$watchCount", 1] }, 1, 0] } }, total: { $sum: 1 } } }
     ]);
@@ -1777,7 +1790,7 @@ export const getCreatorAnalytics = async (req, res) => {
 
     // Active Viewing Hours
     const activeViewingHours = await WatchHistory.aggregate([
-      { $match: { videoId: { $in: videoIdsValue } } },
+      { $match: { videoId: { $in: allVideoIds } } },
       { $group: { _id: { $hour: "$watchedAt" }, count: { $sum: 1 } } },
       { $sort: { "_id": 1 } }
     ]);
@@ -1789,8 +1802,8 @@ export const getCreatorAnalytics = async (req, res) => {
     res.json({
       core: {
         totalViews: totalViews || 0,
-        totalShares: totalViews > 0 ? Math.round(totalViews * 0.05) : 0, // Placeholder shares update logic if not tracked
-        totalWatchTime: Math.round(totalWatchTime / 60),
+        totalShares: totalShares || 0, // **FIX: Use real shares**
+        totalWatchTime: parseFloat((totalWatchTime / 60).toFixed(1)), // **FIX: Show decimals for precision**
         avgWatchDuration: Math.round(overallAvgDuration),
         skipRate: parseFloat(overallSkipRate.toFixed(2)),
         viewsGrowth: Math.round(viewsGrowthRate),

@@ -88,8 +88,9 @@ class AnalyticsStatCard extends StatelessWidget {
 class PerformanceChart extends StatelessWidget {
   final List<DailyStat> data;
   final String title;
+  final VoidCallback? onTap;
 
-  const PerformanceChart({super.key, required this.data, required this.title});
+  const PerformanceChart({super.key, required this.data, required this.title, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -98,47 +99,51 @@ class PerformanceChart extends StatelessWidget {
     // Simple bar chart representation for now
     final maxViews = data.map((e) => e.views).reduce((a, b) => a > b ? a : b);
 
-    return Container(
-      padding: EdgeInsets.all(AppSpacing.spacing4),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSecondary,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.borderPrimary),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: AppTypography.titleMedium),
-          AppSpacing.vSpace16,
-          SizedBox(
-            height: 150,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: data.map((d) {
-                final heightFactor = maxViews > 0 ? d.views / maxViews : 0.0;
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      width: 20,
-                      height: 100 * heightFactor,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(AppRadius.xs),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        padding: EdgeInsets.all(AppSpacing.spacing4),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundSecondary,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: AppColors.borderPrimary),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppTypography.titleMedium),
+            AppSpacing.vSpace16,
+            SizedBox(
+              height: 150,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: data.map((d) {
+                  final heightFactor = maxViews > 0 ? d.views / maxViews : 0.0;
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Container(
+                        width: 20,
+                        height: 100 * heightFactor,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(AppRadius.xs),
+                        ),
                       ),
-                    ),
-                    AppSpacing.vSpace4,
-                    Text(
-                      d.date.length >= 2 ? d.date.substring(d.date.length - 2) : d.date,
-                      style: AppTypography.labelSmall,
-                    ),
-                  ],
-                );
-              }).toList(),
+                      AppSpacing.vSpace4,
+                      Text(
+                        d.date.length >= 2 ? d.date.substring(d.date.length - 2) : d.date,
+                        style: AppTypography.labelSmall,
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

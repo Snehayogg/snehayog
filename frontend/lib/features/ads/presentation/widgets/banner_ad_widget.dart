@@ -6,6 +6,7 @@ import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
 import 'package:vayu/shared/config/app_config.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/utils/url_utils.dart';
 import 'package:vayu/shared/constants/app_constants.dart';
 import 'package:vayu/shared/widgets/in_app_browser.dart';
 
@@ -423,21 +424,14 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       link = _ensureAbsoluteUrl(link);
 
       // **UTM TRACKING IMPLEMENTATION**
-      // Automatically append source and medium if not present
+      // Automatically append source and medium using central utility
       if (link.isNotEmpty) {
-        final uri = Uri.parse(link);
-        final Map<String, String> queryParams = Map.from(uri.queryParameters);
-        
-        // Add UTM params if missing
-        if (!queryParams.containsKey('utm_source')) {
-          queryParams['utm_source'] = 'vayug_app';
-        }
-        if (!queryParams.containsKey('utm_medium')) {
-          queryParams['utm_medium'] = 'in_app_ad'; 
-        }
-        
-        // Reconstruct URL with new params
-        link = uri.replace(queryParameters: queryParams).toString();
+        link = UrlUtils.enrichUrl(
+          link,
+          source: 'vayug',
+          medium: 'in_app_ad',
+          campaign: 'vayug_ads',
+        );
         AppLogger.log('🔗 BannerAdWidget: Resolved Link with UTM: $link');
       }
 

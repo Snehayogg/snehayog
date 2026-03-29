@@ -72,7 +72,7 @@ class AppRemoteConfigService {
     try {
       // Determine platform
       final detectedPlatform = platform ?? _detectPlatform();
-      final env = environment ?? 'production';
+      final env = environment ?? (AppConfig.isDevelopment ? 'development' : 'production');
 
       AppLogger.log(
           '🔍 AppRemoteConfigService: Fetching config for $detectedPlatform/$env');
