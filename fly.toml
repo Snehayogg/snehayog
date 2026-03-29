@@ -1,5 +1,5 @@
 app = "vayug"
-primary_region = "blr"
+primary_region = "bom"
 
 [env]
   PORT = "8080"

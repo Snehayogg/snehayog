@@ -1,0 +1,369 @@
+import 'dart:convert';
+import 'package:vayu/core/design/spacing.dart';
+import 'package:vayu/core/design/radius.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+import 'package:vayu/core/design/elevation.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
+
+/// Compact grid (3 columns) showing top creators from the user's following list.
+/// This reuses the same API as `TopEarnersBottomSheet` but is optimised for the
+/// ProfileScreen "Recommendations" tab.
+class TopEarnersGrid extends StatefulWidget {
+  const TopEarnersGrid({super.key});
+
+  @override
+  State<TopEarnersGrid> createState() => _TopEarnersGridState();
+}
+
+class _TopEarnersGridState extends State<TopEarnersGrid> {
+  List<Map<String, dynamic>> _topCreators = [];
+  bool _isLoading = false;
+  bool _hasError = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTopCreators();
+  }
+
+  Future<void> _loadTopCreators() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = null;
+    });
+
+    try {
+      final token = await AuthService.getToken();
+      if (token == null || token.isEmpty) {
+        setState(() {
+          _hasError = true;
+          _errorMessage =
+              'Sign in to see top creators from your following list.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final baseUrl = await AppConfig.getBaseUrlWithFallback();
+      final uri = Uri.parse('$baseUrl/api/users/top-earners-from-following');
+
+      AppLogger.log('💰 TopCreatorsGrid: Fetching top creators from $uri');
+
+      final response = await httpClientService.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        timeout: const Duration(seconds: 30),
+      );
+
+      AppLogger.log(
+          '💰 TopCreatorsGrid: Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final topCreators =
+            List<Map<String, dynamic>>.from(data['topEarners'] ?? []);
+
+        setState(() {
+          _topCreators = topCreators;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'Failed to load top creators (${response.statusCode})';
+          _isLoading = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      AppLogger.log('❌ TopCreatorsGrid: Error loading top creators: $e');
+      AppLogger.log('❌ TopCreatorsGrid: Stack trace: $stackTrace');
+      setState(() {
+        _hasError = true;
+        _errorMessage = e.toString().contains('TimeoutException')
+            ? 'Request timeout. Please check your connection.'
+            : e.toString().contains('SocketException')
+                ? 'Network error. Please check your internet connection.'
+                : 'Failed to load top creators';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _navigateToUserProfile(String userId) {
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(userId: userId),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_hasError) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 32),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage ?? 'Failed to load top creators',
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              AppButton(
+                onPressed: _loadTopCreators,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: 'Retry',
+                variant: AppButtonVariant.text,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_topCreators.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.people_outline, size: 40, color: Colors.grey),
+              SizedBox(height: 8),
+              Text(
+                'No top creators found',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4B5563),
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Start following creators to see who has the highest Score.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF9CA3AF),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // GRID: 3 columns, Instagram-style tiles
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.spacing2,
+        vertical: AppSpacing.spacing3,
+      ),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: AppSpacing.spacing2,
+        mainAxisSpacing: AppSpacing.spacing3,
+        childAspectRatio: 0.68,
+      ),
+      itemCount: _topCreators.length,
+      itemBuilder: (context, index) {
+        final creator = _topCreators[index];
+        return _buildCreatorTile(creator, index + 1);
+      },
+    );
+  }
+
+  Widget _buildCreatorTile(Map<String, dynamic> creator, int rank) {
+    final userId = creator['userId'] as String?;
+    final name = creator['name'] as String? ?? 'Unknown';
+    final profilePic = creator['profilePic'] as String?;
+    final score = (creator['totalEarnings'] as num?)?.toDouble() ?? 0.0;
+
+    Color badgeColor;
+    if (rank == 1) {
+      badgeColor = const Color(0xFFFFD700); // gold
+    } else if (rank == 2) {
+      badgeColor = const Color(0xFFC0C0C0); // silver
+    } else if (rank == 3) {
+      badgeColor = const Color(0xFFCD7F32); // bronze
+    } else {
+      badgeColor = Colors.grey.shade300;
+    }
+
+    return GestureDetector(
+      onTap: userId != null ? () => _navigateToUserProfile(userId) : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          boxShadow: AppElevation.shadowMd,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(height: AppSpacing.spacing3),
+            // Avatar + rank badge
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border:
+                        Border.all(color: AppColors.borderPrimary, width: 2),
+                    boxShadow: const[
+                       BoxShadow(
+                        color: AppColors.shadowSecondary,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: profilePic != null && profilePic.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: profilePic,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: AppColors.backgroundSecondary,
+                              child: const Icon(Icons.person, size: 28),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: AppColors.backgroundSecondary,
+                              child: const Icon(Icons.person, size: 28),
+                            ),
+                          )
+                        : Container(
+                            color: AppColors.backgroundSecondary,
+                            child: const Icon(Icons.person, size: 28),
+                          ),
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.spacing1 + 3,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 2,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: AppColors.shadowSecondary,
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    '$rank',
+                    style: TextStyle(
+                      color: rank <= 3 ? AppColors.textInverse : AppColors.textPrimary,
+                      fontSize: AppTypography.fontSizeXS + 1,
+                      fontWeight: AppTypography.weightBold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: AppSpacing.spacing2),
+            // Name
+            Padding(
+              padding: EdgeInsets.all(AppSpacing.spacing1 + 2),
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: AppTypography.fontSizeSM,
+                  fontWeight: AppTypography.weightBold,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+            SizedBox(height: AppSpacing.spacing1 + 2),
+            // Score (Only show if > 0)
+            if (score > 0)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.spacing2,
+                  vertical: AppSpacing.spacing1,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Text(
+                  _formatScore(score),
+                  style: TextStyle(
+                    fontSize: AppTypography.fontSizeXS + 1,
+                    fontWeight: AppTypography.weightBold,
+                    color: AppColors.success,
+                  ),
+                ),
+              ),
+            SizedBox(height: AppSpacing.spacing3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatScore(double score) {
+    if (score >= 10000000) {
+      return '${(score / 10000000).toStringAsFixed(1)} Cr';
+    } else if (score >= 100000) {
+      return '${(score / 100000).toStringAsFixed(1)} L';
+    } else if (score >= 1000) {
+      return '${(score / 1000).toStringAsFixed(1)}K';
+    } else {
+      return score.toStringAsFixed(0);
+    }
+  }
+}

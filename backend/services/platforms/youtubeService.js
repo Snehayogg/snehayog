@@ -8,8 +8,8 @@ import User from '../../models/User.js';
 class YouTubeService {
   constructor() {
     this.oauth2Client = new google.auth.OAuth2(
-      process.env.Client_ID,
-      process.env.Client_secret
+      process.env.YOUTUBE_CLIENT_ID,
+      process.env.YOUTUBE_CLIENT_SECRET
     );
   }
 

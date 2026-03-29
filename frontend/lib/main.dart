@@ -13,7 +13,7 @@ import 'package:vayu/features/video/core/presentation/screens/video_screen.dart'
 import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
 import 'package:vayu/core/design/theme.dart';
 import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/profile/data/services/background_profile_preloader.dart';
+import 'package:vayu/features/profile/core/data/services/background_profile_preloader.dart';
 import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
 import 'package:vayu/features/onboarding/data/services/welcome_onboarding_service.dart';
 import 'package:vayu/features/onboarding/data/services/gallery_permission_service.dart';

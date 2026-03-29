@@ -6,7 +6,7 @@ import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/profile/presentation/widgets/video_creator_search_delegate.dart';
+import 'package:vayu/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
 import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/shared/widgets/vayu_logo.dart';

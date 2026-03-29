@@ -47,9 +47,17 @@ jobs:
             echo "✅ No analysis issues found"
           fi
 
-      - name: 🧪 Run tests
+      - name: 🧪 Run unit & widget tests
         working-directory: ./frontend
         run: flutter test --coverage
+
+      - name: 🧪 Run integration tests (headless)
+        working-directory: ./frontend
+        run: |
+          # Note: Real integration tests usually require a device/emulator.
+          # Here we run it with 'flutter test' which works for some integration tests
+          # that don't strictly require a physical device's GPU/OS features.
+          flutter test integration_test/upload_video_test.dart
 
       - name: 📊 Upload coverage
         uses: codecov/codecov-action@v3

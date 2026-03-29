@@ -10,7 +10,7 @@ import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/core/design/typography.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/ads/presentation/screens/create_ad_screen_refactored.dart';
-import 'package:vayu/features/profile/presentation/widgets/profile_static_views.dart';
+import 'package:vayu/features/profile/core/presentation/widgets/profile_static_views.dart';
 
 /// **ENHANCED AD MANAGEMENT SCREEN**
 /// Complete ad management with advanced targeting, performance analytics, and bulk operations

@@ -16,7 +16,7 @@ import 'package:vayu/features/ads/presentation/widgets/create_ad/ad_placement_pr
 import 'package:vayu/features/ads/presentation/widgets/create_ad/payment_handler_widget.dart';
 import 'package:vayu/features/ads/data/services/ad_service.dart';
 import 'package:vayu/features/auth/data/services/logout_service.dart';
-import 'package:vayu/features/profile/presentation/widgets/profile_static_views.dart';
+import 'package:vayu/features/profile/core/presentation/widgets/profile_static_views.dart';
 import 'package:vayu/shared/services/cloudflare_r2_service.dart';
 import 'package:vayu/features/ads/data/services/ad_refresh_notifier.dart';
 import 'package:vayu/features/ads/data/ad_model.dart';

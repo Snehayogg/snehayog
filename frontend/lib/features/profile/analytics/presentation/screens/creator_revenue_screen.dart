@@ -1,0 +1,479 @@
+import 'package:flutter/material.dart';
+import 'package:vayu/core/design/spacing.dart';
+import 'package:vayu/core/design/radius.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayu/core/providers/auth_providers.dart';
+
+import 'package:vayu/core/design/colors.dart';
+import 'package:vayu/core/design/typography.dart';
+
+import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayu/features/ads/data/services/ad_service.dart';
+import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayu/features/auth/data/services/logout_service.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/utils/app_text.dart';
+import 'package:vayu/shared/widgets/app_button.dart';
+
+// NEW IMPORTS
+import 'package:vayu/features/profile/analytics/data/services/analytics_service.dart';
+import 'package:vayu/features/profile/analytics/domain/models/analytics_models.dart';
+import 'package:vayu/features/profile/analytics/presentation/widgets/analytics_widgets.dart';
+
+class CreatorRevenueScreen extends ConsumerStatefulWidget {
+  const CreatorRevenueScreen({super.key});
+
+  @override
+  ConsumerState<CreatorRevenueScreen> createState() => _CreatorRevenueScreenState();
+}
+
+class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
+  final AdService _adService = AdService();
+  final AuthService _authService = AuthService();
+  final AnalyticsService _analyticsService = AnalyticsService();
+  
+  Map<String, dynamic>? _revenueData;
+  CreatorAnalytics? _analytics;
+  
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllData();
+  }
+
+  Future<void> _loadAllData({bool forceRefresh = false}) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final userData = await _authService.getUserData();
+      if (userData case final Map<String, dynamic> userMap) {
+        final userId = (userMap['googleId'] ?? userMap['id'] ?? '').toString();
+
+        if (userId.isEmpty) {
+          throw Exception('User ID not found. Please sign in again.');
+        }
+
+        await Future.wait([
+          _fetchRevenueData(forceRefresh),
+          _fetchAnalytics(userId),
+        ]);
+
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      AppLogger.log('❌ CreatorDashboard: Error loading data: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Unable to load dashboard data. Please try again.";
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchRevenueData(bool forceRefresh) async {
+    try {
+      final freshRevenueData = await _adService.getCreatorRevenueSummary(forceRefresh: forceRefresh);
+      if (mounted) {
+        setState(() => _revenueData = freshRevenueData);
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Engagement load failed: $e');
+    }
+  }
+
+  Future<void> _fetchAnalytics(String userId) async {
+    try {
+      final data = await _analyticsService.getCreatorAnalytics(userId);
+      if (mounted) {
+        setState(() => _analytics = data);
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Analytics load failed: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Creator Dashboard"),
+          centerTitle: true,
+          elevation: 0,
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: "Engagement"),
+              Tab(text: "Analytics"),
+            ],
+            indicatorColor: AppColors.primary,
+            labelColor: AppColors.primary,
+            unselectedLabelColor: AppColors.textSecondary,
+          ),
+          actions: [
+            IconButton(
+              onPressed: () => _loadAllData(forceRefresh: true),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
+        body: FutureBuilder<Map<String, dynamic>?>(
+          future: _authService.getUserData(),
+          builder: (context, snapshot) {
+            final isSignedIn = snapshot.hasData && snapshot.data != null;
+
+            if (!isSignedIn) {
+              return _buildLoginPrompt();
+            }
+
+            if (_isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (_errorMessage != null) {
+              return _buildErrorView();
+            }
+
+            return TabBarView(
+              children: [
+                _buildRevenueTab(),
+                _buildAnalyticsTab(),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginPrompt() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.lock_outline, size: 64, color: AppColors.textSecondary),
+          AppSpacing.vSpace16,
+          Text(AppText.get('revenue_sign_in_to_view'), textAlign: TextAlign.center),
+          AppSpacing.vSpace24,
+          AppButton(
+            onPressed: () async {
+              final authController = ref.read(googleSignInProvider);
+              final user = await authController.signIn();
+              if (user != null) {
+                await LogoutService.refreshAllState(ref);
+                _loadAllData();
+              }
+            },
+            label: AppText.get('btn_sign_in_google'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            AppSpacing.vSpace16,
+            Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)),
+            AppSpacing.vSpace16,
+            AppButton(onPressed: _loadAllData, label: "Retry"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRevenueTab() {
+    if (_revenueData == null) return const Center(child: Text("No engagement data available"));
+
+    return RefreshIndicator(
+      onRefresh: () => _loadAllData(forceRefresh: true),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(AppSpacing.spacing4),
+        child: Column(
+          children: [
+            _buildRevenueOverviewCard(),
+            AppSpacing.vSpace24,
+            _buildRevenueBreakdownCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsTab() {
+    if (_analytics == null) return const Center(child: Text("No analytics data available"));
+
+    return RefreshIndicator(
+      onRefresh: () => _loadAllData(forceRefresh: true),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(AppSpacing.spacing4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Core Analytics Grid
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: AppSpacing.spacing3,
+              mainAxisSpacing: AppSpacing.spacing3,
+              childAspectRatio: 1.5,
+              children: [
+                AnalyticsStatCard(
+                  label: "Total Views", 
+                  value: _analytics!.core.totalViews.toString(), 
+                  icon: Icons.visibility,
+                  color: AppColors.primary,
+                  growth: _analytics!.core.viewsGrowth,
+                ),
+                AnalyticsStatCard(
+                  label: "Watch Time", 
+                  value: "${_analytics!.core.totalWatchTime}m", 
+                  icon: Icons.access_time,
+                  color: Colors.orange,
+                  growth: _analytics!.core.watchTimeGrowth,
+                ),
+                AnalyticsStatCard(
+                  label: "Shares", 
+                  value: _analytics!.core.totalShares.toString(), 
+                  icon: Icons.share,
+                  color: Colors.blue,
+                ),
+                AnalyticsStatCard(
+                  label: "Skip Rate", 
+                  value: "${(_analytics!.core.skipRate * 100).toStringAsFixed(1)}%", 
+                  icon: Icons.skip_next,
+                  color: Colors.redAccent,
+                  onTap: _showSkipRateGuide,
+                ),
+              ],
+            ),
+            
+            AppSpacing.vSpace24,
+            PerformanceChart(data: _analytics!.dailyPerformance, title: "Daily Performance (Views)"),
+            
+            AppSpacing.vSpace24,
+            TopVideosList(videos: _analytics!.topVideos),
+
+            AppSpacing.vSpace24,
+            Text("Viewer Insights", style: AppTypography.titleMedium),
+            AppSpacing.vSpace12,
+            AudienceInsightCard(
+              title: "New vs Returning Viewers", 
+              content: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildMiniStat("New", _analytics!.audience.newVsReturning.newValue.toString()),
+                  _buildMiniStat("Returning", _analytics!.audience.newVsReturning.returning.toString()),
+                ],
+              )
+            ),
+            AppSpacing.vSpace16,
+            AudienceInsightCard(
+              title: "Top States", 
+              content: Column(
+                children: _analytics!.audience.topLocations.map((l) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(l.name, style: AppTypography.bodyMedium),
+                      Text("${l.value}%", style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                )).toList(),
+              )
+            ),
+            AppSpacing.vSpace24,
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSkipRateGuide() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Small handle for aesthetic
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: AppColors.borderPrimary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  const Icon(Icons.ads_click, color: AppColors.primary, size: 28),
+                  AppSpacing.hSpace12,
+                  Text("Skip Rate Kya Hai?", style: AppTypography.titleLarge),
+                ],
+              ),
+              AppSpacing.vSpace16,
+              const Text(
+                "Agar aapka skip rate 25% hai, toh iska matlab hai ki 25% log aapke video ko bina dekhe skip kar rahe hain.",
+                style: TextStyle(fontSize: 15, color: AppColors.textPrimary, height: 1.4),
+              ),
+              AppSpacing.vSpace24,
+              _buildGuideItem("🔥 Excellent (<20%)", "Dhamakedar content! Audience aapka video poora dekh rahi hai.", Colors.green),
+              _buildGuideItem("✅ Good (20-40%)", "Kafi accha hook hai. Use consistently maintain karein.", Colors.blue),
+              _buildGuideItem("⚠️ Average (40-60%)", "Pehle 3-5 seconds (The Hook) ko aur interesting banayein.", Colors.orange),
+              _buildGuideItem("❌ Critical (>70%)", "Log turant skip kar rahe hain. Naya format ya visuals try karein!", Colors.red),
+              AppSpacing.vSpace24,
+              SizedBox(
+                width: double.infinity,
+                child: AppButton(
+                  onPressed: () => Navigator.pop(context),
+                  label: "Samajh Gaya!",
+                ),
+              ),
+              // Extra space for bottom safety
+              AppSpacing.vSpace16,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuideItem(String label, String tip, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(tip, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold)),
+        Text(label, style: AppTypography.labelSmall.copyWith(color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildRevenueOverviewCard() {
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
+    final grossPoints = thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
+
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.spacing5),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        children: [
+          const Text("Creator Performance Points", style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+          AppSpacing.vSpace8,
+          Text(
+            thisMonth.toStringAsFixed(1),
+            style: AppTypography.displaySmall.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+          ),
+          AppSpacing.vSpace24,
+          Row(
+            children: [
+              Expanded(
+                child: _buildRevenueStat("Total Points", grossPoints.toStringAsFixed(1), Icons.stars),
+              ),
+              Expanded(
+                child: _buildRevenueStat("Last Period", lastMonth.toStringAsFixed(1), Icons.history),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevenueStat(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: AppColors.textPrimary, size: 24),
+        AppSpacing.vSpace4,
+        Text(value, style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold)),
+        Text(label, style: AppTypography.labelSmall.copyWith(color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildRevenueBreakdownCard() {
+    final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
+    if (thisMonth <= 0) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Engagement Breakdown", style: AppTypography.titleMedium),
+        AppSpacing.vSpace12,
+        Container(
+          padding: EdgeInsets.all(AppSpacing.spacing4),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundSecondary,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.borderPrimary),
+          ),
+          child: Column(
+            children: [
+              _buildBreakdownRow("Creator Points", thisMonth.toStringAsFixed(1), AppColors.success),
+              const Divider(height: 24),
+              _buildBreakdownRow("Platform Support", (thisMonth * 0.25).toStringAsFixed(1), AppColors.textSecondary),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBreakdownRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: AppTypography.bodyMedium),
+        Text(value, style: AppTypography.bodyLarge.copyWith(color: color, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+}

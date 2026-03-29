@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayu/core/design/radius.dart';
-import 'package:vayu/features/profile/data/services/payment_setup_service.dart';
+import 'package:vayu/features/profile/payouts/data/services/payment_setup_service.dart';
 import 'package:vayu/core/design/colors.dart';
 
 /// Widget to display payment setup status

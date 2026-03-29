@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:vayu/shared/services/file_picker_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayu/core/providers/video_providers.dart';
 import 'package:vayu/core/providers/navigation_providers.dart';
 import 'package:vayu/core/providers/profile_providers.dart';
 import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
@@ -29,7 +31,7 @@ import 'package:vayu/shared/models/app_activity.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/features/video/upload/presentation/widgets/upload_advanced_settings_section.dart';
 import 'package:vayu/features/video/upload/presentation/screens/make_episode_screen.dart';
-import 'package:vayu/features/profile/presentation/screens/linked_accounts_screen.dart';
+import 'package:vayu/features/profile/core/presentation/screens/linked_accounts_screen.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -61,8 +63,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
-  final VideoService _videoService = VideoService();
-  final AuthService _authService = AuthService();
+  late final VideoService _videoService;
+  late final AuthService _authService;
+  late final FilePickerService _filePickerService;
 
   // Timer for unified progress tracking
   Timer? _progressTimer;
@@ -341,6 +344,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   @override
   void initState() {
+    _videoService = ref.read(videoServiceProvider);
+    _authService = ref.read(authServiceProvider);
+    _filePickerService = ref.read(filePickerServiceProvider);
     _selectedCategory.value = _defaultCategory;
     super.initState();
 
@@ -1085,7 +1091,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         ref.read(mainControllerProvider)
             .setMediaPickerActive(true);
       }
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await _filePickerService.pickFiles(
         type: FileType.custom,
         allowMultiple: false,
         allowedExtensions: [

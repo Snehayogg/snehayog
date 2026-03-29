@@ -116,6 +116,9 @@ dev_dependencies:
   riverpod_generator: ^2.4.0
   build_runner: ^2.4.9
   riverpod_lint: ^2.3.10
+  integration_test:
+    sdk: flutter
+  mocktail: ^1.0.4
   flutter_test:
     sdk: flutter
 

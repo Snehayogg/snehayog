@@ -13,7 +13,7 @@ import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'dart:async';
 import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
+import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
 import 'dart:math' as math;
 import 'package:vayu/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayu/features/video/dubbing/data/services/on_device_dubbing_service.dart';

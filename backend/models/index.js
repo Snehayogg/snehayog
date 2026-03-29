@@ -14,5 +14,6 @@ import './WatchHistory.js';
 import './FeedHistory.js';
 import './AppConfig.js';
 import './Notice.js';
+import './CreatorDailyStats.js';
 
 console.log('✅ All models imported and registered successfully');

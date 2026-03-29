@@ -25,8 +25,8 @@ import 'package:vayu/core/design/spacing.dart';
 import 'package:vayu/features/ads/data/services/active_ads_service.dart';
 import 'package:vayu/features/video/core/data/services/video_view_tracker.dart';
 import 'package:vayu/features/ads/data/services/ad_refresh_notifier.dart';
-import 'package:vayu/features/profile/data/services/background_profile_preloader.dart';
-import 'package:vayu/features/profile/data/services/profile_preloader.dart';
+import 'package:vayu/features/profile/core/data/services/background_profile_preloader.dart';
+import 'package:vayu/features/profile/core/data/services/profile_preloader.dart';
 
 import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
@@ -37,7 +37,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:vayu/features/agent/presentation/screens/agent_screen.dart';
 import 'package:vayu/shared/config/feature_flags.dart';
-import 'package:vayu/features/profile/presentation/screens/profile_screen.dart';
+import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/features/video/core/presentation/managers/main_controller.dart';
