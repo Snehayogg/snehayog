@@ -9,7 +9,7 @@ class AppConfig {
   static const String kApiVersion = '2026-03-12';
 
   // Set to true to force local development server, false for remote server (Fly/custom domain)
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   // Use the explicit flag instead of kReleaseMode
   static bool get _isDevelopment => isDevelopment;
