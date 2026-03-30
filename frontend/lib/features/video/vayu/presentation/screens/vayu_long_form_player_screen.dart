@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:vayu/core/providers/auth_providers.dart';
 import 'package:vayu/features/video/edit/presentation/screens/edit_video_details.dart';
 import 'package:vayu/shared/widgets/report_dialog_widget.dart';
+import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,14 +13,13 @@ import 'package:chewie/chewie.dart';
 import 'package:vayu/features/video/core/data/models/video_model.dart';
 import 'package:vayu/shared/utils/app_logger.dart';
 import 'dart:async';
+import 'package:vayu/core/design/colors.dart';
 import 'package:vayu/features/video/core/data/services/video_service.dart';
 import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
 import 'dart:math' as math;
 import 'package:vayu/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayu/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayu/shared/widgets/follow_button_widget.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 import 'package:vayu/core/design/radius.dart';
 import 'package:vayu/core/design/typography.dart';
@@ -39,6 +39,8 @@ import 'package:vayu/features/video/core/presentation/managers/video_controller_
 import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/features/video/core/presentation/managers/main_controller.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:vayu/features/video/core/data/services/video_view_tracker.dart';
+import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
 
 enum AspectRatioMode {
   fit,
@@ -128,6 +130,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   final Map<String, StreamSubscription> _dubbingSubscriptions = {};
   final Map<String, String> _selectedAudioLanguage = {};
   bool _isDubbingProgressVisible = true;
+  
+  // Revenue Tracking
+  late final VideoViewTracker _viewTracker;
+  late final AdImpressionService _adImpressionService;
+  final Map<int, Timer> _viewUITimers = {};
+  final Map<int, Duration> _lastKnownPositions = {};
 
 
   @override
@@ -147,6 +155,13 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _pageController = PageController(initialPage: 0);
 
     _initPrefs();
+    _viewTracker = VideoViewTracker();
+    _adImpressionService = AdImpressionService();
+    
+    // Start tracking for the first video after a short delay
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _startViewTracking(_currentIndex);
+    });
 
     // Register with VideoControllerManager for tab-switch pauses
     _videoControllerManager.registerOnRoutePopped(() {
@@ -439,8 +454,22 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _onPositionChanged() {
     if (mounted) setState(() {});
+    
     final controller = _controllers[_currentIndex];
-    if (controller != null && controller.value.isPlaying && controller.value.position.inSeconds % 5 == 0) {
+    if (controller == null) return;
+
+    final currentPos = controller.value.position;
+    final lastPos = _lastKnownPositions[_currentIndex] ?? Duration.zero;
+
+    // Detect loop or manual restart
+    if (currentPos < lastPos && lastPos.inSeconds > 1) {
+      AppLogger.log('♻️ VayuPlayer: Loop detected, restarting tracking');
+      _stopViewTracking(_currentIndex);
+      _startViewTracking(_currentIndex);
+    }
+    _lastKnownPositions[_currentIndex] = currentPos;
+
+    if (controller.value.isPlaying && currentPos.inSeconds % 5 == 0) {
       _savePlaybackPosition(_currentIndex);
     }
   }
@@ -459,8 +488,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     // Local cleanup: Stop playback but don't dispose shared controllers globally
     _controllers.forEach((index, c) {
       try {
-        c?.pause();
-        c?.setVolume(0.0);
+        c.pause();
+        c.setVolume(0.0);
       } catch (_) {}
     });
     
@@ -470,10 +499,47 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _controlsTimer?.cancel(); // Changed from _hideControlsTimer
     _overlayTimer?.cancel();
     _aspectRatioOverlayTimer?.cancel();
+    _stopViewTracking(_currentIndex);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     Future.microtask(() { if (context.mounted) ref.read(mainControllerProvider).setBottomNavVisibility(true); });
     super.dispose();
+  }
+
+  void _startViewTracking(int index) {
+    if (index < 0 || index >= _videos.length) return;
+    final video = _videos[index];
+    AppLogger.log('🎯 VayuPlayer: Starting view tracking for video ${video.id}');
+    _viewTracker.startViewTracking(
+      video.id,
+      videoUploaderId: video.uploader.id,
+      videoHash: video.videoHash,
+    );
+    
+    // Cancel any existing UI timer for this index
+    _viewUITimers[index]?.cancel();
+
+    // Local UI update simulation (matching backend threshold)
+    _viewUITimers[index] = Timer(const Duration(seconds: 3), () {
+      if (mounted && _currentIndex == index) {
+        setState(() {
+          _videos[index] = _videos[index].copyWith(views: _videos[index].views + 1);
+        });
+        AppLogger.log('✅ VayuPlayer: Local view incremented for video ${video.id}');
+      }
+    });
+  }
+
+  void _stopViewTracking(int index) {
+    if (index < 0 || index >= _videos.length) return;
+    
+    // Cancel the UI timer immediately 
+    _viewUITimers[index]?.cancel();
+    _viewUITimers.remove(index);
+
+    final video = _videos[index];
+    AppLogger.log('🎯 VayuPlayer: Stopping view tracking for video ${video.id}');
+    _viewTracker.stopViewTracking(video.id);
   }
 
   void _handleUnifiedHorizontalDrag(double deltaX) {
@@ -696,9 +762,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     if (!mounted) return;
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     
-    final iconSize = isLandscape ? 20.0 : 20.0;
-    final titleSize = isLandscape ? 14.0 : AppTypography.bodyMedium.fontSize;
-    final trailingSize = isLandscape ? 12.0 : AppTypography.bodySmall.fontSize;
+    final iconSize = isLandscape ? 17.0 : 20.0;
+    final titleSize = isLandscape ? 12.0 : AppTypography.bodyMedium.fontSize;
+    final trailingSize = isLandscape ? 10.5 : AppTypography.bodySmall.fontSize;
     
     await VayuBottomSheet.show<void>(
       context: context, 
@@ -794,7 +860,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                     },
                   ),
                 ),
-                if (!isLandscape) const SizedBox(height: 16),
+                if (!isLandscape) const SizedBox(height: 12),
               ],
             ),
     );
@@ -802,10 +868,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _openReportDialog() {
     final video = _videos[_currentIndex];
-    showDialog(
+    VayuBottomSheet.show(
       context: context,
-      builder: (context) => ReportDialogWidget(
-        targetType: 'video', 
+      title: 'Report Content',
+      icon: Icons.report_problem_outlined,
+      child: ReportDialogWidget(
+        targetType: 'video',
         targetId: video.id,
       ),
     );
@@ -826,7 +894,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             dense: true, 
             visualDensity: VisualDensity.compact,
             title: Text(_formatPlaybackSpeed(speed), style: TextStyle(
-              fontSize: isLandscape ? 14.0 : null,
+              fontSize: isLandscape ? 12.0 : null,
               color: isSelected ? AppColors.primary : AppColors.textPrimary, 
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
             )),
@@ -854,6 +922,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     
     _pauseCurrentVideo();
     _reprimeWindowIfNeeded(index);
+    _stopViewTracking(_currentIndex);
     
     setState(() {
       _currentIndex = index;
@@ -862,6 +931,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     // **NEW: Persist current video index for Vayu Tab (index 1)**
     ref.read(mainControllerProvider).updateCurrentVideoIndex(index, tabIndex: 1);
 
+    _startViewTracking(index);
     _preloadNearbyVideos();
     _initializePlayer(index);
     _loadBannerAd(index);
@@ -960,24 +1030,47 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _onLocalSmartDubTap(VideoModel video, [String targetLang = 'hindi']) async {
     final videoId = video.id;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     final currentResult = _dubbingResultsVN[videoId]?.value;
     // ... previous checks ...
     if (currentResult != null && !currentResult.isDone && currentResult.status != DubbingStatus.idle) {
       // User tapped while dubbing is in progress -> Ask to Cancel
-      final bool? cancel = await showDialog<bool>(
+      final bool? cancel = await VayuBottomSheet.show<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: AppColors.backgroundSecondary,
-          title: const Text('Cancel Dubbing?', style: TextStyle(color: AppColors.textPrimary)),
-          content: const Text('Are you sure you want to cancel the AI Dubbing process taking place for this video?', style: TextStyle(color: AppColors.textSecondary)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No', style: TextStyle(color: AppColors.textTertiary)),
+        title: 'Cancel Dubbing?',
+        icon: Icons.cancel_outlined,
+        iconColor: Colors.red,
+        maxWidth: isLandscape ? 360.0 : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Are you sure you want to cancel the AI Dubbing process for this video?',
+              style: AppTypography.bodyMedium.copyWith(
+                fontSize: isLandscape ? 13.0 : null,
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    label: 'No',
+                    variant: AppButtonVariant.secondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    label: 'Yes, Cancel',
+                    variant: AppButtonVariant.primary,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1240,7 +1333,28 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildAdSection(int index) {
     final ad = _bannerAdsByIndex[index];
     if (ad == null) return const SizedBox.shrink();
-    return Padding(padding: EdgeInsets.symmetric(horizontal: 16.w), child: BannerAdSection(adData: {...ad, 'creatorId': _videos[index].uploader.id}, onVideoPause: () => _controllers[index]?.pause(), onVideoResume: () => _controllers[index]?.play()));
+    
+    final userData = ref.read(googleSignInProvider).userData;
+    final userId = userData?['id'] ?? userData?['googleId'] ?? 'anonymous';
+    
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w), 
+      child: BannerAdSection(
+        adData: {...ad, 'creatorId': _videos[index].uploader.id}, 
+        onVideoPause: () => _controllers[index]?.pause(), 
+        onVideoResume: () => _controllers[index]?.play(),
+        onImpression: () async {
+          final adId = ad['id'] ?? ad['_id'];
+          if (adId != null) {
+            await _adImpressionService.trackBannerAdImpression(
+              videoId: _videos[index].id,
+              adId: adId.toString(),
+              userId: userId.toString(),
+            );
+          }
+        },
+      ),
+    );
   }
 
   Widget _buildChannelRow(int index) {
@@ -1526,11 +1640,11 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             style: AppTypography.bodyLarge.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w500,
-              fontSize: isLandscape ? 14.0 : null,
+              fontSize: isLandscape ? 12.0 : null,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: isLandscape ? 12 : 20),
           Row(
             children: [
               Expanded(
@@ -1538,6 +1652,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   onPressed: () => Navigator.pop(context),
                   label: 'Nahi',
                   variant: AppButtonVariant.secondary,
+                  size: isLandscape ? AppButtonSize.small : AppButtonSize.medium,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1553,12 +1668,13 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                       _showSnackBar('Dubbing cancelled.');
                     }
                   },
-                  label: 'Haan, Cancel Karein',
+                  label: isLandscape ? 'Haan, Cancel' : 'Haan, Cancel Karein',
+                  size: isLandscape ? AppButtonSize.small : AppButtonSize.medium,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: isLandscape ? 4 : 8),
         ],
       ),
     );

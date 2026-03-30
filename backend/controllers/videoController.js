@@ -1410,15 +1410,17 @@ export const incrementView = async (req, res) => {
 
     if (!videoId) return res.status(400).json({ error: 'Video ID is required' });
 
+    const userIdentifier = googleId || deviceId || 'anonymous';
     const updatedVideo = await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } }, { new: true });
     if (!updatedVideo) return res.status(404).json({ error: 'Video not found' });
+
+    console.log(`📊 [VIEW] Video: ${videoId}, User: ${userIdentifier}, New Count: ${updatedVideo.views}`);
 
     // **NEW: Track Daily Stats (Sliding Window)**
     if (updatedVideo.uploader) {
       updateCreatorDailyStats(updatedVideo.uploader, { views: 1 }).catch(err => console.error('DailyStats Error:', err));
     }
 
-    const userIdentifier = googleId || deviceId;
     if (userIdentifier && redisService.getConnectionStatus()) {
       // **OPTIMIZATION: Targeted Invalidation (Background)**
       const clearCache = async () => {
@@ -1435,7 +1437,7 @@ export const incrementView = async (req, res) => {
             await Promise.all(keysToDel.map(k => redisService.del(k)));
           }
         } catch (e) {
-          console.log('ℹ️ Redis: Background cleanup error:', e.message);
+          // Silent cleanup failure - not critical for user experience
         }
       };
       

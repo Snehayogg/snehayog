@@ -16,6 +16,8 @@ import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayu/features/profile/core/presentation/screens/linked_accounts_screen.dart';
 import 'package:vayu/shared/utils/app_text.dart';
 import 'package:vayu/shared/utils/url_utils.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -281,11 +283,11 @@ class ProfileDialogsWidget {
     required String targetType,
     required String targetId,
   }) {
-    showDialog(
+    VayuBottomSheet.show(
       context: context,
-      barrierDismissible: true,
-      builder: (context) =>
-          ReportDialogWidget(targetType: targetType, targetId: targetId),
+      title: 'Report ${targetType[0].toUpperCase()}${targetType.substring(1)}',
+      icon: Icons.report_problem_outlined,
+      child: ReportDialogWidget(targetType: targetType, targetId: targetId),
     );
   }
 
@@ -299,6 +301,7 @@ class ProfileDialogsWidget {
       minChildSize: 0.5,
       maxChildSize: 0.95,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -306,49 +309,44 @@ class ProfileDialogsWidget {
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: ListView(
-              children: [
-                _buildFAQItem(
-                  question: "Why should I use Vayug instead of Instagram?",
-                  answer:
-                      "Because on Vayug, you can start growing your profile from day one, with meaningful content. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
-                  icon: Icons.compare_arrows,
-                  color: Colors.green,
-                ),
-                _buildFAQItem(
-                  question:
-                      "YouTube already has monetization. Why switch to Vayug?",
-                  answer:
-                      "YouTube has strict entry rules. On Vayug, there's no barrier — creators start building their engagement from the first upload. It's a platform that values your effort, not just your follower count.",
-                  icon: Icons.video_library,
-                  color: Colors.red,
-                ),
-                _buildFAQItem(
-                  question: "Does Vayug have a creator support model?",
-                  answer:
-                      "Yes — we use a creator-first model where rewards are distributed based on engagement. The system automatically updates your score based on your views and interaction. Our goal is to make creators independent and valued.",
-                  icon: Icons.account_balance_wallet,
-                  color: Colors.orange,
-                ),
-                _buildFAQItem(
-                  question:
-                      "What's the point of joining a new app if my followers are on Instagram and YouTube?",
-                  answer:
-                      "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayug, you're not lost in the crowd — your content actually gets discovered.",
-                  icon: Icons.trending_up,
-                  color: Colors.purple,
-                ),
-                _buildFAQItem(
-                  question:
-                      "How will I get views or reach on Vayug? New platforms usually have low traffic.",
-                  answer:
-                      "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
-                  icon: Icons.visibility,
-                  color: Colors.blue,
-                ),
-              ],
-            ),
+          // **FIX: Removed Expanded and ListView to prevent layout crashes in VayuBottomSheet**
+          _buildFAQItem(
+            question: "Why should I use Vayug instead of Instagram?",
+            answer:
+                "Because on Vayug, you can start growing your profile from day one, with meaningful content. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
+            icon: Icons.compare_arrows,
+            color: Colors.green,
+          ),
+          _buildFAQItem(
+            question:
+                "YouTube already has monetization. Why switch to Vayug?",
+            answer:
+                "YouTube has strict entry rules. On Vayug, there's no barrier — creators start building their engagement from the first upload. It's a platform that values your effort, not just your follower count.",
+            icon: Icons.video_library,
+            color: Colors.red,
+          ),
+          _buildFAQItem(
+            question: "Does Vayug have a creator support model?",
+            answer:
+                "Yes — we use a creator-first model where rewards are distributed based on engagement. The system automatically updates your score based on your views and interaction. Our goal is to make creators independent and valued.",
+            icon: Icons.account_balance_wallet,
+            color: Colors.orange,
+          ),
+          _buildFAQItem(
+            question:
+                "What's the point of joining a new app if my followers are on Instagram and YouTube?",
+            answer:
+                "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayug, you're not lost in the crowd — your content actually gets discovered.",
+            icon: Icons.trending_up,
+            color: Colors.purple,
+          ),
+          _buildFAQItem(
+            question:
+                "How will I get views or reach on Vayug? New platforms usually have low traffic.",
+            answer:
+                "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
+            icon: Icons.visibility,
+            color: Colors.blue,
           ),
           const SizedBox(height: 20),
           AppButton(
@@ -451,35 +449,31 @@ class ProfileDialogsWidget {
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 8),
-          _buildLegalItem(
-            context: context,
+          // **FIX: Use _LegalItemWidget to provide visual feedback on click**
+          _VerticalLegalItem(
             title: 'Privacy Policy',
             icon: Icons.privacy_tip_outlined,
-            onTap: () => _launchURL('https://snehayog.site/privacy.html', context: context),
+            url: 'https://snehayog.site/privacy.html',
           ),
-          _buildLegalItem(
-            context: context,
+          _VerticalLegalItem(
             title: 'Terms & Conditions',
             icon: Icons.description_outlined,
-            onTap: () => _launchURL('https://snehayog.site/terms.html', context: context),
+            url: 'https://snehayog.site/terms.html',
           ),
-          _buildLegalItem(
-            context: context,
+          _VerticalLegalItem(
             title: 'Refund & Cancellation',
             icon: Icons.assignment_return_outlined,
-            onTap: () => _launchURL('https://snehayog.site/refund.html', context: context),
+            url: 'https://snehayog.site/refund.html',
           ),
-          _buildLegalItem(
-            context: context,
+          _VerticalLegalItem(
             title: 'Contact Us',
             icon: Icons.contact_support_outlined,
-            onTap: () => _launchURL('https://snehayog.site/contact.html', context: context),
+            url: 'https://snehayog.site/contact.html',
           ),
-          _buildLegalItem(
-            context: context,
+          _VerticalLegalItem(
             title: 'About Us',
             icon: Icons.info_outline_rounded,
-            onTap: () => _launchURL('https://snehayog.site/about.html', context: context),
+            url: 'https://snehayog.site/about.html',
           ),
           const SizedBox(height: 8),
           Center(
@@ -494,48 +488,48 @@ class ProfileDialogsWidget {
     );
   }
 
-  static Widget _buildLegalItem({
-    required BuildContext context,
-    required String title,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.primary),
-      title: Text(
-        title,
-        style: AppTypography.bodyMedium.copyWith(
-          fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 18),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-    );
-  }
 
   static Future<void> _launchURL(String url, {BuildContext? context}) async {
-    // **FIX: Close bottom sheet immediately so user sees action**
-    if (context != null && context.mounted) {
-      Navigator.pop(context);
-    }
-
     final enrichedUrl = UrlUtils.enrichUrl(
-      url,
+      url.trim(),
       source: 'vayug',
       medium: 'internal_link',
       campaign: 'legal_docs',
     );
-    final Uri uri = Uri.parse(enrichedUrl);
+    
+    AppLogger.log('🔗 ProfileDialogs: Attempting to launch legal link: $enrichedUrl');
+    
     try {
-      // **CRITICAL: Use externalApplication to force system browser**
-      await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final Uri uri = Uri.parse(enrichedUrl);
+      if (await canLaunchUrl(uri)) {
+        // **FIX: Launch first, then optionally pop if successful**
+        final success = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        
+        if (success) {
+          // If we launched successfully, we can close the bottom sheet
+          if (context != null && context.mounted) {
+             Navigator.maybePop(context);
+          }
+        } else {
+          AppLogger.log('❌ ProfileDialogs: launchUrl returned false for $enrichedUrl');
+          if (context != null && context.mounted) {
+            VayuSnackBar.showError(context, 'Could not open link in browser.');
+          }
+        }
+      } else {
+        AppLogger.log('⚠️ ProfileDialogs: canLaunchUrl returned false for $enrichedUrl');
+        if (context != null && context.mounted) {
+          VayuSnackBar.showError(context, 'Invalid link or no browser found.');
+        }
+      }
     } catch (e) {
-      debugPrint('Could not launch $url : $e');
+      AppLogger.log('❌ ProfileDialogs: Exception while launching link: $e');
+      if (context != null && context.mounted) {
+        VayuSnackBar.showError(context, 'An error occurred while opening the link.');
+      }
     }
   }
 
@@ -775,6 +769,65 @@ class ProfileDialogsWidget {
       title: 'Top Earners',
       icon: Icons.emoji_events_outlined,
       child: const TopEarnersBottomSheet(),
+    );
+  }
+}
+
+// **NEW: Internal widget for legal items with loading state feedback**
+class _VerticalLegalItem extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final String url;
+
+  const _VerticalLegalItem({
+    required this.title,
+    required this.icon,
+    required this.url,
+  });
+
+  @override
+  State<_VerticalLegalItem> createState() => _VerticalLegalItemState();
+}
+
+class _VerticalLegalItemState extends State<_VerticalLegalItem> {
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(widget.icon, color: AppColors.primary),
+      title: Text(
+        widget.title,
+        style: AppTypography.bodyMedium.copyWith(
+          fontWeight: FontWeight.w500,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      trailing: _isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            )
+          : const Icon(Icons.chevron_right,
+              color: AppColors.textTertiary, size: 18),
+      onTap: _isLoading
+          ? null
+          : () async {
+              setState(() => _isLoading = true);
+              try {
+                await ProfileDialogsWidget._launchURL(widget.url,
+                    context: context);
+              } finally {
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                }
+              }
+            },
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
     );
   }
 }

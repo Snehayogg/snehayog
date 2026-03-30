@@ -100,8 +100,7 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
   String? _dateError;
   String? _mediaError;
 
-  // Services
-  final AdService _adService = AdService();
+  // Services retrieved via ref.read(adServiceProvider) in methods
   final CloudflareR2Service _cloudflareService = CloudflareR2Service();
   final ScrollController _scrollController = ScrollController();
 
@@ -210,7 +209,7 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
   /// **FIX: Pause videos in background when minimizing from create ad screen**
   void _pauseBackgroundVideos() {
     try {
-      // Import MainController to pause videos
+      // Use providers for services
       final mainController = ref.read(mainControllerProvider);
       mainController.forcePauseVideos();
       AppLogger.log('✅ CreateAdScreen: Background videos paused successfully');
@@ -1645,7 +1644,7 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
         _errorMessage = AppText.get('ad_error_creating');
       });
 
-      final result = await _adService.createAdWithPayment(
+      final result = await ref.read(adServiceProvider).createAdWithPayment(
         // For banner ads, title and description are optional (use defaults)
         title: _selectedAdType == 'banner'
             ? (_titleController.text.trim().isEmpty

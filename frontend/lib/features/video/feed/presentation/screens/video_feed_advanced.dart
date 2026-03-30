@@ -44,6 +44,7 @@ import 'package:vayu/features/video/core/presentation/managers/main_controller.d
 import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayu/shared/widgets/report_dialog_widget.dart';
+import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayu/shared/services/share_service.dart';
 import 'video_feed_advanced/widgets/throttled_progress_bar.dart';
@@ -58,7 +59,6 @@ import 'package:vayu/features/video/core/data/services/video_cache_proxy_service
 import 'package:vayu/shared/services/local_gallery_service.dart';
 import 'package:vayu/features/video/edit/presentation/screens/edit_video_details.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayu/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayu/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayu/shared/widgets/vayu_snackbar.dart';
@@ -1158,11 +1158,11 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
   void _openReportDialog(String videoId) {
     if (videoId.isEmpty) return;
-    showDialog(
+    VayuBottomSheet.show(
       context: context,
-      barrierDismissible: true,
-      builder: (context) =>
-          ReportDialogWidget(targetType: 'video', targetId: videoId),
+      title: 'Report Content',
+      icon: Icons.report_problem_outlined,
+      child: ReportDialogWidget(targetType: 'video', targetId: videoId),
     );
   }
 

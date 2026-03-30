@@ -54,22 +54,31 @@ class AppButton extends StatelessWidget {
 
     switch (size) {
       case AppButtonSize.small:
-        height = 36.0;
+        height = 34.0;
         fontSize = AppTypography.fontSizeSM;
         iconSize = 16.0;
-        padding = EdgeInsets.all(AppSpacing.spacing3);
+        padding = EdgeInsets.symmetric(
+          horizontal: AppSpacing.spacing3,
+          vertical: AppSpacing.spacing1, // Minimal vertical padding for small
+        );
         break;
       case AppButtonSize.medium:
-        height = 48.0;
+        height = 44.0;
         fontSize = AppTypography.fontSizeBase;
         iconSize = 20.0;
-        padding = EdgeInsets.all(AppSpacing.spacing4);
+        padding = EdgeInsets.symmetric(
+          horizontal: AppSpacing.spacing4,
+          vertical: AppSpacing.spacing2, // Balanced vertical padding for medium
+        );
         break;
       case AppButtonSize.large:
-        height = 56.0;
+        height = 54.0;
         fontSize = AppTypography.fontSizeLG;
         iconSize = 24.0;
-        padding = EdgeInsets.all(AppSpacing.spacing5);
+        padding = EdgeInsets.symmetric(
+          horizontal: AppSpacing.spacing5,
+          vertical: AppSpacing.spacing3, // Balanced vertical padding for large
+        );
         break;
     }
 
@@ -203,22 +212,22 @@ class AppButton extends StatelessWidget {
 
     // Wrap the outgoing widget in our custom scaling button
     // only if the button is enabled to give it tactile feedback
-    return SizedBox(
-      height: height,
-      width: isFullWidth ? double.infinity : null,
-      child: effectiveDisabled
-          ? buttonWidget
-          : InteractiveScaleButton(
-              onTap: onPressed,
-              // We don't want the InteractiveScaleButton to actually fire the onTap callback
-              // because the underlying Material button (ElevatedButton, etc) already handles it.
-              // So we pass a dummy callback if it's not disabled just so the scale effect works.
-              // The actual logic is handled by the inner `buttonWidget`'s `onPressed`.
-              behavior: HitTestBehavior.deferToChild,
-              // A 0.96 scale looks great on large primary buttons
-              scaleDownFactor: 0.96,
-              child: buttonWidget,
-            ),
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: height,
+        minWidth: isFullWidth ? double.infinity : 0,
+      ),
+      child: isFullWidth ? SizedBox(width: double.infinity, child: _wrapWithFeedback(buttonWidget, effectiveDisabled, onPressed)) : _wrapWithFeedback(buttonWidget, effectiveDisabled, onPressed),
+    );
+  }
+
+  Widget _wrapWithFeedback(Widget buttonWidget, bool effectiveDisabled, VoidCallback? onPressed) {
+    if (effectiveDisabled) return buttonWidget;
+    return InteractiveScaleButton(
+      onTap: onPressed,
+      behavior: HitTestBehavior.deferToChild,
+      scaleDownFactor: 0.96,
+      child: buttonWidget,
     );
   }
 }

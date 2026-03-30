@@ -3,7 +3,6 @@ import 'package:integration_test/integration_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:vayu/features/video/upload/presentation/screens/upload_screen.dart';
 import 'package:file_picker/file_picker.dart';
-
 import 'test_app_wrapper.dart';
 
 void main() {
@@ -12,11 +11,13 @@ void main() {
   late MockAuthService mockAuthService;
   late MockVideoService mockVideoService;
   late MockFilePickerService mockFilePickerService;
+  late MockAdService mockAdService;
 
   setUp(() {
     mockAuthService = MockAuthService();
     mockVideoService = MockVideoService();
     mockFilePickerService = MockFilePickerService();
+    mockAdService = MockAdService();
 
     // Default mocks
     when(() => mockAuthService.getUserData()).thenAnswer((_) async => {
@@ -49,6 +50,7 @@ void main() {
         mockAuthService: mockAuthService,
         mockVideoService: mockVideoService,
         mockFilePickerService: mockFilePickerService,
+        mockAdService: mockAdService,
         child: const UploadScreen(),
       ),
     );

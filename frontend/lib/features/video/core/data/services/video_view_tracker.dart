@@ -12,8 +12,7 @@ class VideoViewTracker {
   static String get _baseUrl => AppConfig.baseUrl;
   final AuthService _authService = AuthService();
 
-  // Track which videos have been viewed to prevent duplicate counts in same session
-  final Set<String> _viewedVideos = <String>{};
+  // Track timers for each video
   final Map<String, Timer> _viewTimers = <String, Timer>{};
   final Map<String, DateTime> _playbackStartTimes = <String, DateTime>{};
   final Map<String, int> _userViewCounts = <String, int>{};
@@ -69,17 +68,17 @@ class VideoViewTracker {
       _queueWatchEvent(videoId, effectiveDuration, false, platformId, videoHash);
 
       // **FIXED: View increment requires authenticated user, but watch tracking already happened above**
-      // Get current user data for view increment (only authenticated users can increment views)
+      // **FIXED: Allow anonymous view increments using platformId**
+      // Get current user data for view increment (prefer authenticated users)
       final userData = await _authService.getUserData();
-      if (userData == null || userData['id'] == null) {
-        AppLogger.log(
-            'ℹ️ VideoViewTracker: No authenticated user found - watch tracking done, skipping view increment');
-        // Watch tracking already happened above, so return true (watch was tracked)
+      final userId = userData?['id'] ?? userData?['googleId'] ?? platformId;
+      
+      if (userId == null || userId.isEmpty) {
+        AppLogger.log('ℹ️ VideoViewTracker: No identifier found - skipping view increment');
         return true;
       }
-
-      final userId = userData['id'];
-      AppLogger.log('🎯 VideoViewTracker: User ID: $userId');
+      
+      AppLogger.log('🎯 VideoViewTracker: User/Device ID for increment: $userId');
 
       // **RELAXED RULE**: Allow creators to test their own videos
       // Self-views will now be counted like normal views so creators
@@ -183,21 +182,14 @@ class VideoViewTracker {
         '⏰ VideoViewTracker: ${AppConstants.videoViewCountThreshold.inSeconds} seconds elapsed for video $videoId, incrementing view',
       );
 
-      // Check if this video hasn't been counted yet in this session
-      final viewKey = '${videoId}_current_session';
-      if (!_viewedVideos.contains(viewKey)) {
-        final success =
-            await incrementView(videoId, videoUploaderId: videoUploaderId, videoHash: videoHash);
-        if (success) {
-          _viewedVideos.add(viewKey);
-          AppLogger.log('✅ VideoViewTracker: View counted for video $videoId');
-        } else {
-          AppLogger.log(
-              '⚠️ VideoViewTracker: View not counted for video $videoId (self-view, max reached or error)');
-        }
+      final success =
+          await incrementView(videoId, videoUploaderId: videoUploaderId, videoHash: videoHash);
+      
+      if (success) {
+        AppLogger.log('✅ VideoViewTracker: View counted for video $videoId');
       } else {
         AppLogger.log(
-            '⚠️ VideoViewTracker: Video $videoId already counted in this session');
+            '⚠️ VideoViewTracker: View not counted for video $videoId (self-view, max reached or error)');
       }
 
       // Clean up timer
@@ -213,7 +205,7 @@ class VideoViewTracker {
     final startTime = _playbackStartTimes.remove(videoId);
     if (startTime != null) {
       final elapsed = DateTime.now().difference(startTime);
-      final threshold = AppConstants.videoViewCountThreshold;
+      const threshold = AppConstants.videoViewCountThreshold;
 
       if (elapsed < threshold && elapsed.inMilliseconds > 500) {
         AppLogger.log(
@@ -232,7 +224,6 @@ class VideoViewTracker {
         '🎯 VideoViewTracker: Resetting view tracking for video $videoId');
 
     stopViewTracking(videoId);
-    _viewedVideos.removeWhere((key) => key.startsWith('${videoId}_'));
   }
 
   /// Get user's view count for a specific video
@@ -270,7 +261,6 @@ class VideoViewTracker {
     }
 
     _viewTimers.clear();
-    _viewedVideos.clear();
     _userViewCounts.clear();
     _recentViews.clear(); // **NEW: Clear recent views tracking**
   }

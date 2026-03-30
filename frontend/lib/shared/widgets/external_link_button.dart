@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vayu/shared/widgets/app_button.dart';
 import 'package:vayu/shared/utils/url_utils.dart';
+import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayu/shared/widgets/vayu_snackbar.dart';
 
 class ExternalLinkButton extends StatelessWidget {
   final String url;
@@ -18,13 +20,30 @@ class ExternalLinkButton extends StatelessWidget {
           source: 'vayug',
           medium: 'visit_now',
         );
-        final uri = Uri.tryParse(enrichedUrl);
-        if (uri != null && await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open link.')),
-          );
+        
+        AppLogger.log('🔗 ExternalLinkButton: Attempting to launch: $enrichedUrl');
+        
+        try {
+          final uri = Uri.tryParse(enrichedUrl);
+          if (uri != null && await canLaunchUrl(uri)) {
+            final success = await launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (!success) {
+              AppLogger.log('❌ ExternalLinkButton: launchUrl returned false for $enrichedUrl');
+              if (context.mounted) {
+                VayuSnackBar.showError(context, 'Could not open link in browser.');
+              }
+            }
+          } else {
+            AppLogger.log('⚠️ ExternalLinkButton: canLaunchUrl returned false or uri is null for $enrichedUrl');
+            if (context.mounted) {
+              VayuSnackBar.showError(context, 'Invalid link or no browser found.');
+            }
+          }
+        } catch (e) {
+          AppLogger.log('❌ ExternalLinkButton: Exception while launching link: $e');
+          if (context.mounted) {
+            VayuSnackBar.showError(context, 'An error occurred while opening the link.');
+          }
         }
       },
       label: 'Visit Now',

@@ -81,6 +81,8 @@
 			<string>instagram</string>
 			<string>fb</string>
 			<string>tg</string>
+			<string>https</string>
+			<string>http</string>
 		</array>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>

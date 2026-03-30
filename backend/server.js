@@ -4,6 +4,7 @@ import path from 'path';
 import compression from 'compression';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
+import morgan from 'morgan';
 
 // **FIX: Don't disable console.log in production - we need it for Railway debugging**
 // Only disable if explicitly requested via DISABLE_CONSOLE_LOG=true
@@ -155,7 +156,6 @@ app.use(cors({
     } else {
       // In development, allow all origins as fallback
       if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-        console.log(`⚠️ CORS: Allowing origin in dev mode: ${origin}`);
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -211,6 +211,15 @@ app.use((req, res, next) => {
     }
     next();
 });
+
+// ⏱️ HTTP REQUEST LOGGING (Production Ready & Environment Aware)
+// In production we use a more detailed format including IP and timestamp
+// In development we use 'dev' for clean, color-coded output
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan(':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" - :response-time ms'));
+} else {
+  app.use(morgan('dev'));
+}
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -296,7 +305,6 @@ app.use('/api', apiVersioning, passiveVerifyToken, apiLimiter, apiRouter);
 
 // **FIX: Root route handler - serves the landing page for APK distribution
 app.get('/', (req, res) => {
-  console.log('🔗 Root route hit - Serving Landing Page:', req.url);
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

@@ -146,16 +146,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _stateManager.setContext(context);
-        // **FIX: Ensure data loads on first attempt even if cache fails**
-        // Call _loadData() in postFrameCallback to ensure context is ready
-        if (_stateManager.userData == null) {
-          _loadData();
-        }
       }
     });
 
-    // **FIX: Always attempt initial load, even if cache exists**
-    // This ensures data loads on first attempt
+    // **FIX: Always attempt initial load once during init**
+    // This ensures data loads on first attempt without double-triggering
     _loadData();
     // Load referral stats
     _loadReferralStats();
@@ -277,6 +272,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
 
           _stateManager.setUserData(cachedData);
+          if (!mounted) return;
           _isLoading.value = false; // Show profile header instantly
           _loadVideosFromCache(); // Load videos in background
 
@@ -336,6 +332,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading data: $e');
+      if (!mounted) return;
       _error.value = _getUserFriendlyError(e);
       _isLoading.value = false;
     }
@@ -355,29 +352,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             ? const Duration(seconds: 10)
             : const Duration(seconds: 15);
 
-        // **OPTIMIZATION: Parallel Loading**
-        final authService = ref.read(authServiceProvider);
-        final effectiveUserId = widget.userId ?? authService.currentUserId;
-
-        if (effectiveUserId != null) {
-          AppLogger.log('🚀 ProfileScreen: Parallel loading for $effectiveUserId');
-          await Future.wait([
-            _stateManager.loadUserData(widget.userId, forceRefresh: forceRefresh),
-            _loadVideos(forceRefresh: forceRefresh, silent: true),
-          ]).timeout(timeoutDuration);
-        } else {
-          await _stateManager
-              .loadUserData(widget.userId, forceRefresh: forceRefresh)
-              .timeout(
-            timeoutDuration,
-            onTimeout: () {
-              throw Exception('Request timed out. Please check your connection.');
-            },
-          );
-          
-          if (_stateManager.userData != null) {
-             await _loadVideos(forceRefresh: forceRefresh);
-          }
+        // **SEQUENTIAL LOADING: Profile first, then Videos**
+        // This ensures error handling is cleaner and ID resolution is stable
+        AppLogger.log('🚀 ProfileScreen: Sequential loading for ${widget.userId ?? "own profile"}');
+        
+        await _stateManager
+            .loadUserData(widget.userId, forceRefresh: forceRefresh)
+            .timeout(
+          timeoutDuration,
+          onTimeout: () {
+            throw Exception('Request timed out while loading profile data.');
+          },
+        );
+        
+        // Once profile data is loaded (or resolved from cache), load videos
+        if (_stateManager.userData != null) {
+           await _loadVideos(forceRefresh: forceRefresh, silent: true).timeout(
+             timeoutDuration,
+             onTimeout: () {
+               AppLogger.log('⚠️ ProfileScreen: Video load timed out (continuing)');
+             },
+           );
         }
 
         if (_stateManager.userData != null) {
@@ -385,6 +380,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             await _cacheProfileData(_stateManager.userData!);
           }
 
+          if (!mounted) return;
           _isLoading.value = false;
           _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
 
@@ -401,6 +397,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         retryCount++;
 
         if (retryCount > maxRetries) {
+          if (!mounted) return;
           _error.value = _getUserFriendlyError(e);
           _isLoading.value = false;
           AppLogger.log('❌ ProfileScreen: Max retries reached, showing error');
@@ -590,6 +587,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           // **CRITICAL: Force refresh videos - this bypasses cache and fetches fresh data**
           await _loadVideos(forceRefresh: true);
 
+          if (!mounted) return;
           AppLogger.log(
               '✅ ProfileScreen: Refreshed ${_stateManager.userVideos.length} videos from server (fresh data, not cache)');
         }
@@ -609,6 +607,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           '✅ ProfileScreen: Manual refresh completed - ALL data fetched fresh from server (NO CACHE USED)');
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error during refresh: $e');
+      if (!mounted) return;
       _error.value = '${AppText.get('error_refresh')}: ${e.toString()}';
       // _isLoading.value = false;
     }
@@ -631,8 +630,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     _activeProfileTabIndex.dispose();
     // _upiController.dispose(); // This line was not in the original code, so I'm not adding it.
     _isCheckingUpiId.dispose();
-    _isLoading.dispose();
-    _error.dispose();
     ProfileScreenLogger.logProfileScreenDispose();
     
     // **NEW: Stop all background downloads immediately on exit**
@@ -705,6 +702,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       if (mounted) setState(() => _isSigningIn = true);
 
       final userData = await authController.signIn();
+      if (!mounted) return;
+      
       if (userData != null) {
         // **OPTIMIZED: Parallel state refresh and pre-fetch**
         if (mounted) {
@@ -766,7 +765,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           'Monetize from your content. Enjoy ad-free videos $referralLink';
       // Optimistically increment invite counter immediately on click
       final prefs = await SharedPreferences.getInstance();
-      _invitedCount.value = (prefs.getInt('referral_invite_count') ?? 0) + 1;
+      if (mounted) {
+        _invitedCount.value = (prefs.getInt('referral_invite_count') ?? 0) + 1;
+      }
       await prefs.setInt('referral_invite_count', _invitedCount.value);
 
       await sp.Share.share(
@@ -788,7 +789,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Future<void> _loadReferralStats() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _invitedCount.value = prefs.getInt('referral_invite_count') ?? 0;
+      if (mounted) {
+        _invitedCount.value = prefs.getInt('referral_invite_count') ?? 0;
+      }
       // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
     } catch (_) {}
   }
@@ -1141,116 +1144,110 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     // we use that. Otherwise we use the global watched state.
     final activeManager = _isLocalManager ? _stateManager : globalProfileState;
 
-    if (activeManager.isLoading) {
-      return const ProfileSkeleton(); // Changed from ProfileLoadingView to ProfileSkeleton to match existing code
-    }
+    return ListenableBuilder(
+      listenable: activeManager,
+      builder: (context, _) {
+        // Determine if viewing own profile
+        final loggedInUserId = globalAuthState.userData?['id']?.toString() ??
+            globalAuthState.userData?['googleId']?.toString();
+        final displayedUserId = widget.userId ??
+            activeManager.userData?['googleId']?.toString() ??
+            activeManager.userData?['id']?.toString();
+        final bool isViewingOwnProfile = widget.userId == null ||
+            (loggedInUserId != null &&
+                displayedUserId != null &&
+                loggedInUserId == displayedUserId);
 
-    // If session expired / token missing, show Sign-In CTA instead of empty state.
-    // Use the global auth controller as source of truth for session availability.
-    if (!globalAuthState.isSignedIn && widget.userId == null) {
-      return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn); // Changed from ProfileLoginNoticeView to ProfileSignInView to match existing code
-    }
-
-
-    // Determine if viewing own profile (use authController from Consumer builder)
-    final loggedInUserId = globalAuthState.userData?['id']?.toString() ??
-        globalAuthState.userData?['googleId']?.toString();
-    final displayedUserId = widget.userId ??
-        activeManager.userData?['googleId']?.toString() ??
-        activeManager.userData?['id']?.toString();
-    final bool isViewingOwnProfile = widget.userId == null ||
-        (loggedInUserId != null &&
-            displayedUserId != null &&
-            loggedInUserId == displayedUserId);
-
-    return PopScope(
-      canPop: !activeManager.isSelecting,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && activeManager.isSelecting) {
-          activeManager.exitSelectionMode();
-        }
-      },
-      child: p.MultiProvider(
-        providers: [
-          p.ChangeNotifierProvider<ProfileStateManager>.value(value: activeManager),
-        ],
-        child: Stack(
-        children: [
-          Scaffold(
-            key: _scaffoldKey,
-            backgroundColor: AppColors.backgroundPrimary,
-            appBar: _buildAppBar(isViewingOwnProfile, activeManager),
-            drawer: isViewingOwnProfile
-                ? ProfileMenuWidget(
-                    stateManager: activeManager,
-                    userId: widget.userId,
-                    onEditProfile: _handleEditProfile,
-                    onSaveProfile: _handleSaveProfile,
-                    onCancelEdit: _handleCancelEdit,
-                    onReportUser: () => _openReportDialog(
-                      targetType: 'user',
-                      targetId: widget.userId!,
+        return PopScope(
+          canPop: !activeManager.isSelecting,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && activeManager.isSelecting) {
+              activeManager.exitSelectionMode();
+            }
+          },
+          child: p.MultiProvider(
+            providers: [
+              p.ChangeNotifierProvider<ProfileStateManager>.value(value: activeManager),
+            ],
+            child: Stack(
+            children: [
+              Scaffold(
+                key: _scaffoldKey,
+                backgroundColor: AppColors.backgroundPrimary,
+                appBar: _buildAppBar(isViewingOwnProfile, activeManager),
+                drawer: isViewingOwnProfile
+                    ? ProfileMenuWidget(
+                        stateManager: activeManager,
+                        userId: widget.userId,
+                        onEditProfile: _handleEditProfile,
+                        onSaveProfile: _handleSaveProfile,
+                        onCancelEdit: _handleCancelEdit,
+                        onReportUser: () => _openReportDialog(
+                          targetType: 'user',
+                          targetId: widget.userId!,
+                        ),
+                        onShowFeedback: _showFeedbackDialog,
+                        onShowWhatsApp: _openWhatsAppGroupChat,
+                        onShowFAQ: _showFAQDialog,
+                        onEnterSelectionMode: () =>
+                            activeManager.enterSelectionMode(),
+                        onLogout: _handleLogout,
+                        onGoogleSignIn: _handleGoogleSignIn,
+                        onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
+                      )
+                    : null,
+                body: _buildBody(activeManager, globalAuthState),
+              ),
+              // **NEW: Signing In Overlay**
+              if (_isSigningIn)
+                Container(
+                  color: Colors.black.withOpacity(0.5),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.green),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            AppText.get('profile_signing_in_label', fallback: 'Signing in...'),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    onShowFeedback: _showFeedbackDialog,
-                    onShowWhatsApp: _openWhatsAppGroupChat,
-                    onShowFAQ: _showFAQDialog,
-                    onEnterSelectionMode: () =>
-                        activeManager.enterSelectionMode(),
-                    onLogout: _handleLogout,
-                    onGoogleSignIn: _handleGoogleSignIn,
-                    onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
-                  )
-                : null,
-            body: _buildBody(activeManager, globalAuthState),
-          ),
-          // **NEW: Signing In Overlay**
-          if (_isSigningIn)
-            Container(
-              color: Colors.black.withOpacity(0.5),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 32, vertical: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.green),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        AppText.get('profile_signing_in_label', fallback: 'Signing in...'),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1266,168 +1263,140 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
     }
 
-    // If loading, show skeleton
-    if (_isLoading.value) {
-      return const ProfileSkeleton();
-    }
+    // **REACTIVE UI: Wrap in ValueListenableBuilders for granular state updates**
+    return ValueListenableBuilder<bool>(
+      valueListenable: _isLoading,
+      builder: (context, isLoading, _) {
+        if (isLoading || manager.isLoading) {
+          return const ProfileSkeleton();
+        }
 
-    // Show error state
-    if (_error.value != null) {
-      final bool isAuthError = _error.value == 'No authentication data found' ||
-          _error.value!.contains('authentication') ||
-          _error.value!.contains('Unauthorized');
+        return ValueListenableBuilder<String?>(
+          valueListenable: _error,
+          builder: (context, error, _) {
+            // Show error state
+            if (error != null) {
+              final bool isAuthError = error == 'No authentication data found' ||
+                  error.contains('authentication') ||
+                  error.contains('Unauthorized');
 
-      // If viewing own profile and auth error, show sign-in
-      if (widget.userId == null && isAuthError) {
-        return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
-      }
-      
-      // **FIX: Allow viewing other profiles even if not signed in**
-      // If not signed in and viewing own profile -> Sign In
-      if (widget.userId == null && !authController.isSignedIn) {
-         return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
-      }
+              // If viewing own profile and auth error, show sign-in
+              if (widget.userId == null && isAuthError) {
+                return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+              }
+              
+              // **FIX: Allow viewing other profiles even if not signed in**
+              if (widget.userId == null && !authController.isSignedIn) {
+                 return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+              }
 
-      // Otherwise show error with retry (for both signed-in users and public profiles)
-      return RepaintBoundary(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
-                  size: 64,
-                  color: Colors.red[300],
-                ),
-               const SizedBox(height: 16),
-                Text(
-                  AppText.get('error_load_profile'),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: AppColors.error,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _error.value!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-
-                // **ENHANCED: Retry button with loading state**
-                ValueListenableBuilder<bool>(
-                  valueListenable: _isLoading,
-                  builder: (context, isLoading, child) {
-                    return AppButton(
-                      onPressed: isLoading
-                          ? null
-                          : () => _loadData(forceRefresh: true),
-                      isLoading: isLoading,
-                      icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
-                      label: AppText.get('btn_retry', fallback: 'Retry'),
-                      variant: AppButtonVariant.primary,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Check if we have user data - if viewing own profile and no data, show sign-in view
-    if (manager.userData == null) {
-      if (widget.userId == null && !authController.isSignedIn) {
-        return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
-      }
-      // If viewing someone else's profile, we might not have data yet - show loading or error
-      if (widget.userId != null) {
-        return RepaintBoundary(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
-                    size: 64,
-                    color: Colors.red[300],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    AppText.get('error_load_profile'),
-                    style: TextStyle(
-                      color: Colors.red[700],
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (_error.value != null && _error.value!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _error.value!,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
+              // Otherwise show error with retry
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
+                        size: 64,
+                        color: Colors.red[300],
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                 const SizedBox(height: 24),
-                  // **ENHANCED: Retry button with loading state**
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _isLoading,
-                    builder: (context, isLoading, child) {
-                      return AppButton(
-                        onPressed: isLoading
-                            ? null
-                            : () => _loadData(forceRefresh: true),
-                        isLoading: isLoading,
+                      const SizedBox(height: 16),
+                      Text(
+                        AppText.get('error_load_profile'),
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        error,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      AppButton(
+                        onPressed: () => _loadData(forceRefresh: true),
                         icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
                         label: AppText.get('btn_retry', fallback: 'Retry'),
                         variant: AppButtonVariant.primary,
-                      );
-                    },
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              );
+            }
+
+            // Check if we have user data
+            if (manager.userData == null) {
+              if (widget.userId == null && !authController.isSignedIn) {
+                return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+              }
+              // If viewing someone else's profile, we might not have data yet
+              if (widget.userId != null) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
+                          size: 64,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          AppText.get('error_load_profile'),
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        AppButton(
+                          onPressed: () => _loadData(forceRefresh: true),
+                          icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
+                          label: AppText.get('btn_retry', fallback: 'Retry'),
+                          variant: AppButtonVariant.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+            }
+
+            // SUCCESS STATE: Show profile data
+            return NestedScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return _buildProfileHeaderSlivers(context, manager, authController);
+              },
+              body: RefreshIndicator(
+                onRefresh: _refreshData,
+                notificationPredicate: (notification) => notification.depth >= 0,
+                child: TabBarView(
+                  physics: const BouncingScrollPhysics(),
+                  dragStartBehavior: DragStartBehavior.down,
+                  controller: _tabController,
+                  children: [
+                    YugGridTab(manager: manager),
+                    VayuGridTab(manager: manager),
+                    const AboutUserTab(),
+                  ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
-      }
-      return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
-    }
-
-
-    // If we reach here, we have user data and can show the profile
-
-    return NestedScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return _buildProfileHeaderSlivers(context, manager, authController);
       },
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        // **FIX: Ensure notifications from nested scrollables also trigger refresh**
-        notificationPredicate: (notification) => notification.depth >= 0,
-        child: TabBarView(
-          physics: const BouncingScrollPhysics(),
-          dragStartBehavior: DragStartBehavior.down,
-          controller: _tabController,
-          children: [
-            YugGridTab(manager: manager),
-            VayuGridTab(manager: manager),
-            const AboutUserTab(),
-          ],
-        ),
-      ),
     );
   }
 

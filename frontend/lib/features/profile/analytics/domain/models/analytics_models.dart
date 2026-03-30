@@ -28,7 +28,7 @@ class CreatorAnalytics {
 class CoreAnalytics {
   final int totalViews;
   final int totalShares;
-  final int totalWatchTime; // in minutes
+  final double totalWatchTime; // in minutes
   final int avgWatchDuration; // in seconds
   final double skipRate;
   final int viewsGrowth;
@@ -46,13 +46,13 @@ class CoreAnalytics {
 
   factory CoreAnalytics.fromJson(Map<String, dynamic> json) {
     return CoreAnalytics(
-      totalViews: json['totalViews'] ?? 0,
-      totalShares: json['totalShares'] ?? 0,
-      totalWatchTime: json['totalWatchTime'] ?? 0,
-      avgWatchDuration: json['avgWatchDuration'] ?? 0,
-      skipRate: (json['skipRate'] ?? 0.0).toDouble(),
-      viewsGrowth: json['viewsGrowth'] ?? 0,
-      watchTimeGrowth: json['watchTimeGrowth'] ?? 0,
+      totalViews: (json['totalViews'] as num?)?.toInt() ?? 0,
+      totalShares: (json['totalShares'] as num?)?.toInt() ?? 0,
+      totalWatchTime: (json['totalWatchTime'] as num?)?.toDouble() ?? 0.0,
+      avgWatchDuration: (json['avgWatchDuration'] as num?)?.toInt() ?? 0,
+      skipRate: (json['skipRate'] as num?)?.toDouble() ?? 0.0,
+      viewsGrowth: (json['viewsGrowth'] as num?)?.toInt() ?? 0,
+      watchTimeGrowth: (json['watchTimeGrowth'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -62,7 +62,7 @@ class VideoPerformance {
   final String title;
   final int views;
   final int shares;
-  final int watchTime;
+  final double watchTime;
 
   VideoPerformance({
     required this.id,
@@ -76,9 +76,9 @@ class VideoPerformance {
     return VideoPerformance(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
-      views: json['views'] ?? 0,
-      shares: json['shares'] ?? 0,
-      watchTime: json['watchTime'] ?? 0,
+      views: (json['views'] as num?)?.toInt() ?? 0,
+      shares: (json['shares'] as num?)?.toInt() ?? 0,
+      watchTime: (json['watchTime'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -86,7 +86,7 @@ class VideoPerformance {
 class DailyStat {
   final String date;
   final int views;
-  final int watchTime;
+  final double watchTime;
 
   DailyStat({
     required this.date,
@@ -97,8 +97,8 @@ class DailyStat {
   factory DailyStat.fromJson(Map<String, dynamic> json) {
     return DailyStat(
       date: json['date'] ?? '',
-      views: json['views'] ?? 0,
-      watchTime: json['watchTime'] ?? 0,
+      views: (json['views'] as num?)?.toInt() ?? 0,
+      watchTime: (json['watchTime'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -136,7 +136,7 @@ class LocationStat {
   factory LocationStat.fromJson(Map<String, dynamic> json) {
     return LocationStat(
       name: json['name'] ?? '',
-      value: json['value'] ?? 0,
+      value: (json['value'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -149,8 +149,8 @@ class ActiveTimeStat {
 
   factory ActiveTimeStat.fromJson(Map<String, dynamic> json) {
     return ActiveTimeStat(
-      hour: json['hour'] ?? 0,
-      count: json['count'] ?? 0,
+      hour: (json['hour'] as num?)?.toInt() ?? 0,
+      count: (json['count'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -163,8 +163,8 @@ class NewVsReturning {
 
   factory NewVsReturning.fromJson(Map<String, dynamic> json) {
     return NewVsReturning(
-      newValue: json['new'] ?? 0,
-      returning: json['returning'] ?? 0,
+      newValue: (json['new'] as num?)?.toInt() ?? 0,
+      returning: (json['returning'] as num?)?.toInt() ?? 0,
     );
   }
 }

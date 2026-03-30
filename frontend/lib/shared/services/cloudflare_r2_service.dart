@@ -31,8 +31,8 @@ class CloudflareR2Service {
         return false;
       }
 
-      final bytes = await file.openRead(0, 1).first;
-      if (bytes.isEmpty) {
+      final byteList = await file.openRead(0, 1).take(1).toList();
+      if (byteList.isEmpty || byteList.first.isEmpty) {
         AppLogger.log(
             '❌ CloudflareR2Service: Cannot read file: ${file.path}');
         return false;

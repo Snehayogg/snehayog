@@ -182,35 +182,43 @@ class ProfileStateManager extends ChangeNotifier {
 
       await _ensureSmartCacheInitialized();
 
-      final loggedInUser =
-          await _authService.getUserData(forceRefresh: forceRefresh);
-      AppLogger.log(
-          '?? ProfileStateManager: Logged in user: ${loggedInUser?['googleId'] ?? loggedInUser?['id']}');
-
       // **PARALLEL OPTIMIZATION: Start loading videos IMMEDIATELY**
       // Now that we have the loggedInUser, we can determine the correct ID and start video loading.
       // Don't wait for profile data to load. This eliminates the waterfall.
-      if (userId != null) {
-        // If we have an explicit userId (viewing other creator), start loading their videos now
+      Map<String, dynamic>? loggedInUser;
+      if (userId == null) {
+        // Only wait for auth data if we are loading our own profile (userId is null)
+        loggedInUser = await _authService.getUserData(forceRefresh: forceRefresh);
         AppLogger.log(
-            '🚀 ProfileStateManager: Starting PARALLEL video load for $userId');
-        loadUserVideos(userId, forceRefresh: forceRefresh, silent: silent)
+            '👤 ProfileStateManager: Logged in user: ${loggedInUser?["googleId"] ?? loggedInUser?["id"]}');
+        
+        if (loggedInUser != null) {
+          final myId = loggedInUser['googleId'] ?? loggedInUser['id'];
+          if (myId != null) {
+            AppLogger.log(
+                '🚀 ProfileStateManager: Starting PARALLEL video load for own profile ($myId)');
+            unawaited(loadUserVideos(myId.toString(), forceRefresh: forceRefresh, silent: silent)
+                .catchError((e) {
+              AppLogger.log('⚠️ ProfileStateManager: Parallel video load error: $e');
+            }));
+          }
+        }
+      } else {
+        // Viewing other creator - start video load immediately without waiting for auth
+        AppLogger.log(
+            '🚀 ProfileStateManager: Starting PARALLEL video load for other creator $userId');
+        unawaited(loadUserVideos(userId, forceRefresh: forceRefresh, silent: silent)
             .catchError((e) {
           AppLogger.log(
               '⚠️ ProfileStateManager: Parallel video load error: $e');
-        });
-      } else if (loggedInUser != null) {
-        // If viewing own profile, derive ID from logged in user
-        final myId = loggedInUser['googleId'] ?? loggedInUser['id'];
-        if (myId != null) {
-          AppLogger.log(
-              '🚀 ProfileStateManager: Starting PARALLEL video load for own profile ($myId)');
-          loadUserVideos(myId.toString(),
-                  forceRefresh: forceRefresh, silent: silent)
-              .catchError((e) {
-            AppLogger.log('ProfileStateManager: Parallel video load error: $e');
-          });
-        }
+        }));
+        
+        // Non-blocking auth fetch for other creators (only used for relative state like "isFollowing")
+        _authService.getUserData(forceRefresh: forceRefresh).then((data) {
+          if (data != null) {
+            AppLogger.log('👤 ProfileStateManager: Background auth fetch completed for $userId context');
+          }
+        }).catchError((_) => null);
       }
 
       // **FIXED: Allow loading creator profiles without authentication**
@@ -221,12 +229,20 @@ class ProfileStateManager extends ChangeNotifier {
                   userId == loggedInUser['googleId']));
 
       if (isMyProfile && loggedInUser == null) {
-        AppLogger.log(
-            '❌ ProfileStateManager: No authentication data available for own profile');
-        _isLoading = false;
-        _error = 'No authentication data found';
-        notifyListenersSafe();
-        return;
+        // **RETRY: If own profile and auth is null, wait a brief moment and retry once**
+        AppLogger.log('⚠️ ProfileStateManager: Auth null for own profile, retrying once...');
+        await Future.delayed(const Duration(milliseconds: 500));
+        loggedInUser = await _authService.getUserData(forceRefresh: forceRefresh);
+        
+        if (loggedInUser == null) {
+          AppLogger.log(
+              '❌ ProfileStateManager: No authentication data available for own profile after retry');
+          _isLoading = false;
+          _isProfileLoading = false;
+          _error = 'Sign in required to view your profile';
+          notifyListenersSafe();
+          return;
+        }
       }
 
       // **FIXED: For creator profiles, use userId directly if no logged in user**
@@ -318,6 +334,7 @@ class ProfileStateManager extends ChangeNotifier {
       _isProfileLoading = false;
       _isLoading = false;
       notifyListenersSafe();
+      rethrow; // **RETHROW: Allow caller (ProfileScreen) to handle retry logic**
     }
   }
 
@@ -659,6 +676,7 @@ class ProfileStateManager extends ChangeNotifier {
         if (_userVideos.isEmpty) {
           _error = 'Network error. Please check your connection.';
         }
+        rethrow; // **RETHROW: Stop propagation**
       } else {
         // Fallback to direct loading only for non-network errors
         final loggedInUser = await _authService.getUserData();
@@ -672,6 +690,7 @@ class ProfileStateManager extends ChangeNotifier {
           silent: silent,
           page: page,
         );
+        rethrow; // **RETHROW: Even if direct load succeeds, we want the caller to know about the initial failure**
       }
     } finally {
       // Load earnings and update counts BEFORE turning off video loading
@@ -682,7 +701,7 @@ class ProfileStateManager extends ChangeNotifier {
         int? count;
 
         // 1. Try uploader.totalVideos from the video list (from aggregation)
-        if (_userVideos.first.uploader.totalVideos != null &&
+        if (_userVideos.isNotEmpty && _userVideos.first.uploader.totalVideos != null &&
             _userVideos.first.uploader.totalVideos! > 0) {
           count = _userVideos.first.uploader.totalVideos;
         }
@@ -2028,10 +2047,15 @@ class ProfileStateManager extends ChangeNotifier {
       }
 
       _isNoticeLoading = false;
-      notifyListenersSafe();
+      if (!_isDisposed) {
+        notifyListenersSafe();
+      }
     } catch (e) {
       AppLogger.log('⚠️ ProfileStateManager: Error fetching notices: $e');
       _isNoticeLoading = false;
+      if (!_isDisposed) {
+        notifyListenersSafe();
+      }
     }
   }
 

@@ -67,7 +67,14 @@ class DeepLinkService {
       if (refCode == null || refCode.isEmpty) {
         final pathStr = uri.path;
         if (pathStr.contains('ref=')) {
-          refCode = pathStr.split('ref=').last.split('&').first;
+          final parts = pathStr.split('ref=');
+          if (parts.length > 1) {
+            final afterRef = parts.last;
+            final subParts = afterRef.split('&');
+            if (subParts.isNotEmpty) {
+              refCode = subParts.first;
+            }
+          }
         }
       }
 

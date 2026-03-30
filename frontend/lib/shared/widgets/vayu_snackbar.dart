@@ -21,8 +21,12 @@ class VayuSnackBar {
     SnackBarAction? action,
     IconData? icon,
   }) {
-    final messenger = ScaffoldMessenger.of(context);
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    try {
+      // **FIX: Robust safety check for async context usage**
+      if (context.mounted != true) return;
+
+      final messenger = ScaffoldMessenger.of(context);
+      final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     // Clear existing snackbars
     messenger.hideCurrentSnackBar();
@@ -86,6 +90,10 @@ class VayuSnackBar {
           : const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       ),
     );
+    } catch (e) {
+      // Gracefully handle context deactivated during snackbar configuration
+      debugPrint('⚠️ VayuSnackBar: Error showing snackbar: $e');
+    }
   }
 
   // Helper methods for common types

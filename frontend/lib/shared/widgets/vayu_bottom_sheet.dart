@@ -126,7 +126,7 @@ class VayuBottomSheet extends StatelessWidget {
                 child: Container(
                   width: 32,
                   height: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  margin: EdgeInsets.symmetric(vertical: isLandscape ? 6 : 10),
                   decoration: BoxDecoration(
                     color: AppColors.borderPrimary,
                     borderRadius: BorderRadius.circular(100),
@@ -136,23 +136,24 @@ class VayuBottomSheet extends StatelessWidget {
             
             // Header
             if (title != null)
-              Padding(
-                padding: EdgeInsets.fromLTRB(20, showHandle ? 0 : 20, 12, 12),
-                child: Row(
-                  children: [
-                    if (icon != null) ...[
-                      Icon(icon, color: iconColor ?? AppColors.primary, size: 22),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      child: Text(
-                        title!,
-                        style: AppTypography.titleMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(20, showHandle ? 0 : (isLandscape ? 8 : 20), 12, isLandscape ? 6 : 12),
+                      child: Row(
+                        children: [
+                          if (icon != null) ...[
+                            Icon(icon, color: iconColor ?? AppColors.primary, size: isLandscape ? 18 : 22),
+                            const SizedBox(width: 12),
+                          ],
+                          Expanded(
+                            child: Text(
+                              title!,
+                              style: AppTypography.titleMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                                fontSize: isLandscape ? 14.0 : null,
+                              ),
+                            ),
+                          ),
                     if (actions != null) ...actions!,
                     IconButton(
                       icon: const Icon(Icons.close, color: AppColors.textTertiary, size: 18),
@@ -189,6 +190,9 @@ class VayuBottomSheet extends StatelessWidget {
       );
     }
 
-    return content;
+    return Material(
+      color: Colors.transparent,
+      child: content,
+    );
   }
 }
