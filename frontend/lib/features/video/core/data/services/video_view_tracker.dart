@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/services/platform_id_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/services/platform_id_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
 
 /// Handles 2-second view threshold for videos, repeat views (max 10 per user), self-view prevention, and API integration
 class VideoViewTracker {

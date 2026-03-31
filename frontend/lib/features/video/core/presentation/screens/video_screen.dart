@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/navigation_providers.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/video/feed/presentation/screens/video_feed_advanced.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/feed/presentation/screens/video_feed_advanced.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class VideoScreen extends ConsumerStatefulWidget {
   final int? initialIndex;

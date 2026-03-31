@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/ads/data/carousel_ad_model.dart';
-import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/ads/data/carousel_ad_model.dart';
+import 'package:vayug/features/ads/presentation/widgets/carousel_ad_widget.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 /// Optimized widget components extracted from VideoFeedAdvanced
 /// These widgets use const constructors and RepaintBoundary for better performance

@@ -1,6 +1,6 @@
 ﻿
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 features/video/present
 ation/managers/main_co
 ntroller.dart' - lib\f
@@ -10,7 +10,7 @@ edia_uploader_widget.d
 art:9:8 - 
 unused_import
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 shared/providers/user_
 provider.dart' - lib\f
 eatures\profile\presen
@@ -18,7 +18,7 @@ tation\widgets\profile
 _header_widget.dart:10
 :8 - unused_import
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 shared/providers/user_
 provider.dart' - lib\f
 eatures\profile\presen
@@ -91,7 +91,7 @@ yu_long_form_player_sc
 reen.dart:1263:11 - 
 unused_local_variable
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 core/providers/video_p
 roviders.dart' - lib\f
 eatures\video\presenta
@@ -191,7 +191,7 @@ n\screens\video_feed_a
 dvanced.dart:1841:53 
 - undefined_getter
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 features/auth/data/ser
 vices/authservices.dar
 t' - lib\shared\widget

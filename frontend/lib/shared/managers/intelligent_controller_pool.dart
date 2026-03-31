@@ -1,8 +1,8 @@
 import 'package:video_player/video_player.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/enhanced_controller_disposal.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/enhanced_controller_disposal.dart';
 import 'dart:async';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Intelligent Controller Pool
 /// Manages video controllers with smart pooling and concurrent preparation

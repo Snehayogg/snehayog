@@ -3,8 +3,8 @@ import 'dart:collection';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
-import 'package:vayu/shared/utils/feature_flags.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/feature_flags.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class InstagramCacheEntry<T> {
   final T data;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 /// Loading indicator widget for better performance
 class LoadingIndicatorWidget extends StatelessWidget {

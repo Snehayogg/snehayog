@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/ads/presentation/widgets/banner_ad_widget.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/ads/presentation/widgets/banner_ad_widget.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Banner Ad Section Widget
 /// Supports only custom banner ads (AdMob removed)

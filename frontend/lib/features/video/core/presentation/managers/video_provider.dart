@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/shared/enums/video_state.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/shared/enums/video_state.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 
 // import 'package:hive_flutter/hive_flutter.dart';
 

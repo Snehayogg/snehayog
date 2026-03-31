@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Service to manage multiple accounts with separate cache
 class AccountSwitcherService {

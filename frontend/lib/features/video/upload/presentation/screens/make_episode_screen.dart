@@ -5,11 +5,11 @@ import 'dart:math';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/navigation_providers.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 // Helper class to store episode details
 class EpisodeItem {

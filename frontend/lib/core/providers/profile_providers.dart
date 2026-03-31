@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
 
 final profileStateManagerProvider = ChangeNotifierProvider<ProfileStateManager>((ref) {
   return ProfileStateManager();

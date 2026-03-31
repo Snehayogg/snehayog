@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/constants/profile_constants.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/constants/profile_constants.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class VideoSelectionWidget extends StatelessWidget {
   final bool isVisible;

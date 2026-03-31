@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/auth/data/services/logout_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/data/services/logout_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/profile_providers.dart';
-import 'package:vayu/core/providers/video_providers.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
+import 'package:vayug/core/providers/video_providers.dart';
 import 'dart:async';
-import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MainController extends ChangeNotifier {

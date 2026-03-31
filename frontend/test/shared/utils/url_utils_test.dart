@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vayu/shared/utils/url_utils.dart';
+import 'package:vayug/shared/utils/url_utils.dart';
 
 void main() {
   group('UrlUtils.enrichUrl Tests', () {

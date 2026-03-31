@@ -1,18 +1,18 @@
 import 'dart:convert';
-import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/core/design/radius.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/elevation.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/core/design/elevation.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 /// Compact grid (3 columns) showing top creators from the user's following list.
 /// This reuses the same API as `TopEarnersBottomSheet` but is optimised for the

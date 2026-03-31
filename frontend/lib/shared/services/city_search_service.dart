@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 
 /// **CitySearchService - Handles dynamic city search using OpenStreetMap Nominatim API**
 class CitySearchService {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class EditVideoDetails extends StatefulWidget {
   final VideoModel video;

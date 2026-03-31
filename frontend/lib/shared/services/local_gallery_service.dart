@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// **LocalGalleryService: Manages retrieval of videos from the device's gallery**
 /// This service handles permissions and maps native media assets to our [VideoModel].

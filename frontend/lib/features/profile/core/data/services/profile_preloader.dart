@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:vayu/features/profile/core/data/services/user_service.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/managers/smart_cache_manager.dart';
+import 'package:vayug/features/profile/core/data/services/user_service.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/managers/smart_cache_manager.dart';
 
 /// **PROFILE PRELOADER**
 /// Preloads profile data for any user (especially other creators)

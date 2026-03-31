@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/auth_providers.dart';
-import 'package:vayu/core/providers/navigation_providers.dart';
-import 'package:vayu/core/providers/user_data_providers.dart';
-import 'package:vayu/core/providers/video_providers.dart';
-import 'package:vayu/core/providers/profile_providers.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/core/providers/user_data_providers.dart';
+import 'package:vayug/core/providers/video_providers.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
 
 /// **FIXED: Centralized logout service to coordinate all state managers**
 class LogoutService {

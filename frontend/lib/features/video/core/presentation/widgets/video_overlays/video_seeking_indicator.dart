@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/constants/video_constants.dart';
+import 'package:vayug/shared/constants/video_constants.dart';
 
 class VideoSeekingIndicator extends StatelessWidget {
   final bool isVisible;

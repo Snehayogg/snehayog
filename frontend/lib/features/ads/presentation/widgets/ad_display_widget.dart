@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/ads/data/ad_model.dart';
-import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/ads/data/ad_model.dart';
+import 'package:vayug/features/ads/data/services/ad_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/shared/utils/url_utils.dart';
+import 'package:vayug/shared/utils/url_utils.dart';
 
 class AdDisplayWidget extends StatefulWidget {
   final AdModel ad;

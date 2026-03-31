@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/core/design/colors.dart';
+import 'package:vayug/core/design/colors.dart';
 
 class VayuVideoProgressBar extends StatefulWidget {
   final VideoPlayerController controller;

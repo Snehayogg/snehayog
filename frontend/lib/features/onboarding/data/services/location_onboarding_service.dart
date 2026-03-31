@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'dart:convert';
 import 'package:geocoding/geocoding.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 
 class LocationOnboardingService {
   static const String _locationPermissionKey = 'location_permission_granted';

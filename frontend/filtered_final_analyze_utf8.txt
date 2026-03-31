@@ -1,6 +1,6 @@
 ﻿
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 features/auth/data/ser
 vices/authservices.dar
 t' - lib\features\vide
@@ -9,7 +9,7 @@ o\presentation\screens
 _screen.dart:12:8 - 
 unused_import
 warning - Unused 
-import: 'package:vayu/
+import: 'package:vayug/
 features/ads/data/serv
 ices/ad_impression_ser
 vice.dart' - lib\featu

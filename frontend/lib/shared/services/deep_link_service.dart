@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class DeepLinkService {
   static final DeepLinkService _instance = DeepLinkService._internal();

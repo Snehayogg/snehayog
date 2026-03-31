@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/video/feed/presentation/screens/video_feed_advanced/widgets/video_aspect_surface.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/feed/presentation/screens/video_feed_advanced/widgets/video_aspect_surface.dart';
 
 class VideoPage extends StatelessWidget {
   final VideoModel video;

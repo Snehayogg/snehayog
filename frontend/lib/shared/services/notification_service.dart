@@ -1,11 +1,11 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// Top-level function for handling background messages

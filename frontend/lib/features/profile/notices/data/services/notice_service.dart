@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:http/http.dart' as http;
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/profile/notices/domain/models/notice_model.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/profile/notices/domain/models/notice_model.dart';
 
 class NoticeService {
   Future<List<NoticeModel>> fetchNotices() async {

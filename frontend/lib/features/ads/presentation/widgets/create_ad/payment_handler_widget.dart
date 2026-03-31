@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/features/ads/data/ad_model.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/features/ads/data/ad_model.dart';
 import 'package:snehayog_monetization/snehayog_monetization.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
 
 /// **PaymentHandlerWidget - Handles payment processing and dialogs**
 class PaymentHandlerWidget {

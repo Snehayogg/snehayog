@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {

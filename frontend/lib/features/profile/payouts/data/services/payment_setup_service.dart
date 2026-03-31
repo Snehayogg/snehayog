@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 
 /// Service to manage payment setup status and prevent multiple setups
 class PaymentSetupService {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/shared/constants/interests.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/shared/constants/interests.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 
 class UploadAdvancedSettingsSection extends StatelessWidget {

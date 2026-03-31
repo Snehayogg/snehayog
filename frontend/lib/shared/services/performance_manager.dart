@@ -1,5 +1,5 @@
 import 'package:firebase_performance/firebase_performance.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class PerformanceManager {
   static final PerformanceManager _instance = PerformanceManager._internal();

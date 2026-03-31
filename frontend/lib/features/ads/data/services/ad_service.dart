@@ -2,15 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/features/ads/data/ad_model.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/services/cloudflare_r2_service.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/managers/smart_cache_manager.dart';
-import 'package:vayu/features/ads/data/services/active_ads_service.dart';
-import 'package:vayu/features/ads/data/services/ad_refresh_notifier.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/features/ads/data/ad_model.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/services/cloudflare_r2_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/managers/smart_cache_manager.dart';
+import 'package:vayug/features/ads/data/services/active_ads_service.dart';
+import 'package:vayug/features/ads/data/services/ad_refresh_notifier.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 
 class AdService {
   static final AdService _instance = AdService._internal();

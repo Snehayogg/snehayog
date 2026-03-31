@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:vayu/features/ads/presentation/screens/create_ad_screen_refactored.dart';
+import 'package:vayug/features/ads/presentation/screens/create_ad_screen_refactored.dart';
 import 'package:flutter/material.dart';
 
 import 'test_app_wrapper.dart';

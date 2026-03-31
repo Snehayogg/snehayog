@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
 /// **CampaignPreviewWidget - Shows campaign metrics and preview**
 class CampaignPreviewWidget extends StatelessWidget {

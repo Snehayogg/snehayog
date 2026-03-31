@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/services/auto_scroll_settings.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/shared/services/auto_scroll_settings.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
 
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
-import 'package:vayu/features/profile/core/presentation/screens/settings_screen.dart';
+import 'package:vayug/features/profile/core/presentation/screens/settings_screen.dart';
 import 'package:hugeicons/hugeicons.dart';
 
 class ProfileMenuWidget extends StatelessWidget {

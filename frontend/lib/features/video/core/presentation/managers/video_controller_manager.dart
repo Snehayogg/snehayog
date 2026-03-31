@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/managers/video_position_cache_manager.dart';
-import 'package:vayu/shared/managers/hot_ui_state_manager.dart';
-import 'package:vayu/shared/factories/video_controller_factory.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/video_disposal_utils.dart';
+import 'package:vayug/shared/managers/video_position_cache_manager.dart';
+import 'package:vayug/shared/managers/hot_ui_state_manager.dart';
+import 'package:vayug/shared/factories/video_controller_factory.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/video_disposal_utils.dart';
 import 'dart:collection';
 import 'dart:async';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class VideoControllerManager {
   static final VideoControllerManager _instance =

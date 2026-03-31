@@ -1,54 +1,54 @@
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter/gestures.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:flutter/material.dart';
-import 'package:vayu/features/profile/core/presentation/screens/edit_profile_screen.dart';
+import 'package:vayug/features/profile/core/presentation/screens/edit_profile_screen.dart';
 import 'package:provider/provider.dart' as p;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/managers/smart_cache_manager.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/shared/managers/smart_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
-import 'package:vayu/core/providers/profile_providers.dart';
-import 'package:vayu/features/video/core/data/services/video_cache_proxy_service.dart';
-import 'package:vayu/shared/services/profile_screen_logger.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
+import 'package:vayug/features/video/core/data/services/video_cache_proxy_service.dart';
+import 'package:vayug/shared/services/profile_screen_logger.dart';
 
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
 import 'dart:async';
 import 'package:share_plus/share_plus.dart' as sp;
 
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_static_views.dart';
-import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
-import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_static_views.dart';
+import 'package:vayug/features/ads/data/services/ad_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
+import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/features/auth/data/services/logout_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayug/features/auth/data/services/logout_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_menu_widget.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_tabs_widget.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_header_widget.dart';
-import 'package:vayu/features/profile/notices/presentation/widgets/notice_banner_widget.dart';
-import 'package:vayu/features/profile/content/presentation/screens/profile_tabs/yug_grid_tab.dart';
-import 'package:vayu/features/profile/content/presentation/screens/profile_tabs/vayu_grid_tab.dart';
-import 'package:vayu/features/profile/content/presentation/screens/profile_tabs/about_user_tab.dart';
-import 'package:vayu/shared/widgets/vayu_snackbar.dart';
+import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_menu_widget.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_tabs_widget.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_header_widget.dart';
+import 'package:vayug/features/profile/notices/presentation/widgets/notice_banner_widget.dart';
+import 'package:vayug/features/profile/content/presentation/screens/profile_tabs/yug_grid_tab.dart';
+import 'package:vayug/features/profile/content/presentation/screens/profile_tabs/vayu_grid_tab.dart';
+import 'package:vayug/features/profile/content/presentation/screens/profile_tabs/about_user_tab.dart';
+import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 
-import 'package:vayu/core/providers/auth_providers.dart';
-import 'package:vayu/core/providers/navigation_providers.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? userId;

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 
 class SignedUrlService {
   static final SignedUrlService _instance = SignedUrlService._internal();

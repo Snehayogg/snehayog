@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-import 'package:vayu/features/ads/data/services/active_ads_service.dart';
-import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/utils/url_utils.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
-import 'package:vayu/shared/widgets/in_app_browser.dart';
+import 'package:vayug/features/ads/data/services/active_ads_service.dart';
+import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/url_utils.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
+import 'package:vayug/shared/widgets/in_app_browser.dart';
 
 /// Widget to display banner ads at the top of video feed
 class BannerAdWidget extends StatefulWidget {

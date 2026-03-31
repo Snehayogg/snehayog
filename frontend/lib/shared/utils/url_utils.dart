@@ -1,4 +1,4 @@
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class UrlUtils {
   /// Enriches a URL with UTM parameters for attribution tracking.

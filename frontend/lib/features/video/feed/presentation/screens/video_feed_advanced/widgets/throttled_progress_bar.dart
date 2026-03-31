@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
-import 'package:vayu/core/design/colors.dart';
+import 'package:vayug/core/design/colors.dart';
 
 class ThrottledProgressBar extends StatefulWidget {
   final VideoPlayerController controller;

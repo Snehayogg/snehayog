@@ -18,8 +18,8 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.snehayog.app"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 36 // Required by latest AndroidX dependencies (core, activity, etc.)
+    ndkVersion = "28.2.13676358" // r28 for latest 16KB support and alignment features
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -29,7 +29,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
     }
 
@@ -46,6 +46,22 @@ android {
         targetSdk = 35
         versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName
+
+        // Force 16KB page alignment linker flags for any native components
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-Wl,-z,common-page-size=16384"
+                cppFlags += "-Wl,-z,max-page-size=16384"
+            }
+            ndkBuild {
+                arguments += "APP_LDFLAGS+=-Wl,-z,common-page-size=16384 -Wl,-z,max-page-size=16384"
+            }
+        }
+
+        ndk {
+            // Explicitly define compatible ABIs
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+        }
     }
 
     signingConfigs {

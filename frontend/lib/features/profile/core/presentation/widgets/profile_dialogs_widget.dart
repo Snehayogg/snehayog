@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/services/auto_scroll_settings.dart';
-import 'package:vayu/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
-import 'package:vayu/shared/widgets/feedback/feedback_dialog_widget.dart';
-import 'package:vayu/shared/widgets/report_dialog_widget.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/top_earners_bottom_sheet.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/shared/services/auto_scroll_settings.dart';
+import 'package:vayug/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
+import 'package:vayug/shared/widgets/feedback/feedback_dialog_widget.dart';
+import 'package:vayug/shared/widgets/report_dialog_widget.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/top_earners_bottom_sheet.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
-import 'package:vayu/features/profile/core/presentation/screens/linked_accounts_screen.dart';
-import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/shared/utils/url_utils.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/widgets/vayu_snackbar.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
+import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/shared/utils/url_utils.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(

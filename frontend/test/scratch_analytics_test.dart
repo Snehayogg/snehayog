@@ -1,4 +1,4 @@
-import 'package:vayu/features/profile/analytics/domain/models/analytics_models.dart';
+import 'package:vayug/features/profile/analytics/domain/models/analytics_models.dart';
 import 'dart:convert';
 
 void main() {

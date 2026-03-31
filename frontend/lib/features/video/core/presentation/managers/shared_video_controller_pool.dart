@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// **Shared Video Controller Pool: Singleton manager for persisting video controllers**
 /// This class manages a shared pool of video controllers that can be reused

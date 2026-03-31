@@ -1,20 +1,20 @@
 import 'dart:async';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:vayu/features/ads/data/carousel_ad_model.dart';
-import 'package:vayu/features/ads/data/services/carousel_ad_service.dart';
-import 'package:vayu/features/ads/data/services/ad_impression_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-// import 'package:vayu/features/video/core/data/services/video_service.dart'; // Unused import removed
+import 'package:vayug/features/ads/data/carousel_ad_model.dart';
+import 'package:vayug/features/ads/data/services/carousel_ad_service.dart';
+import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+// import 'package:vayug/features/video/core/data/services/video_service.dart'; // Unused import removed
 // import 'package:url_launcher/url_launcher.dart'; // Unused import removed
-import 'package:vayu/shared/services/share_service.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
-import 'package:vayu/shared/widgets/in_app_browser.dart';
+import 'package:vayug/shared/services/share_service.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
+import 'package:vayug/shared/widgets/in_app_browser.dart';
 
 /// **Professional Carousel Ad Widget**
 class CarouselAdWidget extends StatefulWidget {

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/auth_providers.dart';
-import 'package:vayu/features/agent/data/autonomous_agent_service.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/features/auth/data/usermodel.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/shared/widgets/vayu_logo.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
+import 'package:vayug/features/agent/data/autonomous_agent_service.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/features/auth/data/usermodel.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/shared/widgets/vayu_logo.dart';
 
 // Simple model for chat messages
 class AgentMessage {

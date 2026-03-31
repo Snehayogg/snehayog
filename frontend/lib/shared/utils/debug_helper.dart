@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class DebugHelper {
   static void showDebugInfo(BuildContext context) {

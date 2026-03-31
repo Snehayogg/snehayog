@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vayu/features/ads/data/ad_model.dart';
+import 'package:vayug/features/ads/data/ad_model.dart';
 import 'package:flutter/material.dart';
 
 void main() {

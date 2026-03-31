@@ -1,4 +1,4 @@
-import 'package:vayu/shared/services/app_remote_config_service.dart';
+import 'package:vayug/shared/services/app_remote_config_service.dart';
 
 /// AppText - Text Management System
 ///

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/enums/video_state.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/enums/video_state.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class VideoLoadingStates extends StatelessWidget {
   final VideoLoadState loadState;

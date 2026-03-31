@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Unified media upload service backed by Cloudflare R2 (via your backend APIs).
 /// Replaces the old "CloudinaryService" naming which was confusing.

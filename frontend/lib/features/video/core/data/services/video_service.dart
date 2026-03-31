@@ -7,15 +7,15 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'package:video_compress/video_compress.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/ads/data/ad_model.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/shared/services/platform_id_service.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/services/connectivity_service.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/ads/data/ad_model.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/ads/data/services/ad_service.dart';
+import 'package:vayug/shared/services/platform_id_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/connectivity_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 
 /// Eliminates code duplication and provides consistent API
 class VideoService {

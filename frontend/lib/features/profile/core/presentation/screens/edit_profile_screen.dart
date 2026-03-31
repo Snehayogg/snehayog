@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
 
 class EditProfileScreen extends StatelessWidget {
   final ProfileStateManager? stateManager;

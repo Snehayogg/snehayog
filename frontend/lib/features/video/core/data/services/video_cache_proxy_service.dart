@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// **VideoCacheProxyService: Industry-standard persistent caching**
 /// Runs a local HTTP proxy to intercept video requests and serve fragments from disk.

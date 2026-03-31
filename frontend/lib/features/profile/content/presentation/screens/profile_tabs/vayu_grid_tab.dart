@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/profile_videos_widget.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_videos_widget.dart';
 
 class VayuGridTab extends StatelessWidget {
   final ProfileStateManager manager;

@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 
 /// Service to optimize video startup and auto-play after app clear
 class VideoStartupOptimizer {

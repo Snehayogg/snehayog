@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/spacing.dart';
+import 'package:vayug/core/design/spacing.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/features/profile/core/presentation/screens/saved_videos_screen.dart';
-import 'package:vayu/features/profile/core/presentation/screens/linked_accounts_screen.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/utils/app_text.dart';
+import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayug/features/profile/core/presentation/screens/saved_videos_screen.dart';
+import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/utils/app_text.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

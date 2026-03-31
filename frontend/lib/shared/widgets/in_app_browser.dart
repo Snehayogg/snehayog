@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
 class InAppBrowser extends StatefulWidget {
   final String url;

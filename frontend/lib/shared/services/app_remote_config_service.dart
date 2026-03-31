@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/models/app_remote_config.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/models/app_remote_config.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 

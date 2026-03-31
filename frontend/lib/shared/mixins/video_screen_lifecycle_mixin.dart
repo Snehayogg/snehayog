@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 
 /// Mixin to handle video screen lifecycle events
 mixin VideoScreenLifecycleMixin<T extends StatefulWidget> on State<T> {

@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class VideoEngagementRanker {
   VideoEngagementRanker._();

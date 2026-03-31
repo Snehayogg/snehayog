@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/widgets/vayu_logo.dart';
-import 'package:vayu/features/agent/presentation/screens/agent_screen.dart';
-import 'package:vayu/shared/config/feature_flags.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/widgets/vayu_logo.dart';
+import 'package:vayug/features/agent/presentation/screens/agent_screen.dart';
+import 'package:vayug/shared/config/feature_flags.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
 
-import 'package:vayu/shared/services/local_gallery_service.dart';
-import 'package:vayu/shared/utils/format_utils.dart';
-import 'package:vayu/shared/widgets/interactive_scale_button.dart';
+import 'package:vayug/shared/services/local_gallery_service.dart';
+import 'package:vayug/shared/utils/format_utils.dart';
+import 'package:vayug/shared/widgets/interactive_scale_button.dart';
 
 class VayuScreen extends ConsumerStatefulWidget {
   const VayuScreen({Key? key}) : super(key: key);

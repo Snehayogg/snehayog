@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/profile/core/presentation/widgets/top_earners_grid.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/top_earners_grid.dart';
 
 class AboutUserTab extends StatelessWidget {
   const AboutUserTab({super.key});

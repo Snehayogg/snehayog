@@ -1,18 +1,18 @@
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:provider/provider.dart' as provider;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:vayu/features/auth/data/usermodel.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/services/search_service.dart';
-import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
-import 'package:vayu/features/video/core/presentation/screens/video_screen.dart';
-import 'package:vayu/core/design/theme.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/utils/format_utils.dart';
-import 'package:vayu/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
+import 'package:vayug/features/auth/data/usermodel.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/services/search_service.dart';
+import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
+import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
+import 'package:vayug/core/design/theme.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/utils/format_utils.dart';
+import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 
 /// Global search UI for videos and creators.
 class VideoCreatorSearchDelegate extends SearchDelegate<void> {

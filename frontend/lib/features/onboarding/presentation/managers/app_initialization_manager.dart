@@ -1,18 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/managers/smart_cache_manager.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/managers/smart_cache_manager.dart';
 
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/services/app_remote_config_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/services/app_remote_config_service.dart';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:vayu/shared/services/notification_service.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/shared/services/hls_warmup_service.dart';
+import 'package:vayug/shared/services/notification_service.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/shared/services/hls_warmup_service.dart';
 import 'dart:async'; // For unawaited
 import 'package:shared_preferences/shared_preferences.dart';
 /// **AppInitializationManager**

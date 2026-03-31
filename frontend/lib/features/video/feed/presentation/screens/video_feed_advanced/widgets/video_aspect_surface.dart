@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class VideoAspectSurface extends StatelessWidget {
   final VideoPlayerController controller;

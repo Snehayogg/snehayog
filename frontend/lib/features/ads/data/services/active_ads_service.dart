@@ -1,12 +1,12 @@
 import 'dart:convert';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/managers/smart_cache_manager.dart';
-import 'package:vayu/features/ads/data/services/ad_targeting_service.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/managers/smart_cache_manager.dart';
+import 'package:vayug/features/ads/data/services/ad_targeting_service.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 
 /// Service to fetch all types of active ads (banner, carousel, video feed)
 class ActiveAdsService {

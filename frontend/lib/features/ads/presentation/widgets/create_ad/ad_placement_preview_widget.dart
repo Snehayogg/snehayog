@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
+import 'package:vayug/core/design/colors.dart';
 import 'dart:io';
 
 /// Visual preview showing where ads appear in the app

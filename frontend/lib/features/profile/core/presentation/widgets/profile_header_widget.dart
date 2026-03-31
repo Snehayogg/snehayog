@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/providers/user_data_providers.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/shared/utils/url_utils.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/core/providers/user_data_providers.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/shared/utils/url_utils.dart';
 
 class ProfileHeaderWidget extends ConsumerWidget {
   final bool isViewingOwnProfile;

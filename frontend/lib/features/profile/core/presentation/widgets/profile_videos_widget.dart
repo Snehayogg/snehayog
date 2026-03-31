@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart' as provider;
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/features/video/core/presentation/screens/video_screen.dart';
-import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
+import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
-import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
-import 'package:vayu/shared/utils/format_utils.dart';
-import 'package:vayu/features/video/edit/presentation/screens/edit_video_details.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
+import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayug/shared/utils/format_utils.dart';
+import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;

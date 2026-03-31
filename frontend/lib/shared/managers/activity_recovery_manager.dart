@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/models/app_activity.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/models/app_activity.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class ActivityRecoveryManager {
   static final ActivityRecoveryManager _instance = ActivityRecoveryManager._internal();

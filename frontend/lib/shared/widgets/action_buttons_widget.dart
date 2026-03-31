@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
 
 class ActionButtonsWidget extends StatelessWidget {
   final VideoModel video;

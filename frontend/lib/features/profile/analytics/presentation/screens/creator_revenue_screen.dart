@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
 
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/auth/data/services/logout_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/ads/data/services/ad_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/auth/data/services/logout_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
 
 // NEW IMPORTS
-import 'package:vayu/features/profile/analytics/data/services/analytics_service.dart';
-import 'package:vayu/features/profile/analytics/domain/models/analytics_models.dart';
-import 'package:vayu/features/profile/analytics/presentation/widgets/analytics_widgets.dart';
+import 'package:vayug/features/profile/analytics/data/services/analytics_service.dart';
+import 'package:vayug/features/profile/analytics/domain/models/analytics_models.dart';
+import 'package:vayug/features/profile/analytics/presentation/widgets/analytics_widgets.dart';
 
 class CreatorRevenueScreen extends ConsumerStatefulWidget {
   const CreatorRevenueScreen({super.key});

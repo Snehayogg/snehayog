@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'dart:convert';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
 
 // Import AppConfig to access clearCache
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 /// Bottom sheet to display top earners from user's following list
 class TopEarnersBottomSheet extends StatefulWidget {

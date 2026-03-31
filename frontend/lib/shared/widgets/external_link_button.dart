@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/shared/utils/url_utils.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/widgets/vayu_snackbar.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/shared/utils/url_utils.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 
 class ExternalLinkButton extends StatelessWidget {
   final String url;

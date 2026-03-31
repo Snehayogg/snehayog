@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Status of a dubbing job
 enum DubbingStatus {

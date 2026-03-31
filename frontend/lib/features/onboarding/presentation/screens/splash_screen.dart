@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/main.dart'; // Access to AuthWrapper
+import 'package:vayug/main.dart'; // Access to AuthWrapper
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/features/onboarding/presentation/managers/app_initialization_manager.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/design/radius.dart';
-import 'package:vayu/core/design/spacing.dart';
-import 'package:vayu/shared/widgets/vayu_logo.dart';
+import 'package:vayug/features/onboarding/presentation/managers/app_initialization_manager.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/core/design/radius.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/shared/widgets/vayu_logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

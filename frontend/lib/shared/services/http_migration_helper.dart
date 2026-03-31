@@ -15,7 +15,7 @@
 /// AFTER (uses connection pooling):
 /// ```dart
 /// import 'package:http/http.dart' as http;
-/// import 'package:vayu/shared/services/http_client_service.dart';
+/// import 'package:vayug/shared/services/http_client_service.dart';
 /// 
 /// final response = await httpClientService.get(Uri.parse('$baseUrl/api/endpoint'));
 /// final response = await httpClientService.post(Uri.parse('$baseUrl/api/endpoint'), 

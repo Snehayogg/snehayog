@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/features/profile/core/data/services/user_service.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/profile/core/data/services/user_service.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// **BACKGROUND PROFILE PRELOADER**
 /// Preloads profile data in the background while user is on video feed (Yog tab)

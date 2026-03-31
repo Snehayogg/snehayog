@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 
 class AdImpressionService {
   static final AdImpressionService _instance = AdImpressionService._internal();

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:vayu/features/auth/data/usermodel.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/data/usermodel.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 import 'package:flutter/foundation.dart'; // for kIsWeb
 

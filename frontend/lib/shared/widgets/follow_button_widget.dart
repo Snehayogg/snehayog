@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/radius.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/core/providers/profile_providers.dart';
-import 'package:vayu/core/providers/user_data_providers.dart';
-import 'package:vayu/core/providers/auth_providers.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/radius.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
+import 'package:vayug/core/providers/user_data_providers.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
 
 class FollowButtonWidget extends ConsumerStatefulWidget {
   final String uploaderId;

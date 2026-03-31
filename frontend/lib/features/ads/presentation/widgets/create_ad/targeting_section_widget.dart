@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/shared/services/city_search_service.dart';
-import 'package:vayu/shared/constants/interests.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/shared/services/city_search_service.dart';
+import 'package:vayug/shared/constants/interests.dart';
 
 /// **TargetingSectionWidget - Handles advanced targeting options**
 class TargetingSectionWidget extends StatefulWidget {

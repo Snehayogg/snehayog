@@ -4,19 +4,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_provider.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/services/cloudflare_r2_service.dart';
-import 'package:vayu/features/profile/core/data/services/user_service.dart';
-import 'package:vayu/features/profile/payouts/data/services/payment_setup_service.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/features/ads/data/services/ad_service.dart';
-import 'package:vayu/features/profile/notices/domain/models/notice_model.dart';
-import 'package:vayu/features/profile/notices/data/services/notice_service.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_provider.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/services/cloudflare_r2_service.dart';
+import 'package:vayug/features/profile/core/data/services/user_service.dart';
+import 'package:vayug/features/profile/payouts/data/services/payment_setup_service.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/features/ads/data/services/ad_service.dart';
+import 'package:vayug/features/profile/notices/domain/models/notice_model.dart';
+import 'package:vayug/features/profile/notices/data/services/notice_service.dart';
 
-import 'package:vayu/shared/managers/smart_cache_manager.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/managers/smart_cache_manager.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 // Import for unawaited
 

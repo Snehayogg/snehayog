@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/core/providers/auth_providers.dart';
-import 'package:vayu/core/providers/navigation_providers.dart';
-import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
-import 'package:vayu/shared/widgets/vayu_logo.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/features/onboarding/data/services/location_onboarding_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/vayu_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});

@@ -2,15 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/exceptions/app_exceptions.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/exceptions/app_exceptions.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
 
-import 'package:vayu/features/auth/data/services/authservices.dart';
-import 'package:vayu/shared/services/platform_id_service.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/services/platform_id_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Remote data source for video operations
 /// Handles all HTTP requests to the video API

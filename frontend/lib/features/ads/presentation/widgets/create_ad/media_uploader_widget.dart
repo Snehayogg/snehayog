@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/core/providers/navigation_providers.dart';
-import 'package:vayu/shared/utils/banner_image_processor.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/shared/utils/banner_image_processor.dart';
 
 /// **MediaUploaderWidget - Handles media file uploads for ads**
 class MediaUploaderWidget extends ConsumerStatefulWidget {

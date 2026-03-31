@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
-import 'package:vayu/features/profile/core/presentation/screens/profile_screen.dart';
-import 'package:vayu/shared/widgets/follow_button_widget.dart';
-import 'package:vayu/features/profile/core/data/services/profile_preloader.dart';
-import 'package:vayu/features/video/core/presentation/managers/shared_video_controller_pool.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
+import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
+import 'package:vayug/shared/widgets/follow_button_widget.dart';
+import 'package:vayug/features/profile/core/data/services/profile_preloader.dart';
+import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class VideoInfoWidget extends StatefulWidget {
   final VideoModel video;

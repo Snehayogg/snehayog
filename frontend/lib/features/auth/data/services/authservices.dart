@@ -2,18 +2,18 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
-import 'package:vayu/shared/services/http_client_service.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/config/app_config.dart';
+import 'package:vayug/shared/config/app_config.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
-import 'package:vayu/shared/config/google_sign_in_config.dart';
-import 'package:vayu/features/onboarding/data/services/location_onboarding_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/shared/services/platform_id_service.dart';
-import 'package:vayu/shared/services/notification_service.dart';
+import 'package:vayug/shared/config/google_sign_in_config.dart';
+import 'package:vayug/features/onboarding/data/services/location_onboarding_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/platform_id_service.dart';
+import 'package:vayug/shared/services/notification_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(

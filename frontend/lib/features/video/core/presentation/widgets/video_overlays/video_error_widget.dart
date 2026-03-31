@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/constants/video_constants.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/constants/video_constants.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class VideoErrorWidget extends StatelessWidget {
   final String errorMessage;

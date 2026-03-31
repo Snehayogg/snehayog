@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/radius.dart';
-import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/shared/utils/responsive_helper.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/radius.dart';
+import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/shared/utils/responsive_helper.dart';
 
 class ProfileSkeleton extends StatelessWidget {
   const ProfileSkeleton({super.key});

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/colors.dart';
+import 'package:vayug/core/design/colors.dart';
 
 /// **AdDetailsFormWidget - Handles ad title, description, and link input**
 /// For banner ads, only shows link field (title/description not needed)

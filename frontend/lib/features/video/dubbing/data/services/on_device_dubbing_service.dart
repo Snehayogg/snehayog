@@ -7,15 +7,15 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:whisper_flutter_new/whisper_flutter_new.dart';
-import 'package:vayu/features/video/dubbing/data/models/dubbing_models.dart';
-import 'package:vayu/features/video/dubbing/data/services/translation_processor.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+// import 'package:whisper_flutter_new/whisper_flutter_new.dart';
+import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
+import 'package:vayug/features/video/dubbing/data/services/translation_processor.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Orchestrates the on-device dubbing process.
 class OnDeviceDubbingService {
   final FlutterTts _tts = FlutterTts();
-  final Whisper _whisper = const Whisper(model: WhisperModel.base);
+  // final Whisper _whisper = const Whisper(model: WhisperModel.base);
   late OnDeviceTranslator _translator;
   late TranslationProcessor _processor;
   
@@ -180,6 +180,7 @@ class OnDeviceDubbingService {
       yield const DubbingResult(status: DubbingStatus.checkingContent, progress: 25);
       
       String fullTranscript = '';
+      /*
       try {
         AppLogger.log('🎬 OnDeviceDubbing: Starting Whisper transcription...');
         final res = await _whisper.transcribe(
@@ -193,6 +194,8 @@ class OnDeviceDubbingService {
         AppLogger.log('❌ OnDeviceDubbing: Whisper transcription failed: $e');
         throw Exception('Transcription failed: $e');
       }
+      */
+      AppLogger.log('📝 OnDeviceDubbing: Whisper transcription is temporarily disabled for Play Store compliance.');
       
       // Validation Logic: Detect if the content is likely music, dance, or no-vocal
       // 1. Empty Transcript

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/ads/data/carousel_ad_model.dart';
-import 'package:vayu/features/ads/data/services/carousel_ad_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/features/ads/data/carousel_ad_model.dart';
+import 'package:vayug/features/ads/data/services/carousel_ad_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// **CarouselAdManager - Handles all carousel ad logic**
 /// Separated from VideoScreen for better maintainability

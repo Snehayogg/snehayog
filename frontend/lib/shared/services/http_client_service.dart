@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_performance/firebase_performance.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayu/shared/config/app_config.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Centralized HTTP client service with Dio
 /// Provides automatic connection pooling, interceptors, retry logic, and better performance

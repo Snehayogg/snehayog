@@ -1,6 +1,6 @@
 // Removed unused import
-import 'package:vayu/shared/utils/enhanced_controller_disposal.dart';
-import 'package:vayu/features/video/core/presentation/managers/video_controller_manager.dart';
+import 'package:vayug/shared/utils/enhanced_controller_disposal.dart';
+import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'dart:async';
 
 /// Memory Management Service

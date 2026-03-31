@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/core/design/radius.dart';
+import 'package:vayug/core/design/radius.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vayu/features/profile/core/presentation/managers/profile_state_manager.dart';
-import 'package:vayu/shared/services/profile_screen_logger.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/shared/utils/app_text.dart';
-import 'package:vayu/core/providers/profile_providers.dart';
-import 'package:vayu/core/providers/user_data_providers.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/shared/services/profile_screen_logger.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
+import 'package:vayug/core/providers/user_data_providers.dart';
 
 class ProfileStatsWidget extends ConsumerWidget {
   final ProfileStateManager stateManager;

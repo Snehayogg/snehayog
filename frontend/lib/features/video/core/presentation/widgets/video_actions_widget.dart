@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:vayu/features/video/core/data/models/video_model.dart';
-import 'package:vayu/features/auth/presentation/controllers/google_sign_in_controller.dart';
-import 'package:vayu/shared/constants/app_constants.dart';
-import 'package:vayu/features/video/core/data/services/video_service.dart';
-import 'package:vayu/shared/services/share_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
-import 'package:vayu/core/design/colors.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayug/shared/constants/app_constants.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/shared/services/share_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/core/design/colors.dart';
 
 class VideoActionsWidget extends StatelessWidget {
   final VideoModel video;

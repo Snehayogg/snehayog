@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:vayu/features/video/upload/presentation/screens/upload_screen.dart';
+import 'package:vayug/features/video/upload/presentation/screens/upload_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'test_app_wrapper.dart';
 

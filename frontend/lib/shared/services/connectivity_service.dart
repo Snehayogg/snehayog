@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:vayu/shared/services/http_client_service.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class ConnectivityService {
   static final Connectivity _connectivity = Connectivity();

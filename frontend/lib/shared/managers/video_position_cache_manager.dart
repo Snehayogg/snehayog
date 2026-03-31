@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// **VideoPositionCacheManager - Caches video positions for seamless resume**
 /// Stores video positions in SharedPreferences for persistence across app sessions

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 

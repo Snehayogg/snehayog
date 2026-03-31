@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/utils/app_logger.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Service for managing video player configuration and quality optimization
 class VideoPlayerConfigService {

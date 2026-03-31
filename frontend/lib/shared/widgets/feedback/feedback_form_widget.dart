@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/shared/services/feedback_service.dart';
+import 'package:vayug/shared/services/feedback_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class FeedbackFormWidget extends StatefulWidget {
   const FeedbackFormWidget({Key? key}) : super(key: key);

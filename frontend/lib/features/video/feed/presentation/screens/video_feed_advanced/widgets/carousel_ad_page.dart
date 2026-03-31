@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:vayu/features/ads/data/carousel_ad_model.dart';
-import 'package:vayu/features/ads/presentation/widgets/carousel_ad_widget.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
+import 'package:vayug/features/ads/data/carousel_ad_model.dart';
+import 'package:vayug/features/ads/presentation/widgets/carousel_ad_widget.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
 class CarouselAdPage extends StatelessWidget {
   final List<CarouselAdModel> carouselAds;

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:vayu/features/onboarding/data/services/welcome_onboarding_service.dart';
-import 'package:vayu/shared/services/app_remote_config_service.dart';
-import 'package:vayu/core/design/colors.dart';
-import 'package:vayu/core/design/typography.dart';
-import 'package:vayu/shared/widgets/app_button.dart';
+import 'package:vayug/features/onboarding/data/services/welcome_onboarding_service.dart';
+import 'package:vayug/shared/services/app_remote_config_service.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class WelcomeOnboardingScreen extends StatefulWidget {
   final VoidCallback onGetStarted;
