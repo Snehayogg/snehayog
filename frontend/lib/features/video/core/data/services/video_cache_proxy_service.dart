@@ -20,6 +20,10 @@ class VideoCacheProxyService {
   final Map<String, http.Client> _activeDownloads = {};
   // **NEW: Track active streaming clients (requests from player)**
   final Map<String, http.Client> _activeProxyStreams = {};
+  
+  // **NEW: Performance Flags**
+  bool _isLowEndDevice = false;
+  int _maxCacheSizeBytes = 200 * 1024 * 1024; // Default 200MB
 
   /// Start the local proxy server
   Future<void> initialize() async {
@@ -51,7 +55,8 @@ class VideoCacheProxyService {
     if (_port == null || originalUrl.isEmpty) return originalUrl;
 
     // Don't proxy if already proxied or local
-    if (originalUrl.contains('localhost:$_port') ||
+    if (originalUrl.contains('127.0.0.1:$_port') ||
+        originalUrl.contains('localhost:$_port') ||
         originalUrl.startsWith('file://')) {
       return originalUrl;
     }
@@ -60,10 +65,10 @@ class VideoCacheProxyService {
     
     // **HLS SUPPORT: Use special route for manifests**
     if (originalUrl.contains('.m3u8')) {
-      return 'http://localhost:$_port/proxy-hls?url=$encodedUrl';
+      return 'http://127.0.0.1:$_port/proxy-hls?url=$encodedUrl';
     }
 
-    return 'http://localhost:$_port/proxy?url=$encodedUrl';
+    return 'http://127.0.0.1:$_port/proxy?url=$encodedUrl';
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -198,7 +203,16 @@ class VideoCacheProxyService {
 
     try {
       // **LRU UPDATE for Manifests too**
+      bool isStale = false;
       if (await file.exists()) {
+        final lastModified = await file.lastModified();
+        // **FRESHNESS CHECK: Expire manifests after 5 minutes (Signed URL Safety)**
+        if (DateTime.now().difference(lastModified).inMinutes > 5) {
+          isStale = true;
+        }
+      }
+
+      if (await file.exists() && !isStale) {
         try { file.setLastModified(DateTime.now()); } catch (_) {}
         originalManifest = await file.readAsString();
       } else {
@@ -214,10 +228,10 @@ class VideoCacheProxyService {
         }
         originalManifest = response.body;
 
-        // Fire and forget to avoid blocking response
-        file.writeAsString(originalManifest).catchError((e) {
+        // Save to cache
+        await file.writeAsString(originalManifest).catchError((e) {
           AppLogger.log('⚠️ Proxy: Failed to cache manifest: $e');
-          return file; // Return file to satisfy Future<File> expectation
+          return file;
         });
       }
 
@@ -230,21 +244,48 @@ class VideoCacheProxyService {
       const LineSplitter splitter = LineSplitter();
       final List<String> lines = splitter.convert(originalManifest);
 
+      bool skipNextLine = false;
       for (String line in lines) {
-        if (line.trim().isEmpty) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) {
           modifiedManifest.writeln(line);
           continue;
         }
 
+        if (skipNextLine) {
+          skipNextLine = false;
+          continue;
+        }
+
         if (line.startsWith('#')) {
-           // It's a tag (like #EXT-X-STREAM-INF), preserve it
-           // Check if it's a URI tag if needed, but usually URIs are on their own lines 
-           // or part of a tag like #EXT-X-KEY:METHOD=AES-128,URI="key.php"
-           // For simplicity, we handle standard lines. Complex tag URI rewriting requires regex.
-           modifiedManifest.writeln(line);
+          // **LOW-END OPTIMIZATION: Filter HD Variants**
+          // Reject variants that are too heavy for lownd hardware
+          if (_isLowEndDevice && line.contains('#EXT-X-STREAM-INF')) {
+             bool isHD = line.contains('RESOLUTION=1920x1080') || 
+                         line.contains('RESOLUTION=1280x720') ||
+                         line.contains('BANDWIDTH=4000000'); // > 4Mbps
+             
+             // If RESOLUTION is missing but BANDWIDTH is high, also filter
+             if (!isHD && line.contains('BANDWIDTH=')) {
+                try {
+                  final reg = RegExp(r'BANDWIDTH=(\d+)');
+                  final match = reg.firstMatch(line);
+                  if (match != null) {
+                    final bandwidth = int.parse(match.group(1)!);
+                    if (bandwidth > 2500000) isHD = true; // > 2.5 Mbps is too much for 2GB RAM
+                  }
+                } catch (_) {}
+             }
+
+             if (isHD) {
+               skipNextLine = true; // Skip this tag AND the following URL
+               continue;
+             }
+          }
+          modifiedManifest.writeln(line);
         } else {
-          // This line is a URL (segment or sub-playlist)
-          String segmentUrl = line.trim();
+          // This line is a URL
+          String segmentUrl = trimmed;
           
           // Resolve relative URLs
           if (!segmentUrl.startsWith('http')) {
@@ -256,10 +297,10 @@ class VideoCacheProxyService {
 
           if (segmentUrl.contains('.m3u8')) {
              // Recursively proxy sub-playlists
-             localUrl = 'http://localhost:$_port/proxy-hls?url=$encodedSegmentUrl';
+             localUrl = 'http://127.0.0.1:$_port/proxy-hls?url=$encodedSegmentUrl';
           } else {
              // Proxy segments (TS, KEY, etc.) using simple binary proxy
-             localUrl = 'http://localhost:$_port/proxy?url=$encodedSegmentUrl';
+             localUrl = 'http://127.0.0.1:$_port/proxy?url=$encodedSegmentUrl';
           }
           
           modifiedManifest.writeln(localUrl);
@@ -415,14 +456,20 @@ class VideoCacheProxyService {
   /// Downloads only the first 300-500KB of a video for instant playback start.
   /// The rest of the video is loaded by ExoPlayer in the background.
 
-  void configureCacheSize({required bool isLowEndDevice}) {
+  void configureService({required bool isLowEndDevice}) {
+    _isLowEndDevice = isLowEndDevice;
     if (isLowEndDevice) {
-      _maxCacheSizeBytes = 120 * 1024 * 1024; // 70MB for Low End (~2 videos)
-      AppLogger.log('📉 Proxy: Configured for Low-End Device (Limit: 70MB - 2 Videos)');
+      _maxCacheSizeBytes = 100 * 1024 * 1024; // 100MB for Low End
+      AppLogger.log('📉 Proxy: Configured for Low-End Device (Quality capped to 480p/720p)');
     } else {
-      _maxCacheSizeBytes = 300 * 1024 * 1024; // 200MB for High End (~6 videos)
-      AppLogger.log('📈 Proxy: Configured for High-End Device (Limit: 200MB - 6 Videos)');
+      _maxCacheSizeBytes = 300 * 1024 * 1024; // 300MB for High End
+      AppLogger.log('📈 Proxy: Configured for High-End Device (Full performance)');
     }
+  }
+
+  /// **NEW: Check if a URL is a proxy URL**
+  bool isProxyUrl(String url) {
+    return url.contains('127.0.0.1') || url.contains('localhost');
   }
   /// **NEW: Smart Initial Chunk Prefetch for Instant Playback (0.5s Buffer)**
   /// Downloads only the first 300-500KB of a video for instant playback start.
@@ -594,8 +641,6 @@ class VideoCacheProxyService {
     }
   }
 
-  // **NEW: Dynamic Cache Configuration**
-  int _maxCacheSizeBytes = 200 * 1024 * 1024; // Default 200MB
 
 
   /// **NEW: Get a random available video URL from cache for instant splash screen**

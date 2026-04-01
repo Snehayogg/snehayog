@@ -53,9 +53,9 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
    * VERSION SPECIFIC LOGIC
    */
   
-  // Baseline behavior for all versions up to and including 2026-03-12
+  // Baseline behavior for all versions up to and including 2026-04-02
   // Date-based versions compare correctly as strings (YYYY-MM-DD).
-  if (!apiVersion || apiVersion <= '2026-03-12') {
+  if (!apiVersion || apiVersion <= '2026-04-02') {
     base.uploader = {
       id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
       _id: videoObj.uploader?._id?.toString() || '',

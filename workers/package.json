@@ -1,0 +1,12 @@
+{
+  "name": "vayug-edge",
+  "version": "1.0.0",
+  "description": "Vayug Edge Workers for Upload and Caching",
+  "main": "index.js",
+  "dependencies": {
+    "aws4fetch": "^1.0.17"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

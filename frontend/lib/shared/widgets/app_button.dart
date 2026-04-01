@@ -29,6 +29,7 @@ class AppButton extends StatelessWidget {
   final bool isDisabled;
   final Widget? icon;
   final bool isFullWidth;
+  final double? fontSize; // Added to override default scaling in landscape
 
   const AppButton({
     super.key,
@@ -40,6 +41,7 @@ class AppButton extends StatelessWidget {
     this.isDisabled = false,
     this.icon,
     this.isFullWidth = false,
+    this.fontSize,
   });
 
   @override
@@ -152,7 +154,7 @@ class AppButton extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
-              fontSize: fontSize,
+              fontSize: this.fontSize ?? fontSize, 
               fontWeight: AppTypography.weightSemiBold,
               color: foregroundColor,
             ),

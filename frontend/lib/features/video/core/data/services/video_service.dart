@@ -4,8 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:io';
-import 'package:http/http.dart' as http;
-
 import 'package:video_compress/video_compress.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/ads/data/ad_model.dart';
@@ -217,11 +215,8 @@ class VideoService {
 
       // AppLogger.log('📡 VideoService: Fetching video by ID: $videoId');
 
-      final res = await http
-          .get(Uri.parse(url))
-          .timeout(const Duration(seconds: 15), onTimeout: () {
-        throw Exception('Request timed out. Please check your connection.');
-      });
+      final res = await httpClientService
+          .get(Uri.parse(url), timeout: const Duration(seconds: 15));
 
       if (res.statusCode == 200) {
         final videoData = json.decode(res.body);
@@ -322,36 +317,21 @@ class VideoService {
         }
       }
 
-      final headers = await _getAuthHeaders();
-      headers['Content-Type'] = 'application/json';
-
-      // **FIX: Log token info for debugging**
-      final tokenForLog =
-          headers['Authorization']?.toString().replaceAll('Bearer ', '') ??
-              'No token';
-      AppLogger.log(
-          '🔍 VideoService: Like request - Token present: ${headers.containsKey('Authorization')}');
-      AppLogger.log(
-          '🔍 VideoService: Like request - Token length: ${tokenForLog.length}');
-      AppLogger.log(
-          '🔍 VideoService: Like request - Token starts with: ${tokenForLog.length > 20 ? tokenForLog.substring(0, 20) : tokenForLog}');
-
       // **FIX: Log user data for debugging**
       AppLogger.log(
           '🔍 VideoService: User data - googleId: ${userData['googleId']}');
       AppLogger.log('🔍 VideoService: User data - id: ${userData['id']}');
       AppLogger.log('🔍 VideoService: User data - email: ${userData['email']}');
-
       AppLogger.log(
           '🔍 VideoService: Like request URL: ${NetworkHelper.apiBaseUrl}/videos/$videoId/like');
 
-      final res = await http
+      final res = await httpClientService
           .post(
             Uri.parse('${NetworkHelper.apiBaseUrl}/videos/$videoId/like'),
-            headers: headers,
+            headers: {'Content-Type': 'application/json'},
             body: json.encode({}),
-          )
-          .timeout(const Duration(seconds: 15));
+            timeout: const Duration(seconds: 15),
+          );
 
       AppLogger.log('📡 VideoService: Like response status: ${res.statusCode}');
       AppLogger.log('📡 VideoService: Like response body: ${res.body}');
@@ -360,67 +340,6 @@ class VideoService {
         final data = json.decode(res.body);
         AppLogger.log('✅ VideoService: Like toggled successfully');
         return VideoModel.fromJson(data);
-      } else if (res.statusCode == 401 || res.statusCode == 403) {
-        AppLogger.log(
-            '⚠️ VideoService: Authentication failed (${res.statusCode}), attempting one token refresh + retry');
-
-        final refreshedToken = await _authService.refreshAccessToken();
-        if (refreshedToken != null && refreshedToken.isNotEmpty) {
-          final retryHeaders = await _getAuthHeaders();
-          retryHeaders['Content-Type'] = 'application/json';
-
-          final retryRes = await http
-              .post(
-                Uri.parse('${NetworkHelper.apiBaseUrl}/videos/$videoId/like'),
-                headers: retryHeaders,
-                body: json.encode({}),
-              )
-              .timeout(const Duration(seconds: 15));
-
-          if (retryRes.statusCode == 200) {
-            final retryData = json.decode(retryRes.body);
-            AppLogger.log(
-                '✅ VideoService: Like toggled successfully after token refresh');
-            return VideoModel.fromJson(retryData);
-          }
-        }
-
-        throw Exception('Please sign in again to like videos');
-      } else if (res.statusCode == 400) {
-        // **FIX: Handle 400 Bad Request (user not authenticated or missing googleId)**
-        final errorBody = res.body;
-        AppLogger.log(
-            '❌ VideoService: Bad request (${res.statusCode}), Body: $errorBody');
-        try {
-          final error = json.decode(errorBody);
-          final errorMsg = error['error'] ?? 'User not authenticated';
-          if (errorMsg.toString().contains('not authenticated') ||
-              errorMsg.toString().contains('User not found')) {
-            throw Exception('Please sign in again to like videos');
-          }
-          throw Exception(errorMsg.toString());
-        } catch (e) {
-          if (e.toString().contains('sign in')) {
-            rethrow;
-          }
-          throw Exception('Failed to like video: ${e.toString()}');
-        }
-      } else if (res.statusCode == 404) {
-        // **FIX: Handle 404 (video not found or user not found)**
-        final errorBody = res.body;
-        AppLogger.log(
-            '❌ VideoService: Not found (${res.statusCode}), Body: $errorBody');
-        try {
-          final error = json.decode(errorBody);
-          final errorMsg = error['error'] ?? 'Video or user not found';
-          if (errorMsg.toString().contains('User not found')) {
-            throw Exception(
-                'Please sign in again. Your account may not be registered.');
-          }
-          throw Exception(errorMsg.toString());
-        } catch (e) {
-          throw Exception('Failed to like video: ${e.toString()}');
-        }
       } else {
         final errorBody = res.body;
         AppLogger.log(
@@ -432,7 +351,6 @@ class VideoService {
           throw Exception(errorMsg.toString());
         } catch (e) {
           if (e is FormatException) {
-            // Response is not JSON, show raw error
             throw Exception(
                 'Failed to like video: ${errorBody.length > 100 ? errorBody.substring(0, 100) : errorBody}');
           }
@@ -445,7 +363,7 @@ class VideoService {
         throw Exception('Request timed out. Please try again.');
       } else if (e.toString().contains('sign in') ||
           e.toString().contains('authenticated')) {
-        rethrow; // Re-throw authentication errors as-is
+        rethrow;
       }
       throw Exception('Failed to like video: ${e.toString()}');
     }
@@ -454,15 +372,12 @@ class VideoService {
   /// **Track video skip**
   Future<void> trackSkip(String videoId) async {
     try {
-      final headers = await _getAuthHeaders();
-      headers['Content-Type'] = 'application/json';
-
       final url = '${NetworkHelper.apiBaseUrl}/videos/$videoId/skip';
       
       // Use fire-and-forget or background tracking for skips to avoid blocking UI
-      unawaited(http.post(
+      unawaited(httpClientService.post(
         Uri.parse(url),
-        headers: headers,
+        headers: {'Content-Type': 'application/json'},
         body: json.encode({}),
       ).then((res) {
         if (res.statusCode != 200) {
@@ -486,14 +401,6 @@ class VideoService {
     try {
       AppLogger.log('🔄 VideoService: Toggling save for video: $videoId');
 
-      final userData = await _authService.getUserData();
-      if (userData == null || userData['token'] == null) {
-        throw Exception('Please sign in to save videos');
-      }
-
-      final headers = await _getAuthHeaders();
-      headers['Content-Type'] = 'application/json';
-
       // **FIX: Robust URL construction to avoid double slashes or missing /api**
       final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/')
           ? NetworkHelper.apiBaseUrl
@@ -503,13 +410,13 @@ class VideoService {
       final url = '$baseUrl/videos/$videoId/save';
       AppLogger.log('🚀 VideoService: Save request URL: $url');
 
-      final res = await http
+      final res = await httpClientService
           .post(
             Uri.parse(url),
-            headers: headers,
+            headers: {'Content-Type': 'application/json'},
             body: json.encode({}),
-          )
-          .timeout(const Duration(seconds: 15));
+            timeout: const Duration(seconds: 15),
+          );
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
@@ -536,12 +443,7 @@ class VideoService {
     try {
       AppLogger.log('📡 VideoService: Fetching saved videos...');
 
-      final userData = await _authService.getUserData();
-      if (userData == null || userData['token'] == null) {
-        throw Exception('Please sign in to view saved videos');
-      }
-
-      final headers = await _getAuthHeaders();
+      // Session validation happens automatically in HttpClientService
       final baseUrl = NetworkHelper.apiBaseUrl.endsWith('/')
           ? NetworkHelper.apiBaseUrl
               .substring(0, NetworkHelper.apiBaseUrl.length - 1)
@@ -549,10 +451,9 @@ class VideoService {
 
       final url = '$baseUrl/videos/saved';
 
-      final res = await http
+      final res = await httpClientService
           .get(
             Uri.parse(url),
-            headers: headers,
           )
           .timeout(const Duration(seconds: 15));
 
@@ -602,15 +503,11 @@ class VideoService {
       AppLogger.log('📡 VideoService: Fetching videos for userId: $userId');
       AppLogger.log('📡 VideoService: URL: $url');
 
-      final headers = await _getAuthHeaders();
-
-      // **DEBUG: Log token presence (without exposing full token)**
-      final hasToken = headers.containsKey('Authorization') &&
-          headers['Authorization']?.isNotEmpty == true;
+      final hasToken = await AuthService.getToken() != null;
       AppLogger.log('📡 VideoService: Auth token present: $hasToken');
 
-      final response = await http
-          .get(Uri.parse(url), headers: headers)
+      final response = await httpClientService
+          .get(Uri.parse(url))
           .timeout(const Duration(seconds: 30));
 
       AppLogger.log('📡 VideoService: Response status: ${response.statusCode}');
@@ -792,9 +689,6 @@ class VideoService {
       final mimeType =
           'video/${videoFile.path.split('.').last}'; // Simple mime guess
 
-      // **FIX: Use auth service to get headers**
-      final authHeaders = await _getAuthHeaders();
-
       // **FIX: Use shared httpClientService.dioClient to ensure interceptors and validateStatus work**
       final dio = httpClientService.dioClient;
 
@@ -806,7 +700,9 @@ class VideoService {
           'fileSize': fileSize,
         },
         options: Options(
-          headers: authHeaders,
+          headers: {
+            'Content-Type': 'application/json',
+          },
         ),
       );
 
@@ -859,9 +755,6 @@ class VideoService {
           'videoType': videoType,
           'crossPostPlatforms': crossPostPlatforms,
         },
-        options: Options(
-          headers: authHeaders,
-        ),
       );
 
       if (onProgress != null) onProgress(1.0);
@@ -876,14 +769,6 @@ class VideoService {
     try {
       AppLogger.log('🔄 VideoService: Updating metadata for video: $videoId');
 
-      final userData = await _authService.getUserData();
-      if (userData == null) {
-        throw Exception('Please sign in to update video details');
-      }
-
-      final headers = await _getAuthHeaders();
-      headers['Content-Type'] = 'application/json';
-
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final url = '$resolvedBaseUrl/api/videos/$videoId';
 
@@ -894,13 +779,13 @@ class VideoService {
       if (link != null) updateData['link'] = link;
       if (tags != null) updateData['tags'] = tags;
 
-      final res = await http
+      final res = await httpClientService
           .patch(
             Uri.parse(url),
-            headers: headers,
+            headers: {'Content-Type': 'application/json'},
             body: json.encode(updateData),
-          )
-          .timeout(const Duration(seconds: 15));
+            timeout: const Duration(seconds: 15),
+          );
 
       if (res.statusCode == 200) {
         AppLogger.log('✅ VideoService: Video updated successfully');
@@ -927,16 +812,9 @@ class VideoService {
     try {
       AppLogger.log('🗑️ VideoService: Attempting to delete video: $videoId');
 
-      final userData = await _authService.getUserData();
-      if (userData == null) {
-        throw Exception('Please sign in to delete videos');
-      }
-
-      final headers = await _getAuthHeaders();
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final res = await http
-          .delete(Uri.parse('$resolvedBaseUrl/api/videos/$videoId'),
-              headers: headers)
+      final res = await httpClientService
+          .delete(Uri.parse('$resolvedBaseUrl/api/videos/$videoId'))
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200 || res.statusCode == 204) {
@@ -964,11 +842,9 @@ class VideoService {
   /// **Increment share count** (without showing share dialog)
   Future<void> incrementShares(String videoId) async {
     try {
-      final headers = await _getAuthHeaders();
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final res = await httpClientService.post(
         Uri.parse('$resolvedBaseUrl/api/videos/$videoId/share'),
-        headers: headers,
       );
 
       if (res.statusCode != 200) {
@@ -986,11 +862,9 @@ class VideoService {
       AppLogger.log(
           '🔄 VideoService: Getting processing status for video: $videoId');
 
-      final headers = await _getAuthHeaders();
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final res = await http
-          .get(Uri.parse('$resolvedBaseUrl/api/upload/video/$videoId/status'),
-              headers: headers)
+      final res = await httpClientService
+          .get(Uri.parse('$resolvedBaseUrl/api/upload/video/$videoId/status'))
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -1017,7 +891,7 @@ class VideoService {
     try {
       // Resolve base URL with local-first fallback
       final resolvedBaseUrl = await getBaseUrlWithFallback();
-      final response = await http
+      final response = await httpClientService
           .get(Uri.parse('$resolvedBaseUrl/api/health'))
           .timeout(const Duration(seconds: 15));
       return response.statusCode == 200;
@@ -1056,44 +930,7 @@ class VideoService {
     }
   }
 
-  /// **Get authentication headers**
-  Future<Map<String, String>> _getAuthHeaders() async {
-    try {
-      final userData = await _authService.getUserData();
-      if (userData == null) {
-        throw Exception('User not authenticated');
-      }
 
-      // **CRITICAL FIX: Always get token using AuthService.getToken() (most reliable source)**
-      String? token = await AuthService.getToken();
-
-      // Fallback to userData token if AuthService doesn't have it
-      if (token == null || token.isEmpty) {
-        AppLogger.log(
-            '⚠️ VideoService: Token not found via AuthService, checking userData...');
-        token = userData['token'];
-      }
-
-      // Final check - if still no token, throw error
-      if (token == null || token.isEmpty) {
-        AppLogger.log(
-            '❌ VideoService: No token found via AuthService or userData');
-        throw Exception(
-            'Authentication token not found. Please sign in again.');
-      }
-
-      AppLogger.log(
-          '✅ VideoService: Token retrieved successfully (length: ${token.length})');
-
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
-    } catch (e) {
-      AppLogger.log('❌ VideoService: Error getting auth headers: $e');
-      rethrow;
-    }
-  }
 
   // **AD INTEGRATION METHODS - From original VideoService**
 

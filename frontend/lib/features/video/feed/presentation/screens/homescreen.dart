@@ -29,6 +29,7 @@ import 'package:vayug/features/profile/core/presentation/screens/settings_screen
 import 'package:vayug/features/profile/core/presentation/screens/saved_videos_screen.dart';
 import 'package:vayug/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -349,7 +350,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
         final userId = args?['userId'];
         if (userId != null) screen = ProfileScreen(userId: userId);
       } else if (routeName == 'edit_profile') {
-        screen = const EditProfileScreen();
+        screen = EditProfileScreen(stateManager: ref.read(profileStateManagerProvider));
       } else if (routeName == 'settings') {
         screen = const SettingsScreen();
       } else if (routeName == 'saved_videos') {

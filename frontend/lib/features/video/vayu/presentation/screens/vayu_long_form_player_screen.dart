@@ -16,7 +16,6 @@ import 'dart:async';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
-import 'dart:math' as math;
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayug/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayug/shared/widgets/follow_button_widget.dart';
@@ -38,7 +37,6 @@ import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayug/features/video/core/presentation/managers/main_controller.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:vayug/features/video/core/data/services/video_view_tracker.dart';
 import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
 
@@ -1164,7 +1162,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         )),
         if (badge != null) ...[const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Text(badge, style: const TextStyle(fontSize: 10, color: AppColors.primary)))]
       ]),
-      trailing: isSelected ? const Icon(Icons.check, color: AppColors.primary) : (!available ? Icon(Icons.psychology_outlined, color: AppColors.textTertiary, size: isLandscape ? 16 : 16.w) : null),
+      trailing: isSelected ? const Icon(Icons.check, color: AppColors.primary) : (!available ? Icon(Icons.psychology_outlined, color: AppColors.textTertiary, size: isLandscape ? 16 : 16) : null),
       onTap: () { 
         Navigator.pop(context); 
         if (available || langCode == 'default') {
@@ -1194,19 +1192,18 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     return Align(
       alignment: _isForward ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: isLandscape ? 60 : 40.w),
+        padding: EdgeInsets.symmetric(horizontal: isLandscape ? 60 : 40),
         child: Column(
           mainAxisSize: MainAxisSize.min, 
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: isLandscape ? 16 : 16.w, vertical: isLandscape ? 8 : 8.h), 
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(isLandscape ? 100 : 100.r)), 
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(isLandscape ? 100 : 100)), 
               child: Row(
                 mainAxisSize: MainAxisSize.min, 
                 children: [
-                  Icon(_isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: isLandscape ? 32 : 32.w),
-                  SizedBox(width: isLandscape ? 12 : 12.w),
-                  Text('${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 24 : 24.sp, fontWeight: FontWeight.bold)),
+                  Icon(_isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: isLandscape ? 32 : 32),
+                  SizedBox(width: isLandscape ? 12 : 12),
+                  Text('${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 24 : 24, fontWeight: FontWeight.bold)),
                 ]
               )
             ),
@@ -1221,10 +1218,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildAspectRatioOverlay() {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return IgnorePointer(child: Align(alignment: Alignment.topCenter, child: Container(
-      margin: EdgeInsets.only(top: isLandscape ? 40 : 72.h), 
-      padding: EdgeInsets.symmetric(horizontal: isLandscape ? 12 : 12.w, vertical: isLandscape ? 6 : 6.h), 
+      margin: EdgeInsets.only(top: isLandscape ? 40 : 72), 
+      padding: EdgeInsets.symmetric(horizontal: isLandscape ? 12 : 12, vertical: isLandscape ? 6 : 6), 
       decoration: BoxDecoration(color: Colors.black54, borderRadius: AppRadius.borderRadiusLG), 
-      child: Text(_aspectRatioOverlayText!, style: TextStyle(color: Colors.white, fontSize: isLandscape ? 12 : 12.sp, fontWeight: FontWeight.bold))
+      child: Text(_aspectRatioOverlayText!, style: TextStyle(color: Colors.white, fontSize: isLandscape ? 12 : 12, fontWeight: FontWeight.bold))
     )));
   }
 
@@ -1260,7 +1257,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
               child: _buildFeedItem(index)
             ),
           ),
-          if (!_hasSeenScrollHint) Positioned(bottom: isLandscape ? 80 : 140.h, left: 0, right: 0, child: IgnorePointer(child: AnimatedOpacity(opacity: _showScrollHintOverlay ? 1.0 : 0.0, duration: const Duration(milliseconds: 500), child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: isLandscape ? 24 : 24.w, vertical: isLandscape ? 12 : 12.h), decoration: BoxDecoration(color: Colors.black.withOpacity(0.65), borderRadius: BorderRadius.circular(isLandscape ? 30 : 30.r)), child: Text('Swipe up to watch more', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 16 : 16.sp, fontWeight: FontWeight.w600))))))),
+          if (!_hasSeenScrollHint) Positioned(bottom: isLandscape ? 80 : 140, left: 0, right: 0, child: IgnorePointer(child: AnimatedOpacity(opacity: _showScrollHintOverlay ? 1.0 : 0.0, duration: const Duration(milliseconds: 500), child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: isLandscape ? 24 : 24, vertical: isLandscape ? 12 : 12), decoration: BoxDecoration(color: Colors.black.withOpacity(0.65), borderRadius: BorderRadius.circular(isLandscape ? 30 : 30)), child: Text('Swipe up to watch more', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 16 : 16, fontWeight: FontWeight.w600))))))),
         ]),
       ),
     );
@@ -1290,7 +1287,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildVideoInfo(int index) {
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final v = _videos[index];
-    return Padding(padding: EdgeInsets.fromLTRB(isPortrait ? 16.w : 16, 0, isPortrait ? 16.w : 16, isPortrait ? 4.h : 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Padding(padding: EdgeInsets.fromLTRB(isPortrait ? 16 : 16, 0, isPortrait ? 16 : 16, isPortrait ? 4 : 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
           child: Column(
@@ -1298,15 +1295,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             children: [
               Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
               if (v.tags != null && v.tags!.isNotEmpty) ...[
-                SizedBox(height: isPortrait ? 8.h : 8),
+                SizedBox(height: isPortrait ? 8 : 8),
                 Wrap(
-                  spacing: isPortrait ? 6.w : 6,
-                  runSpacing: isPortrait ? 4.h : 4,
+                  spacing: isPortrait ? 6 : 6,
+                  runSpacing: isPortrait ? 4 : 4,
                   children: v.tags!.map((tag) => Text(
                     '#$tag',
                     style: TextStyle(
                       color: AppColors.primary,
-                      fontSize: isPortrait ? 12.sp : 12,
+                      fontSize: isPortrait ? 12 : 12,
                       fontWeight: FontWeight.w500,
                     ),
                   )).toList(),
@@ -1326,7 +1323,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           ),
         ),
       ]),
-      Transform.translate(offset: Offset(0, isPortrait ? -8.h : -8), child: Text('${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary, fontSize: isPortrait ? 12.sp : 12))),
+      Transform.translate(offset: Offset(0, isPortrait ? -8 : -8), child: Text('${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary, fontSize: isPortrait ? 12 : 12))),
     ]));
   }
 
@@ -1338,7 +1335,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final userId = userData?['id'] ?? userData?['googleId'] ?? 'anonymous';
     
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.w), 
+      padding: const EdgeInsets.symmetric(horizontal: 16), 
       child: BannerAdSection(
         adData: {...ad, 'creatorId': _videos[index].uploader.id}, 
         onVideoPause: () => _controllers[index]?.pause(), 
@@ -1360,10 +1357,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildChannelRow(int index) {
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final v = _videos[index];
-    return Padding(padding: EdgeInsets.symmetric(horizontal: isPortrait ? 16.w : 16), child: Row(children: [
-      InteractiveScaleButton(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => ProfileScreen(userId: v.uploader.id))), child: CircleAvatar(radius: isPortrait ? 18.r : 18, backgroundImage: v.uploader.profilePic.isNotEmpty ? CachedNetworkImageProvider(v.uploader.profilePic) : null, backgroundColor: AppColors.backgroundSecondary, child: v.uploader.profilePic.isEmpty ? const Icon(Icons.person_rounded, color: Colors.white, size: 21) : null)),
-      SizedBox(width: isPortrait ? 10.w : 10),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(v.uploader.name, style: AppTypography.bodyMedium.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold), maxLines: 1), if (v.uploader.totalVideos != null) Text('${v.uploader.totalVideos} videos', style: AppTypography.bodySmall.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textSecondary : Colors.black54, fontSize: isPortrait ? 10.sp : 10))])),
+    return Padding(padding: EdgeInsets.symmetric(horizontal: isPortrait ? 16 : 16), child: Row(children: [
+      InteractiveScaleButton(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => ProfileScreen(userId: v.uploader.id))), child: CircleAvatar(radius: isPortrait ? 18 : 18, backgroundImage: v.uploader.profilePic.isNotEmpty ? CachedNetworkImageProvider(v.uploader.profilePic) : null, backgroundColor: AppColors.backgroundSecondary, child: v.uploader.profilePic.isEmpty ? const Icon(Icons.person_rounded, color: Colors.white, size: 21) : null)),
+      SizedBox(width: isPortrait ? 10 : 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(v.uploader.name, style: AppTypography.bodyMedium.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold), maxLines: 1), if (v.uploader.totalVideos != null) Text('${v.uploader.totalVideos} videos', style: AppTypography.bodySmall.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textSecondary : Colors.black54, fontSize: isPortrait ? 10 : 10))])),
       FollowButtonWidget(uploaderId: v.uploader.id, uploaderName: v.uploader.name),
     ]));
   }
@@ -1397,7 +1394,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.black26,
                   padding: EdgeInsets.zero,
-                  fixedSize: Size(isPortrait ? 30.w : 30, isPortrait ? 30.w : 30),
+                  fixedSize: Size(isPortrait ? 30 : 30, isPortrait ? 30 : 30),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
@@ -1408,7 +1405,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
       // Lock Button (Middle Left)
       Positioned(
-        left: isPortrait ? 16.w : 16, 
+        left: isPortrait ? 16 : 16, 
         top: 0, bottom: 0,
         child: SafeArea(
           top: false, bottom: false,
@@ -1420,7 +1417,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
               style: IconButton.styleFrom(
                 backgroundColor: _isControlsLocked ? AppColors.primary : Colors.black26,
                 padding: EdgeInsets.zero,
-                fixedSize: Size(isPortrait ? 30.w : 30, isPortrait ? 30.w : 30),
+                fixedSize: Size(isPortrait ? 30 : 30, isPortrait ? 30 : 30),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
@@ -1438,17 +1435,17 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 InteractiveScaleButton(
                   onTap: _previousVideo,
                   child: Container(
-                    width: isPortrait ? 38.w : 38, height: isPortrait ? 38.h : 38,
+                    width: isPortrait ? 38 : 38, height: isPortrait ? 38 : 38,
                     decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Icon(Icons.skip_previous_rounded, color: Colors.white, size: isPortrait ? 26.w : 26),
+                    child: Icon(Icons.skip_previous_rounded, color: Colors.white, size: isPortrait ? 26 : 26),
                   ),
                 ),
-                SizedBox(width: isPortrait ? 42.w : 42),
+                SizedBox(width: isPortrait ? 42 : 42),
               ],
               // Limit the hit area of the Play button to its visual size
               SizedBox(
-                width: isPortrait ? 50.w : 50,
-                height: isPortrait ? 50.w : 50,
+                width: isPortrait ? 50 : 50,
+                height: isPortrait ? 50 : 50,
                 child: InteractiveScaleButton(
                   onTap: _togglePlay,
                   child: Container(
@@ -1456,19 +1453,19 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                     child: Icon(
                       controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, 
                       color: Colors.white, 
-                      size: isPortrait ? 34.w : 34,
+                      size: isPortrait ? 34 : 34,
                     ),
                   ),
                 ),
               ),
               if (!isPortrait) ...[
-                SizedBox(width: isPortrait ? 42.w : 42),
+                SizedBox(width: isPortrait ? 42 : 42),
                 InteractiveScaleButton(
                   onTap: _nextVideo,
                   child: Container(
-                    width: isPortrait ? 38.w : 38, height: isPortrait ? 38.h : 38,
+                    width: isPortrait ? 38 : 38, height: isPortrait ? 38 : 38,
                     decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Icon(Icons.skip_next_rounded, color: Colors.white, size: isPortrait ? 26.w : 26),
+                    child: Icon(Icons.skip_next_rounded, color: Colors.white, size: isPortrait ? 26 : 26),
                   ),
                 ),
               ],
@@ -1476,41 +1473,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           ),
         ),
 
-      // Bottom Right Actions (Aspect Ratio, Full Screen)
-      if (!_isControlsLocked) 
-        Positioned(
-          bottom: isPortrait ? 28 : 58, 
-          right: isPortrait ? 16 : (16 + MediaQuery.of(context).viewPadding.right), 
-          child: Row(
-            children: [
-              IconButton(
-                constraints: const BoxConstraints(),
-                tooltip: 'Aspect Ratio', 
-                onPressed: _cycleAspectRatioMode, 
-                icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white, size: 21),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black26,
-                  padding: EdgeInsets.zero,
-                  fixedSize: Size(isPortrait ? 30.w : 30, isPortrait ? 30.w : 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                constraints: const BoxConstraints(),
-                tooltip: 'Full Screen', 
-                onPressed: _toggleFullScreen, 
-                icon: Icon(isPortrait ? Icons.fullscreen_rounded : Icons.fullscreen_exit_rounded, color: Colors.white, size: 21),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.black26,
-                  padding: EdgeInsets.zero,
-                  fixedSize: Size(isPortrait ? 30.w : 30, isPortrait ? 30.w : 30),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
-          ),
-        ),
     ]);
   }
 
@@ -1529,17 +1491,17 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         final statusText = result.statusLabel;
         final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
         
-        final horizontalMargin = isLandscape ? 32.0 : 16.w;
-        final bottomMargin = isLandscape ? 48.0 : 12.h; // Higher in landscape to stay above progress bar
+        final horizontalMargin = isLandscape ? 32.0 : 16.0;
+        final bottomMargin = isLandscape ? 48.0 : 12.0; // Higher in landscape to stay above progress bar
         
         return Center(
           child: Container(
             constraints: BoxConstraints(maxWidth: isLandscape ? MediaQuery.of(context).size.width * 0.5 : double.infinity),
             margin: EdgeInsets.fromLTRB(horizontalMargin, 0, horizontalMargin, bottomMargin),
-            padding: EdgeInsets.symmetric(horizontal: isLandscape ? 12.0 : 12.w, vertical: isLandscape ? 8.0 : 10.h),
+            padding: EdgeInsets.symmetric(horizontal: isLandscape ? 12.0 : 12.0, vertical: isLandscape ? 8.0 : 10.0),
             decoration: BoxDecoration(
               color: isLandscape ? Colors.black87 : AppColors.backgroundSecondary.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(isLandscape ? 12 : 12.r),
+              borderRadius: BorderRadius.circular(isLandscape ? 12 : 12),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.2),
@@ -1571,7 +1533,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                                     'AI Dubbing: $statusText',
                                     style: TextStyle(
                                       color: isLandscape ? Colors.white : AppColors.textPrimary, 
-                                      fontSize: isLandscape ? 12.0 : 12.sp, 
+                                      fontSize: isLandscape ? 12.0 : 12, 
                                       fontWeight: FontWeight.bold
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -1582,7 +1544,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                                   '${result.progress}%',
                                   style: TextStyle(
                                     color: AppColors.primary, 
-                                    fontSize: isLandscape ? 12.0 : 12.sp, 
+                                    fontSize: isLandscape ? 12.0 : 12, 
                                     fontWeight: FontWeight.bold
                                   ),
                                 ),
@@ -1590,12 +1552,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                             ),
                             const SizedBox(height: 8),
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(isLandscape ? 4 : 4.r),
+                              borderRadius: BorderRadius.circular(isLandscape ? 4 : 4),
                               child: LinearProgressIndicator(
                                 value: progressValue,
                                 backgroundColor: isLandscape ? Colors.white24 : AppColors.borderPrimary,
                                 valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                minHeight: isLandscape ? 4.0 : 4.h,
+                                minHeight: isLandscape ? 4.0 : 4,
                               ),
                             ),
                           ],
@@ -1609,7 +1571,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                         'Hide',
                         style: TextStyle(
                           color: isLandscape ? Colors.white : AppColors.primary,
-                          fontSize: isLandscape ? 12.0 : 12.sp,
+                          fontSize: isLandscape ? 12.0 : 12,
                           fontWeight: FontWeight.bold,
                           decoration: TextDecoration.underline,
                           decorationColor: isLandscape ? Colors.white.withOpacity(0.5) : AppColors.primary.withOpacity(0.5),
@@ -1653,6 +1615,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   label: 'Nahi',
                   variant: AppButtonVariant.secondary,
                   size: isLandscape ? AppButtonSize.small : AppButtonSize.medium,
+                  fontSize: isLandscape ? 11.0 : null, // Stable size in landscape
                 ),
               ),
               const SizedBox(width: 12),
@@ -1668,8 +1631,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                       _showSnackBar('Dubbing cancelled.');
                     }
                   },
-                  label: isLandscape ? 'Haan, Cancel' : 'Haan, Cancel Karein',
+                  label: isLandscape ? 'Haan' : 'Haan, Cancel Karein', // Shorter text for landscape
                   size: isLandscape ? AppButtonSize.small : AppButtonSize.medium,
+                  fontSize: isLandscape ? 11.0 : null, // Stable size in landscape
                 ),
               ),
             ],
@@ -1756,7 +1720,7 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
         children: [
           _buildVideoSection(orientation),
           Positioned(
-            bottom: isFull ? 40 : 40.h, // Above the video progress bar
+            bottom: isFull ? 40 : 40, // Above the video progress bar
             left: 0, right: 0,
             child: widget.buildDubbingProgress(widget.index),
           ),
@@ -1766,11 +1730,11 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
     return Column(children: [
       _buildVideoSection(orientation),
       Expanded(child: SingleChildScrollView(child: Column(children: [
-        SizedBox(height: 12.h), widget.buildAdSection(widget.index),
-        SizedBox(height: 12.h), widget.buildVideoInfo(widget.index),
-        SizedBox(height: 8.h), widget.buildChannelRow(widget.index),
-        SizedBox(height: 12.h), widget.buildDubbingProgress(widget.index),
-        SizedBox(height: 48.h),
+        const SizedBox(height: 12), widget.buildAdSection(widget.index),
+        const SizedBox(height: 12), widget.buildVideoInfo(widget.index),
+        const SizedBox(height: 8), widget.buildChannelRow(widget.index),
+        const SizedBox(height: 12), widget.buildDubbingProgress(widget.index),
+        const SizedBox(height: 48),
       ]))),
     ]);
   }
@@ -1796,9 +1760,7 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
     
     // Calculate stable symmetrical padding for horizontal mode
     // Using max of left/right padding to keep it symmetrical and avoid jumps
-    final lateralPadding = isFull 
-        ? (math.max(MediaQuery.of(context).viewPadding.left, MediaQuery.of(context).viewPadding.right) + (isFull ? 24 : 24.w))
-        : 0.0;
+    final lateralPadding = isFull ? 60.0 : 16.0;
         
     final videoHeight = isPortrait && !isFull ? size.width * 9 / 16 : size.height;
 
@@ -1938,50 +1900,83 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
         Positioned(
           left: lateralPadding, 
           right: lateralPadding, 
-          bottom: isFull ? MediaQuery.of(context).padding.bottom + 16 : -1, 
+          bottom: isFull ? 32.0 : 0.0, 
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
             opacity: (!isFull || widget.showControls) ? 1.0 : 0.0,
-            child: SafeArea(
-              top: false, bottom: false,
-              child: Stack(
-                clipBehavior: Clip.none,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // hit area: 20px total (Yug Match)
-                SizedBox(
-                  height: 20,
-                  child: VayuVideoProgressBar(
-                    controller: controller, 
-                    height: 20, 
-                    barHeight: 2, 
-                    activeBarHeight: 6, 
-                    thumbRadius: 6,
-                    barCenterOffset: isFull ? null : 19.h, // Precise bottom alignment only in portrait
-                  ),
-                ),
-                // Duration label positioned neatly above the tight progress bar area
-                Positioned(
-                  left: isFull ? 12 : 12.w,
-                  bottom: isFull ? 24 : 24.h, 
-                  child: ValueListenableBuilder<VideoPlayerValue>(
-                    valueListenable: controller,
-                    builder: (context, v, _) => AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: widget.showControls ? 1.0 : 0.0,
-                      child: Text(
+                // Top Row: Duration and Buttons (Aligned on the same line)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Duration text
+                    ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: controller,
+                      builder: (context, v, _) => Text(
                         '${widget.formatDuration(v.position)} / ${widget.formatDuration(v.duration)}',
                         style: TextStyle(
                           color: Colors.white, 
-                          fontSize: isFull ? 12.0 : 12.sp, 
+                          fontSize: isFull ? 12.0 : 12, 
                           fontWeight: FontWeight.bold, 
                           shadows: const [Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))]
                         ),
                       ),
                     ),
+                    
+                    // Buttons: Aspect Ratio and Full Screen
+                    if (!widget.isControlsLocked) Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Cycle Aspect Ratio
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Aspect Ratio', 
+                          onPressed: widget.onCycleAspectRatio, 
+                          icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white, size: 21),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black26,
+                            padding: EdgeInsets.zero,
+                            fixedSize: const Size(30, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Toggle Full Screen
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Full Screen', 
+                          onPressed: widget.onToggleFullScreen, 
+                          icon: Icon(isPortrait ? Icons.fullscreen_rounded : Icons.fullscreen_exit_rounded, color: Colors.white, size: 21),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black26,
+                            padding: EdgeInsets.zero,
+                            fixedSize: const Size(30, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 8), // Gap between duration/buttons and progress bar
+                
+                // Progress Bar
+                SizedBox(
+                  height: 20,
+                  child: VayuVideoProgressBar(
+                    controller: controller, 
+                    height: 20, 
+                    barHeight: isFull ? 4 : 2,
+                    activeBarHeight: isFull ? 10 : 4,
+                    thumbRadius: isFull ? 8 : 4,
+                    barCenterOffset: isFull ? null : 19,
                   ),
                 ),
-                ],
-              ),
+              ],
             ),
           ),
         ),

@@ -6,7 +6,7 @@ import 'package:vayug/shared/services/http_client_service.dart';
 /// Optimized app configuration for better performance and smaller size
 class AppConfig {
   // **NEW: API Version (Date-Based)**
-  static const String kApiVersion = '2026-03-12';
+  static const String kApiVersion = '2026-04-02';
 
   // Set to true to force local development server, false for remote server (Fly/custom domain)
   static const bool isDevelopment = false;
@@ -27,6 +27,15 @@ class AppConfig {
   // Primary production endpoints
   static const String _customDomainUrl = 'https://api.snehayog.site';
   static const String _flyUrl = 'https://vayug.fly.dev';
+
+  // **NEW: Cloudflare Workers configuration**
+  static const String _workerProductionUrl =
+      'https://vayug-edge.factshorts1.workers.dev';
+  static const String _workerDevelopmentUrl = 'http://localhost:8787';
+
+  static String get workerUrl {
+    return _isDevelopment ? _workerDevelopmentUrl : _workerProductionUrl;
+  }
 
   // Backend API configuration - Strict Mode
   static String get baseUrl {
@@ -419,6 +428,10 @@ class NetworkHelper {
   static String get authEndpoint => '$apiBaseUrl/auth';
   static String get usersEndpoint => '$apiBaseUrl/users';
   static String get adsEndpoint => '$apiBaseUrl/ads';
+
+  /// Cloudflare Workers endpoints
+  static String get workerUrl => AppConfig.workerUrl;
+  static String get uploadUrlEndpoint => '$workerUrl/upload-url';
 
   /// Network timeout configurations - Increased for better remote connectivity
   static const Duration defaultTimeout = Duration(seconds: 30);

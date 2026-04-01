@@ -128,8 +128,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   _isBuffering[videoId] = false; // Reset buffering state
                   _isBufferingVN[videoId]?.value = false;
                 });
-                // Force reload
-                _preloadVideo(index).then((_) {
+                // Force reload (Use fallback for manual retry to ensure success)
+                _preloadVideo(index, bypassProxy: true).then((_) {
                   if (mounted && index == _currentIndex) {
                     _tryAutoplayCurrentImmediate(index);
                   }
@@ -859,9 +859,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         }
       },
       onVideoResume: () {
-        // Resume the video when the browser is closed
+        // Resume the video when the browser is closed (if still active)
         final videoId = index < _videos.length ? _videos[index].id : null;
         if (videoId != null && _controllerPool.containsKey(videoId)) {
+          if (!_shouldAutoplayForContext('ad resume')) return;
           _controllerPool[videoId]!.play();
         }
       },
@@ -1719,8 +1720,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         }
       },
       onVideoResume: () {
-        // Resume the video when the browser is closed
+        // Resume the video when the browser is closed (if still active)
         if (videoId != null && _controllerPool.containsKey(videoId)) {
+          if (!_shouldAutoplayForContext('carousel ad resume')) return;
           _controllerPool[videoId]!.play();
         }
       },

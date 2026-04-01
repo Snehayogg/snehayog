@@ -20,8 +20,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       // **DYNAMIC POOL: Configure shared pool based on device power**
       SharedVideoControllerPool().configurePool(isLowEndDevice: _isLowEndDevice);
       
-      // **DYNAMIC CACHE: Configure disk cache limit (150MB vs 500MB)**
-      videoCacheProxy.configureCacheSize(isLowEndDevice: _isLowEndDevice);
+      // **DYNAMIC CACHE: Configure disk cache limit + Quality filtering**
+      videoCacheProxy.configureService(isLowEndDevice: _isLowEndDevice);
       
     } catch (e) {
       AppLogger.log('⚠️ Error checking device capabilities: $e');
@@ -70,10 +70,22 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     // Down: Focus on Current & Next (n+1). Clean everything else (past).
     // Up: Focus on Current & Prev (n-1). Clean everything else (future).
     
-    // **SAFE WINDOW: Always keep [Current-1, Current+1] to avoid PageView crashes**
-    // PageView keeps immediate neighbors in the tree; disposing them causes "No active player" errors.
-    int keepStart = (_currentIndex - 1).clamp(0, _videos.length - 1);
-    int keepEnd = (_currentIndex + 1).clamp(0, _videos.length - 1);
+    // **SAFE WINDOW: Adjust window based on device power**
+    // High-end: keep [Current-1, Current+1] (Total 3)
+    // Low-end: keep [Current, Current+1] if down, [Current-1, Current] if up (Total 2)
+    int keepStart, keepEnd;
+    if (_isLowEndDevice) {
+      if (isScrollingDown) {
+        keepStart = _currentIndex;
+        keepEnd = (_currentIndex + 1).clamp(0, _videos.length - 1);
+      } else {
+        keepStart = (_currentIndex - 1).clamp(0, _videos.length - 1);
+        keepEnd = _currentIndex;
+      }
+    } else {
+      keepStart = (_currentIndex - 1).clamp(0, _videos.length - 1);
+      keepEnd = (_currentIndex + 1).clamp(0, _videos.length - 1);
+    }
     
     // **STRICT DIRECTIONAL WINDOWS (Optimization)**
     // While we keep the safe buffer above, we prioritize preloading in the scroll direction.
@@ -170,7 +182,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
   }
 
   /// **PRELOAD SINGLE VIDEO**
-  Future<void> _preloadVideo(int index) async {
+  Future<void> _preloadVideo(int index, {bool bypassProxy = false}) async {
     final video = _videos[index];
     final String videoId = video.id;
 
@@ -199,7 +211,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _preloadDebounceTimers[videoId]?.cancel();
       _preloadDebounceTimers[videoId] = Timer(const Duration(milliseconds: 200), () {
         if (mounted && !_preloadedVideos.contains(videoId)) {
-          _preloadVideo(index);
+          _preloadVideo(index, bypassProxy: bypassProxy);
         }
       });
       return;
@@ -236,6 +248,13 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       // **NEW: Use effective URL (Original or Dubbed)**
       videoUrl = _getActingUrl(video);
+      
+      // **PROXY LOGIC: Apply proxy URL unless bypassing due to previous error**
+      if (!bypassProxy) {
+          videoUrl = videoCacheProxy.proxyUrl(videoUrl);
+      } else {
+          AppLogger.log('🛡️ Fallback: Loading $videoId directly from CDN (Bypassing Proxy)');
+      }
       if (videoUrl.isEmpty) {
         AppLogger.log('❌ Invalid video URL for $index: ${video.videoUrl}');
         _loadingVideos.remove(videoId);
@@ -318,13 +337,16 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
         try {
           if (videoUrl.contains('.m3u8')) {
+            // **VIP: Increase timeout for low-end hardware/network combinations**
+            final timeoutSeconds = _isLowEndDevice ? 25 : 15;
             await controller.initialize().timeout(
-              const Duration(seconds: 12),
+              Duration(seconds: timeoutSeconds),
               onTimeout: () => throw Exception('HLS timeout'),
             );
           } else {
+            final timeoutSeconds = _isLowEndDevice ? 15 : 10;
             await controller.initialize().timeout(
-              const Duration(seconds: 8),
+              Duration(seconds: timeoutSeconds),
               onTimeout: () => throw Exception('Video timeout'),
             );
           }
@@ -847,26 +869,44 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         final errorMessage = value.errorDescription ?? 'Unknown playback error';
         if (_videoErrors[videoId] != errorMessage) {
           AppLogger.log('❌ Runtime Video Error for video $videoId: $errorMessage');
-          safeSetState(() {
-            _videoErrors[videoId] = errorMessage;
-            // Force hide loading state if error occurs
-            _loadingVideos.remove(videoId);
-            _isBuffering[videoId] = false;
-            _isBufferingVN[videoId]?.value = false;
-            
-            // **CRITICAL FIX: Zombie Audio Killer**
-            // If error occurs, immediate kill the controller to stop any background audio
-            try {
-               controller.pause();
-               controller.setVolume(0.0);
-               // Remove from pools immediately
-               _controllerPool.remove(videoId);
-               if (_controllerPool.containsKey(videoId)) {
-                  // Double safety
-                  _controllerPool[videoId]?.dispose(); 
-               }
-            } catch (_) {}
-          });
+          
+          // **VIP FALLBACK: If proxy fails on old phone, retry with Raw URL**
+          bool handledByFallback = false;
+          if (videoCacheProxy.isProxyUrl(controller.dataSource)) {
+             AppLogger.log('🔄 Fallback: Proxy failed on $videoId. Retrying with Raw URL...');
+             handledByFallback = true;
+             
+             safeSetState(() {
+                _videoErrors.remove(videoId);
+                _loadingVideos.add(videoId);
+             });
+
+             // Kill old controller and retry without proxy
+             _controllerPool[videoId]?.dispose();
+             _controllerPool.remove(videoId);
+             
+             // Trigger direct load (bypass proxy completely)
+             _preloadVideo(index, bypassProxy: true).then((_) {
+                 if (mounted && index == _currentIndex) {
+                    _tryAutoplayCurrentImmediate(index);
+                 }
+             });
+          }
+
+          if (!handledByFallback) {
+            safeSetState(() {
+              _videoErrors[videoId] = errorMessage;
+              _loadingVideos.remove(videoId);
+              _isBuffering[videoId] = false;
+              _isBufferingVN[videoId]?.value = false;
+              
+              try {
+                 controller.pause();
+                 controller.setVolume(0.0);
+                 _controllerPool.remove(videoId);
+              } catch (_) {}
+            });
+          }
         }
       }
     }

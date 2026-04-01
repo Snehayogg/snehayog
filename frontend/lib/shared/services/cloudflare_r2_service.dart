@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:vayug/shared/config/app_config.dart';
-import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 
@@ -15,302 +13,122 @@ class CloudflareR2Service {
   factory CloudflareR2Service() => _instance;
   CloudflareR2Service._internal();
 
-  /// Internal helper copied from the original service to sanity‑check files.
-  Future<bool> _testFileBeforeUpload(File file) async {
-    try {
-      if (!await file.exists()) {
-        AppLogger.log(
-            '❌ CloudflareR2Service: File does not exist: ${file.path}');
-        return false;
-      }
+  /// Get direct upload URL from Worker
+  Future<Map<String, dynamic>> _getUploadUrl(String fileName, String folder) async {
+    final authService = AuthService();
+    final userData = await authService.getUserData();
+    if (userData == null) throw Exception('User not authenticated');
 
-      final fileSize = await file.length();
-      if (fileSize == 0) {
-        AppLogger.log(
-            '❌ CloudflareR2Service: File is empty: ${file.path}');
-        return false;
-      }
+    final response = await http.get(
+      Uri.parse('${NetworkHelper.uploadUrlEndpoint}?filename=$fileName&folder=$folder'),
+      headers: {
+        'Authorization': 'Bearer ${userData['token']}',
+        'Content-Type': 'application/json',
+      },
+    );
 
-      final byteList = await file.openRead(0, 1).take(1).toList();
-      if (byteList.isEmpty || byteList.first.isEmpty) {
-        AppLogger.log(
-            '❌ CloudflareR2Service: Cannot read file: ${file.path}');
-        return false;
-      }
-
-      AppLogger.log(
-        '✅ CloudflareR2Service: File test passed - size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
-      );
-      return true;
-    } catch (e) {
-      AppLogger.log('❌ CloudflareR2Service: File test failed: $e');
-      return false;
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to get upload URL: ${response.body}');
     }
   }
 
-  /// Upload image via backend `/api/upload/image` (Cloudflare R2 under the hood).
+  /// Perform binary PUT upload to R2
+  Future<void> _binaryPutUpload(String uploadUrl, File file) async {
+    final bytes = await file.readAsBytes();
+    final response = await http.put(
+      Uri.parse(uploadUrl),
+      body: bytes,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Binary upload failed: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  /// Upload image via Worker + Direct-to-R2.
   Future<String> uploadImage(File imageFile, {String? folder}) async {
     try {
-      if (!await imageFile.exists()) {
-        throw Exception('Image file does not exist');
-      }
-      final fileSize = await imageFile.length();
-      if (fileSize == 0) {
-        throw Exception('Image file is empty');
-      }
-      if (fileSize > 10 * 1024 * 1024) {
-        throw Exception('Image file size must be less than 10MB');
-      }
-
+      if (!await imageFile.exists()) throw Exception('Image file does not exist');
+      
       final fileName = imageFile.path.split('/').last.toLowerCase();
-      final isSupported = fileName.endsWith('.jpg') ||
-          fileName.endsWith('.jpeg') ||
-          fileName.endsWith('.png') ||
-          fileName.endsWith('.gif') ||
-          fileName.endsWith('.webp') ||
-          fileName.endsWith('.heic') ||
-          fileName.endsWith('.heif') ||
-          fileName.endsWith('.avif') ||
-          fileName.endsWith('.bmp');
-      if (!isSupported) {
-        throw Exception(
-          'Invalid image file type. Supported: JPG, PNG, GIF, WebP, HEIC/HEIF, AVIF, BMP',
-        );
-      }
+      final targetFolder = folder ?? 'snehayog/ads/images';
+      
+      AppLogger.log('🔍 CloudflareR2Service: Getting signed URL for image...');
+      final uploadData = await _getUploadUrl(fileName, targetFolder);
+      final uploadUrl = uploadData['uploadUrl'];
+      final publicUrl = uploadData['publicUrl'];
 
-      AppLogger.log('🔍 CloudflareR2Service: Starting image upload...');
-      AppLogger.log('   File path: ${imageFile.path}');
-      AppLogger.log('   File name: $fileName');
-      AppLogger.log(
-        '   File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
-      );
-      AppLogger.log('   Folder: ${folder ?? 'snehayog/ads/images'}');
+      AppLogger.log('🔍 CloudflareR2Service: Uploading image to R2...');
+      await _binaryPutUpload(uploadUrl, imageFile);
 
-      if (!await _testFileBeforeUpload(imageFile)) {
-        throw Exception(
-          'File validation failed - file may be corrupted or inaccessible',
-        );
-      }
-
-      final authService = AuthService();
-      final userData = await authService.getUserData();
-      if (userData == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/image'),
-      );
-      request.headers['Authorization'] = 'Bearer ${userData['token']}';
-      request.headers['Content-Type'] = 'multipart/form-data';
-
-      String mimeType = 'image/jpeg';
-      if (fileName.endsWith('.png')) {
-        mimeType = 'image/png';
-      } else if (fileName.endsWith('.gif')) {
-        mimeType = 'image/gif';
-      } else if (fileName.endsWith('.webp')) {
-        mimeType = 'image/webp';
-      } else if (fileName.endsWith('.heic') || fileName.endsWith('.heif')) {
-        mimeType = 'image/heic';
-      } else if (fileName.endsWith('.avif')) {
-        mimeType = 'image/avif';
-      } else if (fileName.endsWith('.bmp')) {
-        mimeType = 'image/bmp';
-      } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
-        mimeType = 'image/jpeg';
-      }
-
-      AppLogger.log('🔍 CloudflareR2Service: Using MIME type: $mimeType');
-
-      final multipartFile = await http.MultipartFile.fromPath(
-        'image',
-        imageFile.path,
-        contentType: MediaType.parse(mimeType),
-      );
-
-      request.files.add(multipartFile);
-      if (folder != null) {
-        request.fields['folder'] = folder;
-      }
-
-      AppLogger.log('🔍 CloudflareR2Service: Sending request to backend...');
-      final streamedResponse = await httpClientService.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-
-      AppLogger.log(
-        '🔍 CloudflareR2Service: Backend response status: ${response.statusCode}',
-      );
-      AppLogger.log(
-        '🔍 CloudflareR2Service: Backend response body: ${response.body}',
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          final url = data['url'] ?? '';
-          AppLogger.log('✅ CloudflareR2Service: Image uploaded: $url');
-          return url;
-        }
-        throw Exception('Upload failed: ${data['error'] ?? 'Unknown error'}');
-      } else {
-        final errorData = json.decode(response.body);
-        final errorMessage =
-            errorData['error'] ?? errorData['details'] ?? response.body;
-        AppLogger.log(
-          '❌ CloudflareR2Service: Backend error: $errorMessage',
-        );
-        throw Exception('Failed to upload image. Please try again.');
-      }
+      AppLogger.log('✅ CloudflareR2Service: Image uploaded successfully to $publicUrl');
+      return publicUrl;
     } catch (e) {
       AppLogger.log('❌ CloudflareR2Service: Error uploading image: $e');
       throw Exception('Error uploading image: $e');
     }
   }
 
-  /// Upload video for user content via `/api/videos/upload`.
+  /// Upload video for user content via Worker + Direct-to-R2 + Backend Registration.
   Future<Map<String, dynamic>> uploadVideo(
     File videoFile, {
+    String? videoName,
+    String? description,
     String? folder,
     String profile = 'portrait_reels',
     bool enableHLS = true,
   }) async {
     try {
+      final fileName = videoFile.path.split('/').last.toLowerCase();
+      final targetFolder = folder ?? 'snehayog/videos';
+
+      AppLogger.log('🔍 CloudflareR2Service: Getting signed URL for video...');
+      final uploadData = await _getUploadUrl(fileName, targetFolder);
+      final uploadUrl = uploadData['uploadUrl'];
+      final r2Key = uploadData['key'];
+
+      AppLogger.log('🔍 CloudflareR2Service: Uploading video to R2...');
+      await _binaryPutUpload(uploadUrl, videoFile);
+
+      AppLogger.log('🔍 CloudflareR2Service: Registering upload with backend...');
       final authService = AuthService();
       final userData = await authService.getUserData();
-      if (userData == null) {
-        throw Exception('User not authenticated');
-      }
-
-      const endpoint = '/videos/upload';
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${NetworkHelper.apiBaseUrl}$endpoint'),
+      
+      final response = await http.post(
+        Uri.parse('${NetworkHelper.apiBaseUrl}/videos/register-upload'),
+        headers: {
+          'Authorization': 'Bearer ${userData!['token']}',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'videoName': videoName ?? fileName,
+          'description': description ?? '',
+          'r2Key': r2Key,
+          'videoType': profile.contains('portrait') ? 'yog' : 'vayu',
+          'mimeType': 'video/mp4', // Fallback
+        }),
       );
-      request.headers['Authorization'] = 'Bearer ${userData['token']}';
-
-      String mimeType = 'video/mp4';
-      final fileName = videoFile.path.split('/').last.toLowerCase();
-      if (fileName.endsWith('.webm')) {
-        mimeType = 'video/webm';
-      } else if (fileName.endsWith('.avi')) {
-        mimeType = 'video/avi';
-      } else if (fileName.endsWith('.mov')) {
-        mimeType = 'video/mov';
-      } else if (fileName.endsWith('.mkv')) {
-        mimeType = 'video/mkv';
-      }
-
-      AppLogger.log(
-        '🔍 CloudflareR2Service: Using video MIME type: $mimeType',
-      );
-
-      final videoPart = await http.MultipartFile.fromPath(
-        'video',
-        videoFile.path,
-        contentType: MediaType.parse(mimeType),
-      );
-      request.files.add(videoPart);
-
-      request.fields['profile'] = profile;
-      request.fields['enableHLS'] = enableHLS.toString();
-      if (folder != null) {
-        request.fields['folder'] = folder;
-      }
-
-      final streamedResponse = await httpClientService.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        return data;
+        return json.decode(response.body);
       } else {
-        final errorData = json.decode(response.body);
-        final errorMessage =
-            errorData['error'] ?? errorData['details'] ?? response.body;
-        throw Exception(
-          'Video upload failed: $errorMessage',
-        );
+        throw Exception('Failed to register upload with backend: ${response.body}');
       }
     } catch (e) {
-      AppLogger.log('❌ CloudflareR2Service: Error uploading video: $e');
+      AppLogger.log('❌ CloudflareR2Service: Error in direct video upload flow: $e');
       throw Exception('Error uploading video: $e');
     }
   }
 
-  /// Upload video specifically for ads via `/api/upload/video`.
+  /// Upload video specifically for ads via Worker (simplified).
   Future<Map<String, dynamic>> uploadVideoForAd(File videoFile) async {
-    try {
-      final authService = AuthService();
-      final userData = await authService.getUserData();
-      if (userData == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${NetworkHelper.apiBaseUrl}/upload/video'),
-      );
-      request.headers['Authorization'] = 'Bearer ${userData['token']}';
-
-      String mimeType = 'video/mp4';
-      final fileName = videoFile.path.split('/').last.toLowerCase();
-      if (fileName.endsWith('.webm')) {
-        mimeType = 'video/webm';
-      } else if (fileName.endsWith('.avi')) {
-        mimeType = 'video/avi';
-      } else if (fileName.endsWith('.mov')) {
-        mimeType = 'video/mov';
-      } else if (fileName.endsWith('.mkv')) {
-        mimeType = 'video/mkv';
-      }
-
-      AppLogger.log(
-        '🔍 CloudflareR2Service: Using video MIME type for ad: $mimeType',
-      );
-
-      final videoPart = await http.MultipartFile.fromPath(
-        'video',
-        videoFile.path,
-        contentType: MediaType.parse(mimeType),
-      );
-      request.files.add(videoPart);
-
-      final streamedResponse = await httpClientService.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
-
-      AppLogger.log(
-        '🔍 CloudflareR2Service: Video upload response status: ${response.statusCode}',
-      );
-      AppLogger.log(
-        '🔍 CloudflareR2Service: Video upload response body: ${response.body}',
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
-        if (data is Map<String, dynamic>) {
-          AppLogger.log(
-            '✅ CloudflareR2Service: Video uploaded successfully for ad',
-          );
-          return data;
-        }
-        throw Exception('Unexpected response format from server');
-      } else {
-        final errorData = json.decode(response.body);
-        final errorMsg =
-            errorData['error'] ?? errorData['details'] ?? response.body;
-        AppLogger.log(
-          '❌ CloudflareR2Service: Video upload failed: $errorMsg',
-        );
-        throw Exception('Video upload failed: $errorMsg');
-      }
-    } catch (e) {
-      AppLogger.log(
-        '❌ CloudflareR2Service: Error uploading video for ad: $e',
-      );
-      throw Exception('Error uploading video for ad: $e');
-    }
+    // Re-use uploadVideo logic but with ads folder
+    return await uploadVideo(videoFile, folder: 'snehayog/ads/videos');
   }
 }
 

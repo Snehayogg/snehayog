@@ -11,6 +11,7 @@ import 'package:vayug/core/design/typography.dart';
 
 import 'package:vayug/features/profile/core/presentation/screens/settings_screen.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:vayug/features/profile/core/presentation/screens/edit_profile_screen.dart';
 
 class ProfileMenuWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -137,6 +138,14 @@ class ProfileMenuWidget extends StatelessWidget {
                         'color': AppColors.success,
                         'onTap': () {
                           Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => EditProfileScreen(
+                                stateManager: stateManager,
+                              ),
+                            ),
+                          );
                           onEditProfile?.call();
                         },
                       });

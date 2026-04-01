@@ -445,6 +445,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
                           );
                           _pauseAllOtherVideos(videoId);
                           try {
+                            if (!_shouldAutoplayForContext('deep link force play')) return;
                             controller.setVolume(1.0);
                             controller.play();
                             _controllerStates[videoId] = true;

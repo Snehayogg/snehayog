@@ -32,15 +32,20 @@ export const googleSignIn = async (req, res) => {
         email: userData.email,
         profilePic: userData.picture,
         videos: [],
+        lastActive: new Date(),
+        isAppUninstalled: false
       });
       await user.save();
       console.log('✅ Created new user:', user.email);
     } else {
-      // Update profile pic if missing
+      // Update profile pic if missing, update lastActive and isAppUninstalled
+      user.lastActive = new Date();
+      user.isAppUninstalled = false;
+      
       if (!user.profilePic || user.profilePic.trim() === '') {
         user.profilePic = userData.picture;
-        await user.save();
       }
+      await user.save();
       console.log('✅ Found existing user:', user.email);
     }
 

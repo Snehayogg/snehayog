@@ -3,6 +3,7 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/services/report_service.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 
 class ReportDialogWidget extends StatefulWidget {
   final String targetType;
@@ -58,13 +59,9 @@ class _ReportDialogWidgetState extends State<ReportDialogWidget> {
 
     if (success) {
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report submitted. Thank you.')),
-      );
+      VayuSnackBar.showSuccess(context, 'Report submitted. Thank you.');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to submit report.')),
-      );
+      VayuSnackBar.showError(context, 'Failed to submit report.');
     }
 
     if (mounted) setState(() => _submitting = false);

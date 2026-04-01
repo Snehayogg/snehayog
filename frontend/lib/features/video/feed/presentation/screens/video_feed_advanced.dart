@@ -192,8 +192,9 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
         break;
       case AppLifecycleState.resumed:
         _videoControllerManager.onAppResumed();
-        // **FIX: Set screen visible again when app resumes**
-        _isScreenVisible = true;
+        // **FIX: Stop setting _isScreenVisible = true unconditionally**
+        // Relying on VisibilityDetector and MainController index instead
+        // to prevent audio leak when resuming on a different tab.
         _ensureWakelockForVisibility();
         _lifecyclePaused = false;
 
@@ -345,60 +346,32 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      // **FIX: Check if THIS route is currently active/top-most**
-      final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-
-      // If route is no longer current (e.g. Settings pushed on top), ensure videos are paused
-      if (!isCurrentRoute) {
-        if (_isScreenVisible) {
-          AppLogger.log(
-              '⏸️ VideoFeedAdvanced: Obscured by new route, ensuring pause');
-          _isScreenVisible = false;
+      // **CRITICAL FIX: Use the unified guard for autoplay instead of manual checks**
+      if (!_shouldAutoplayForContext('didChangeDependencies')) {
+        // If not allowed to autoplay, ensure we are actually paused
+        if (_hasActivePlayback()) {
+          AppLogger.log('⏸️ VideoFeedAdvanced: Autoplay not allowed, ensuring pause');
           _pauseCurrentVideo();
         }
         return;
       }
 
-      // **FIX: Allow autoplay when opened from ProfileScreen OR when on Yug tab AND screen is visible**
-      final bool isYugTabActive = _mainController?.currentIndex == 0 &&
-          !_mainController!.isMediaPickerActive &&
-          !_mainController!.recentlyReturnedFromPicker;
+      // If we reach here, autoplay is allowed by the source of truth
+      AppLogger.log('🚀 VideoFeedAdvanced: Autoplay allowed in didChangeDependencies');
 
-      // **CRITICAL FIX: Set _isScreenVisible = true when Yug tab is active (not opened from profile)**
-      // This ensures videos autoplay when Yug tab is first loaded
-      if (!_openedFromProfile && isYugTabActive && !_isScreenVisible) {
-        _isScreenVisible = true;
-        _ensureWakelockForVisibility();
-        /* AppLogger.log(
-          '✅ VideoFeedAdvanced: Yug tab active - setting _isScreenVisible = true',
-        ); */
-      }
-
-      final bool shouldAttemptAutoplay =
-          _openedFromProfile || (isYugTabActive && _isScreenVisible);
-
-      if (shouldAttemptAutoplay) {
-        // **FIX: Ensure screen is visible when opened from ProfileScreen**
-        if (_openedFromProfile) {
-          _isScreenVisible = true;
-          _ensureWakelockForVisibility();
-        }
-
-        // **FIX: Ensure video is preloaded before trying autoplay**
-        if (_videos.isNotEmpty && _currentIndex < _videos.length) {
-          final currentVideoId = _videos[_currentIndex].id;
-          // If controller not initialized, preload first
-          if (!_controllerPool.containsKey(currentVideoId) ||
-              _controllerPool[currentVideoId]?.value.isInitialized != true) {
-            _preloadVideo(_currentIndex).then((_) {
-              if (mounted) {
-                // No delay - autoplay checks controller readiness
-                _tryAutoplayCurrent();
-              }
-            });
-          } else {
-            _tryAutoplayCurrent();
-          }
+      // **FIX: Ensure video is preloaded before trying autoplay**
+      if (_videos.isNotEmpty && _currentIndex < _videos.length) {
+        final currentVideoId = _videos[_currentIndex].id;
+        // If controller not initialized, preload first
+        if (!_controllerPool.containsKey(currentVideoId) ||
+            _controllerPool[currentVideoId]?.value.isInitialized != true) {
+          _preloadVideo(_currentIndex).then((_) {
+            if (mounted) {
+              _tryAutoplayCurrent();
+            }
+          });
+        } else {
+          _tryAutoplayCurrent();
         }
       }
     });
@@ -699,24 +672,17 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
 
-    // **FIX: Check if THIS route is currently active/top-most**
-    // Using this.context explicitly or renaming the parameter avoids the shadowing error
-    final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-    if (!isCurrentRoute) {
-      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): route is obscured by another screen'); */
+    // **PRIORITY 1: Auth Loading Guard**
+    // Suppress all playback during the sign-in/loading phase
+    final authController = ref.read(googleSignInProvider);
+    if (authController.isLoading) {
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): Auth is loading'); */
       return false;
     }
 
-    // **CRITICAL FIX: Always respect _isScreenVisible regardless of context**
-    // This ensures videos pause when the feed is obscured by nested routes or other screens.
-    if (!_isScreenVisible) {
-      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): screen is not visible'); */
-      return false;
-    }
-
-    // **ENHANCED: Allow autoplay for profile videos and deep links**
-    // BUT: If this is the main Yug tab, we MUST strictly check if it's the active tab.
-    // This prevents "millisecond audio leaks" when toggling fullscreen/controls in Vayu.
+    // **PRIORITY 2: Tab Active Check (for Main Yug Feed)**
+    // If this is the main Yug tab, we MUST strictly check if it's the active tab.
+    // This is our primary defense against audio leaks when on other tabs.
     final bool isVideoTabActive = (_mainController?.currentIndex ?? 0) == 0;
     
     if (widget.isMainYugTab && !isVideoTabActive) {
@@ -724,17 +690,30 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
 
+    // **PRIORITY 3: Navigation Context**
+    // Check if THIS route is currently active/top-most in its navigator
+    final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!isCurrentRoute) {
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): route is obscured by another screen'); */
+      return false;
+    }
+
+    // **ENHANCED: Allow autoplay for profile videos and deep links**
+    // Since these are explicitly opened, we allow them regardless of Tab 0 activity,
+    // but only if they are the CURRENT route (checked above).
     if (_openedFromProfile || _openedFromDeepLink) {
-      /* AppLogger.log(
-        '✅ Autoplay allowed ($reason): ${_openedFromProfile ? "opened from profile" : "opened from deep link"}',
-      ); */
       return true;
     }
 
+    // **PRIORITY 4: Physical Visibility**
+    // Respect the VisibilityDetector state for the regular feed
+    if (!_isScreenVisible) {
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): screen is not visible'); */
+      return false;
+    }
+
     if (!isVideoTabActive) {
-      /* AppLogger.log(
-        '⏸️ Autoplay suppressed ($reason): Yug tab not active',
-      ); */
+      /* AppLogger.log('⏸️ Autoplay suppressed ($reason): Yug tab not active'); */
       return false;
     }
     return true;
@@ -775,6 +754,12 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       AppLogger.log('⏸️ Autoplay blocked ($reason) due to lifecycle pause.');
       return false;
     }
+
+    // **FIX: Extra safeguard - check auth loading state**
+    if (ref.read(googleSignInProvider).isLoading) {
+      return false;
+    }
+
     // **FIX: Extra safeguard - check actual system lifecycle state**
     if (WidgetsBinding.instance.lifecycleState != null &&
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {

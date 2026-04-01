@@ -36,8 +36,8 @@ class SharedVideoControllerPool {
   /// **Configure pool based on device capabilities**
   void configurePool({required bool isLowEndDevice}) {
     // High-end: 6 controllers
-    // Low-end: 4 controllers (Increased from 2 to avoid immediate eviction crashes)
-    _maxPoolSize = isLowEndDevice ? 4 : 6;
+    // Low-end: 2 controllers (ExoPlayer decoders are heavy on old phones)
+    _maxPoolSize = isLowEndDevice ? 2 : 6;
     
     AppLogger.log(
       '📱 SharedPool Configured: Max $_maxPoolSize active controllers '

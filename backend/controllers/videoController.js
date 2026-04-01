@@ -415,6 +415,161 @@ export const uploadVideo = async (req, res) => {
   }
 };
 
+/**
+ * Register Video after Direct-to-R2 Upload (Cloudflare Workers Flow)
+ */
+export const registerUpload = async (req, res) => {
+  try {
+    const { 
+      videoName, 
+      description, 
+      videoType, 
+      link, 
+      r2Key, 
+      videoHash, 
+      duration,
+      width,
+      height,
+      mimeType
+    } = req.body;
+
+    const googleId = req.user.googleId;
+    if (!googleId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    if (!r2Key) {
+       return res.status(400).json({ error: 'R2 storage key is required' });
+    }
+
+    // 1. Validate user
+    const user = await User.findOne({ googleId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // 2. Duplicate detection
+    if (videoHash) {
+      const existingVideo = await Video.findOne({
+        uploader: user._id,
+        videoHash: videoHash,
+        processingStatus: { $ne: 'failed' }
+      });
+
+      if (existingVideo) {
+        return res.status(409).json({
+          error: 'Duplicate video detected',
+          message: 'You have already uploaded this video.',
+          existingVideoId: existingVideo._id
+        });
+      }
+    }
+
+    // 3. Determine video type (fallback if not provided/detected)
+    let finalVideoType = videoType || 'yog';
+    if (width && height) {
+      finalVideoType = (width > height) ? 'vayu' : 'yog';
+    }
+
+    // 4. Create initial video record
+    const initialScore = RecommendationService.calculateFinalScore({
+      totalWatchTime: 0,
+      duration: duration || 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      views: 0,
+      uploadedAt: new Date()
+    });
+
+    const video = new Video({
+      videoName: videoName || 'Untitled Video',
+      description: description || '',
+      link: link || '',
+      uploader: user._id,
+      videoType: finalVideoType,
+      mediaType: 'video',
+      aspectRatio: (width && height) ? (width / height) : undefined,
+      duration: duration || 0,
+      originalResolution: { width: width || 0, height: height || 0 },
+      processingStatus: 'pending',
+      processingProgress: 0,
+      isHLSEncoded: false,
+      videoHash: videoHash,
+      likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
+      uploadedAt: new Date(),
+      finalScore: initialScore
+    });
+
+    await video.save();
+    user.videos.push(video._id);
+    await user.save();
+
+    // 5. Trigger Background Processing
+    await queueService.addVideoJob({
+      videoId: video._id,
+      rawVideoKey: r2Key, // This is the key the client used to upload to R2
+      videoName: video.videoName,
+      userId: user._id.toString()
+    });
+
+    // 6. Invalidate cache
+    if (redisService.getConnectionStatus()) {
+      await invalidateCache([
+        'videos:feed:*',
+        `user:feed:${user.googleId}:*`,
+        VideoCacheKeys.all()
+      ]);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Video registered successfully. Processing started.',
+      video: {
+        id: video._id,
+        videoName: video.videoName,
+        processingStatus: 'queued'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Register Upload Error:', error);
+    return res.status(500).json({ error: 'Failed to register video' });
+  }
+};
+
+/**
+ * Cloudflare Worker Callback (Phase 3: Media Processing)
+ * Triggered by worker after R2 upload is confirmed.
+ */
+export const r2Callback = async (req, res) => {
+  try {
+    const { event, key, size } = req.body;
+    const workerSecret = req.headers['x-worker-secret'];
+
+    // Security check: Match secret from env
+    if (workerSecret !== process.env.WORKER_SECRET && process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Unauthorized worker callback' });
+    }
+
+    console.log(`📡 R2 Callback received for ${key} (${event})`);
+    
+    // Logic: If the video isn't registered yet, we might want to log it
+    // Or if it's already registered, we can update its status to "stored"
+    const video = await Video.findOne({ 'rawVideoKey': key });
+    if (video) {
+      video.processingStatus = 'processing';
+      await video.save();
+      console.log(`✅ Video ${video._id} status updated to processing`);
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('❌ R2 Callback Error:', error);
+    return res.status(500).json({ error: 'Callback processing failed' });
+  }
+};
+
 export const createImageFeedEntry = async (req, res) => {
   try {
     const { imageUrl, videoName, link, videoType, category, tags } = req.body || {};

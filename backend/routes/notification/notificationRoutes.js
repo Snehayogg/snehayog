@@ -33,6 +33,7 @@ router.post('/token', verifyToken, async (req, res) => {
     }
 
     user.fcmToken = fcmToken;
+    user.isAppUninstalled = false;
     await user.save();
 
     console.log(`✅ FCM token saved for user: ${user.name} (${user.googleId})`);

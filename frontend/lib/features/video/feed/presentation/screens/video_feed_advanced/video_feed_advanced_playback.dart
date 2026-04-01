@@ -85,6 +85,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     }
 
     if (controller != null && isInitializedSafe) {
+      if (!_shouldAutoplayForContext('forcePlayCurrent')) return;
       _pauseAllOtherVideos(videoId);
       _lifecyclePaused = false;
       controller.play();
@@ -112,6 +113,7 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
         }
       }
       if (c != null && cInit) {
+        if (!_shouldAutoplayForContext('forcePlayCurrent preload')) return;
         _pauseAllOtherVideos(videoId);
         _lifecyclePaused = false;
         c.play();

@@ -125,18 +125,22 @@ class ProfileHeaderWidget extends ConsumerWidget {
                 children: [
                   const Icon(
                     Icons.link,
-                    size: 16,
-                    color: AppColors.primary,
+                    size: 14,
+                    color: AppColors.textTertiary,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      stateManager.userData!['websiteUrl'],
+                      stateManager.userData!['websiteUrl']
+                          .toString()
+                          .replaceFirst(RegExp(r'^https?://'), '')
+                          .replaceFirst(RegExp(r'^www\.'), ''),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodySmall.copyWith(
                         color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.1,
                       ),
                     ),
                   ),

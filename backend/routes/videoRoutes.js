@@ -24,6 +24,8 @@ router.post('/cache/clear', videoController.clearCache);
  */
 router.post('/check-duplicate', verifyToken, videoController.checkDuplicate);
 router.post('/upload', verifyToken, uploadLimiter, validateVideoData, upload.single('video'), videoController.uploadVideo);
+router.post('/register-upload', verifyToken, videoController.registerUpload);
+router.post('/r2-callback', videoController.r2Callback);
 router.post('/image', verifyToken, videoController.createImageFeedEntry);
 
 /**

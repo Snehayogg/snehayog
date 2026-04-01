@@ -63,9 +63,8 @@ void main(List<String> args) {
   }
 
   // 2. Toggle dart files
-  _toggleDartFile('lib/shared/services/local_dubbing_service.dart', disable);
-  _toggleDartFile(
-      'lib/shared/services/local_ai_inference_service.dart', disable);
+  _toggleDartFile('lib/features/video/dubbing/data/services/on_device_dubbing_service.dart', disable);
+  _toggleDartFile('lib/features/video/dubbing/data/services/translation_processor.dart', disable);
 
   print('✅ Done. Please run `flutter pub get` now to apply dependencies.');
 }

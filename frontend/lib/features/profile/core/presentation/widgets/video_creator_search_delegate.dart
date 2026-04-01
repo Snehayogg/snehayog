@@ -510,6 +510,8 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       trailing: const Icon(Icons.arrow_forward_ios,
           size: 14, color: AppColors.textTertiary),
       onTap: () {
+        // **FIX: Store navigator reference BEFORE closing SearchDelegate**
+        final navigator = Navigator.of(context);
         close(context, null);
 
         final authService = provider.Provider.of<AuthService>(context, listen: false);
@@ -517,10 +519,10 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
         if (creator.id == myId) {
           // If navigating to self, pop to root (Profile Tab root)
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          navigator.popUntil((route) => route.isFirst);
         } else {
           // Push profile screen
-          Navigator.of(context).push(
+          navigator.push(
             MaterialPageRoute(
               settings: const RouteSettings(name: 'profile_creator'),
               builder: (_) => ProfileScreen(userId: creator.id),
@@ -558,6 +560,8 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       trailing:
           const Icon(Icons.north_west, size: 14, color: AppColors.textTertiary),
       onTap: () {
+        // **FIX: Store navigator reference BEFORE closing SearchDelegate**
+        final navigator = Navigator.of(context);
         close(context, null);
 
         final authService = provider.Provider.of<AuthService>(context, listen: false);
@@ -565,10 +569,10 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
 
         if (creator.id == myId) {
           // If navigating to self, pop to root (Profile Tab root)
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          navigator.popUntil((route) => route.isFirst);
         } else {
           // Push profile screen
-          Navigator.of(context).push(
+          navigator.push(
             MaterialPageRoute(
               settings: const RouteSettings(name: 'profile_creator'),
               builder: (_) => ProfileScreen(userId: creator.id),

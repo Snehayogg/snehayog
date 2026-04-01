@@ -18,30 +18,30 @@
 const SUPPORTED_VERSIONS = {
   '2025-11-01': {
     releaseDate: new Date('2025-11-01'),
-    deprecated: false,
-    deprecatedDate: null,
-    endOfLifeDate: null,
+    deprecated: true,
+    deprecatedDate: new Date('2026-04-01'),
+    endOfLifeDate: new Date('2026-04-01'),
     description: 'App Launch Version (November 2025)'
   },
   '2026-02-08': {
     releaseDate: new Date('2026-02-08'),
-    deprecated: false,
-    deprecatedDate: null,
-    endOfLifeDate: null,
+    deprecated: true,
+    deprecatedDate: new Date('2026-04-01'),
+    endOfLifeDate: new Date('2026-04-01'),
     description: 'Stability & Optimization Update (February 2026)'
   },
   '2026-02-17': {
     releaseDate: new Date('2026-02-17'),
-    deprecated: false,
-    deprecatedDate: null,
-    endOfLifeDate: null,
+    deprecated: true,
+    deprecatedDate: new Date('2026-04-01'),
+    endOfLifeDate: new Date('2026-04-01'),
     description: 'Upload Fix & Version Sync (February 17, 2026)'
   },
   '2026-03-01': {
     releaseDate: new Date('2026-03-01'),
     deprecated: true,
-    deprecatedDate: new Date('2026-03-02'),
-    endOfLifeDate: null,
+    deprecatedDate: new Date('2026-04-01'),
+    endOfLifeDate: new Date('2026-04-01'),
     description: 'API Optimization & Batch Endpoints (Legacy Arrays)'
   },
   '2026-03-02': {
@@ -57,13 +57,20 @@ const SUPPORTED_VERSIONS = {
     deprecatedDate: null,
     endOfLifeDate: null,
     description: 'API Version Sync (March 12, 2026)'
+  },
+  '2026-04-02': {
+    releaseDate: new Date('2026-04-02'),
+    deprecated: false,
+    deprecatedDate: null,
+    endOfLifeDate: null,
+    description: 'Cloudflare Edge & Direct-to-R2 Integration (April 2, 2026)'
   }
 };
 
 /**
  * Default API version if none specified
  */
-const DEFAULT_VERSION = '2026-03-12';
+const DEFAULT_VERSION = '2026-04-02';
 
 /**
  * Header name for API version

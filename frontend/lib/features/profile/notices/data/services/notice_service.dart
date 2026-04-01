@@ -1,21 +1,14 @@
 import 'dart:convert';
-import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
-import 'package:http/http.dart' as http;
-import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/features/profile/notices/domain/models/notice_model.dart';
+import 'package:vayug/shared/config/app_config.dart';
+import 'package:vayug/shared/services/http_client_service.dart';
 
 class NoticeService {
   Future<List<NoticeModel>> fetchNotices() async {
     try {
-      final token = await AuthService.getToken();
-      if (token == null) return [];
-
-      final response = await http.get(
+      final response = await httpClientService.get(
         Uri.parse('${NetworkHelper.usersEndpoint}/notices'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
       );
 
       if (response.statusCode == 200) {
@@ -34,14 +27,8 @@ class NoticeService {
 
   Future<void> markAsSeen(String noticeId) async {
     try {
-      final token = await AuthService.getToken();
-      if (token == null) return;
-
-      await http.put(
+      await httpClientService.put(
         Uri.parse('${NetworkHelper.usersEndpoint}/notices/$noticeId/seen'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
       );
     } catch (e) {
       AppLogger.log('❌ Error marking notice as seen: $e');
