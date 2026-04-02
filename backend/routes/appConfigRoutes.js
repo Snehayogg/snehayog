@@ -54,8 +54,7 @@ router.get(
             environment: environment,
             apiVersion: req.apiVersion,
             config: JSON.parse(cached),
-            cached: true,
-            timestamp: new Date().toISOString()
+            cached: true
           });
         }
       } catch (cacheError) {
@@ -106,8 +105,7 @@ router.get(
         apiVersion: req.apiVersion,
         config: fallbackConfig.toObject(),
         cached: false,
-        fallback: true,
-        timestamp: new Date().toISOString()
+        fallback: true
       });
     }
     
@@ -135,8 +133,7 @@ router.get(
       environment: environment,
       apiVersion: req.apiVersion,
       config: config.toObject(),
-      cached: false,
-      timestamp: new Date().toISOString()
+      cached: false
     });
   })
 );

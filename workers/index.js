@@ -109,21 +109,24 @@ async function handleApiGateway(request, env) {
   const authHeader = request.headers.get('Authorization');
   const deviceId = request.headers.get('X-Device-Id');
 
-  // Identify Cacheable Routes
+  // Identify Cacheable Routes (More flexible regex)
   const cacheableRoutes = [
-    { pattern: /^\/api\/app-config$/, ttl: 3600, isPrivate: false },
-    { pattern: /^\/api\/videos\/user\/([\w-]+)$/, ttl: 600, isPrivate: true }, // Private because of "earnings" injection
-    { pattern: /^\/api\/videos\/([\da-fA-F]{24})$/, ttl: 3600, isPrivate: false },
-    { pattern: /^\/api\/creator\/analytics\/([\w-]+)$/, ttl: 600, isPrivate: true },
-    { pattern: /^\/api\/users\/profile\/([\w-]+)$/, ttl: 3600, isPrivate: true }
+    { pattern: /^\/api\/app-config\/?$/, ttl: 3600, isPrivate: false },
+    { pattern: /^\/api\/videos\/user\/([\w-]+)\/?$/, ttl: 600, isPrivate: true },
+    { pattern: /^\/api\/videos\/([\da-fA-F]{24})\/?$/, ttl: 3600, isPrivate: false },
+    { pattern: /^\/api\/creator\/analytics\/([\w-]+)\/?$/, ttl: 600, isPrivate: true },
+    { pattern: /^\/api\/users\/profile\/([\w-]+)\/?$/, ttl: 3600, isPrivate: true }
   ];
 
   const route = cacheableRoutes.find(r => r.pattern.test(url.pathname));
 
   // 1. If not cacheable or it's the personalized feed (/api/videos), passthrough
-  if (!route || url.pathname === '/api/videos') {
+  if (!route || url.pathname.startsWith('/api/videos')) {
     console.log(`⏩ Bypassing Cache for: ${url.pathname}`);
-    return fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
+    const response = await fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
+    const newResponse = new Response(response.body, response);
+    newResponse.headers.set('X-Edge-Cache', 'BYPASS');
+    return newResponse;
   }
 
   // 2. Build Cache Key
@@ -160,8 +163,10 @@ async function handleApiGateway(request, env) {
     return newResponse;
   }
 
-  // For non-GET or failed requests, just return the response
-  return response;
+  // For non-GET or failed requests (like 404), still add the debug header
+  const debugResponse = new Response(response.body, response);
+  debugResponse.headers.set('X-Edge-Cache', response.ok ? 'MISS' : 'ERROR-BACKEND');
+  return debugResponse;
 }
 
 /**
