@@ -46,43 +46,8 @@ if (!envLoaded) {
   }
 }
 
-// **DEBUG: Log available environment variables on Railway (for debugging)**
-const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
-if (isRailway) {
-  console.log('🚂 Railway environment detected');
-  const availableEnvVars = Object.keys(process.env).filter(key => 
-    key.includes('RAZORPAY') || 
-    key.includes('MONGO') || 
-    key.includes('JWT') || 
-    key.includes('CLOUD') ||
-    key.includes('ENABLE')
-  );
-  console.log(`📋 Found ${availableEnvVars.length} relevant environment variables:`, availableEnvVars.map(key => `${key}=${process.env[key] ? '***SET***' : 'MISSING'}`).join(', '));
-}
+// **DEBUG: Removed logging of environment variables for confidentiality**
 
-// **DEBUG: Show all relevant environment variables (for Railway debugging)**
-const relevantEnvKeys = Object.keys(process.env).filter(key => 
-  key.includes('RAZORPAY') || 
-  key.includes('MONGO') || 
-  key.includes('JWT') || 
-  key.includes('CLOUD') ||
-  key.includes('ENABLE') ||
-  key.includes('RAILWAY')
-);
-
-if (relevantEnvKeys.length > 0) {
-  console.log('🔍 Environment variables detected:');
-  relevantEnvKeys.forEach(key => {
-    const value = process.env[key];
-    const isSensitive = key.includes('SECRET') || key.includes('KEY') || key.includes('PASSWORD');
-    const displayValue = isSensitive 
-      ? (value ? `***SET (${value.length} chars)***` : 'MISSING')
-      : (value ? value.substring(0, 50) : 'MISSING');
-    console.log(`   ${key}: ${displayValue}`);
-  });
-} else {
-  console.warn('⚠️  No relevant environment variables found (RAZORPAY, MONGO, JWT, CLOUD, ENABLE)');
-}
 
 // Configuration validation
 // **FIX: Make validation lenient to allow healthcheck to work even if some config is missing**
@@ -97,7 +62,7 @@ const validateConfig = () => {
 
   const missingCriticalVars = criticalVars.filter(varName => {
     if (varName === 'MONGODB_URI' || varName === 'MONGO_URI') {
-      return !process.env.MONGODB_URI && !process.env.MONGO_URI;
+      return !process.env.MONGO_URI;
     }
     return !process.env[varName];
   });
@@ -203,10 +168,6 @@ export const config = {
 try {
   validateConfig();
   console.log('✅ Configuration loaded successfully');
-  console.log(`🔍 Environment: ${config.server.nodeEnv}`);
-  console.log(`🔍 Razorpay: ${config.razorpay.keyId ? config.razorpay.environment : 'NOT CONFIGURED'}`);
-  console.log(`🔍 Server Port: ${config.server.port}`);
-  console.log(`🔍 Database URI: ${config.database.uri ? 'SET' : 'MISSING'}`);
 } catch (error) {
   // **FIX: Never exit - just warn. Allow app to start for healthcheck**
   console.warn('⚠️  Configuration validation warnings (app will continue):', error.message);

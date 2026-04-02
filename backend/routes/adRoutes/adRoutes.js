@@ -4,10 +4,11 @@ import AdCampaign from '../../models/AdCampaign.js';
 import AdCreative from '../../models/AdCreative.js';
 import Video from '../../models/Video.js';
 import Invoice from '../../models/Invoice.js';
+import AdImpression from '../../models/AdImpression.js';
+import { AD_CONFIG } from '../../constants/index.js';
 import fs from 'fs';
 import User from '../../models/User.js';
 import { verifyToken } from '../../utils/verifytoken.js';
-import adService from '../../services/adServices/adService.js';
 import adTargetingRoutes from './adTargetingRoutes.js';
 import adCommentRoutes from './adCommentRoutes.js';
 import adCleanupService from '../../services/adServices/adCleanupService.js';
@@ -153,15 +154,7 @@ router.post('/create-with-payment', async (req, res) => {
       link,
       adType,
       budget,
-      targetAudience,
-      targetKeywords,
-      startDate,
-      endDate,
       uploaderId,
-      uploaderName,
-      uploaderProfilePic,
-      estimatedImpressions,
-      fixedCpm,
     } = req.body;
 
     // Validate required fields
@@ -588,102 +581,34 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     console.log(`   -> Date Range: ${new Date(currentYear, currentMonth, 1).toISOString()} to ${new Date(currentYear, currentMonth + 1, 1).toISOString()}`);
 
 
-    // Get video IDs for querying ad impressions
-    const videoIds = userVideos.map(video => video._id);
+    // **SCALABILITY FIX: O(1) Revenue Fetching via CreatorMonthlyStat**
+    const CreatorMonthlyStat = (await import('../../models/CreatorMonthlyStat.js')).default;
+    
+    // Helper to get IST YearMonth
+    const getISTYearMonth = (offsetMonths = 0) => {
+      const dt = new Date();
+      // IST is UTC +5:30
+      const istDate = new Date(dt.getTime() + (5.5 * 60 * 60 * 1000));
+      istDate.setUTCMonth(istDate.getUTCMonth() + offsetMonths);
+      return `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    };
 
-    // **FIXED: Use ACTUAL ad impressions from AdImpression collection (realtime)**
-    const AdImpression = (await import('../../models/AdImpression.js')).default;
-    
-    // **NEW: Aggregate revenue PER VIDEO**
-    // This allows frontend to display breakdown without calculation
-    
-    // 1. Banner Impressions Per Video
-    const bannerImpressionsByVideo = await AdImpression.aggregate([
-      { 
-        $match: { 
-          videoId: { $in: videoIds },
-          adType: 'banner',
-          impressionType: 'view'
-        } 
-      },
-      {
-        $group: {
-          _id: '$videoId',
-          count: { $sum: 1 }
-        }
-      }
+    const currentYearMonth = getISTYearMonth(0);
+    const lastYearMonth = getISTYearMonth(-1);
+
+    const [currentStats, lastStats, allStats] = await Promise.all([
+      CreatorMonthlyStat.findOne({ creatorId: user._id, yearMonth: currentYearMonth }).lean(),
+      CreatorMonthlyStat.findOne({ creatorId: user._id, yearMonth: lastYearMonth }).lean(),
+      CreatorMonthlyStat.find({ creatorId: user._id }).lean()
     ]);
-    
-    // 2. Carousel Impressions Per Video
-    const carouselImpressionsByVideo = await AdImpression.aggregate([
-      { 
-        $match: { 
-          videoId: { $in: videoIds },
-          adType: 'carousel',
-          impressionType: 'view'
-        } 
-      },
-      {
-        $group: {
-          _id: '$videoId',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-    
-    // Create maps for quick lookup
-    const bannerMap = {};
-    bannerImpressionsByVideo.forEach(item => {
-      bannerMap[item._id.toString()] = item.count;
-    });
-    
-    const carouselMap = {};
-    carouselImpressionsByVideo.forEach(item => {
-      carouselMap[item._id.toString()] = item.count;
-    });
-    
-    // CPM Rates
-    const bannerCpm = 20;
-    const carouselCpm = 30;
-    
-    // Calculate total and per-video stats
-    let totalBannerImpressions = 0;
-    let totalCarouselImpressions = 0;
-    let totalRevenueINR = 0.0;
-    
-    const videoStatsArray = userVideos.map(video => {
-      const vid = video._id.toString();
-      const bImp = bannerMap[vid] || 0;
-      const cImp = carouselMap[vid] || 0;
-      
-      totalBannerImpressions += bImp;
-      totalCarouselImpressions += cImp;
-      
-      const bRev = (bImp / 1000) * bannerCpm;
-      const cRev = (cImp / 1000) * carouselCpm;
-      const tRev = bRev + cRev;
-      const cShare = tRev * 0.80;
-      
-      return {
-        videoId: vid,
-        title: video.title || video.description || 'Untitled Video',
-        thumbnail: video.thumbnailUrl,
-        views: video.views || 0,
-        uploadedAt: video.createdAt,
-        
-        // Ad stats
-        bannerImpressions: bImp,
-        carouselImpressions: cImp,
-        totalAdImpressions: bImp + cImp,
-        
-        // Revenue
-        grossRevenue: parseFloat(tRev.toFixed(4)),
-        creatorRevenue: parseFloat(cShare.toFixed(4))
-      };
-    });
-    
-    // Total Revenue (Exact sum of per-video revenue)
-    totalRevenueINR = videoStatsArray.reduce((sum, v) => sum + v.grossRevenue, 0);
+
+    const curMonthRev = currentStats ? currentStats.grossRevenue : 0;
+    const curMonthCreatorRev = curMonthRev * 0.80;
+
+    const lastMonthRev = lastStats ? lastStats.grossRevenue : 0;
+    const lastMonthCreatorRev = lastMonthRev * 0.80;
+
+    const totalRevenueINR = allStats.reduce((sum, s) => sum + (s.grossRevenue || 0), 0);
     const totalCreatorRevenueINR = totalRevenueINR * 0.80;
 
     // Get actual payout records if they exist
@@ -700,44 +625,84 @@ router.get('/creator/revenue/:userId', verifyToken, async (req, res) => {
     const pendingPayouts = payouts
       .filter(p => p.status === 'pending')
       .reduce((sum, p) => sum + (p.amountINR || 0), 0);
-      
-    // **Calculate Monthly Revenue (Current & Last Month)**
 
-    
-    // Helper for monthly aggregation
-    const getMonthlyImpressions = async (month, year, adType) => {
-        // Use UTC to align with database timestamps
-        const start = new Date(Date.UTC(year, month, 1));
-        const end = new Date(Date.UTC(year, month + 1, 1));
+    const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+    const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+    const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
+
+    // **NEW: Live Aggregation for Per-Video Breakdown (matches Profile logic)**
+    // This provides the detailed list that the Revenue Screen needs
+    const videoStatsArray = [];
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+
+      // Aggregate ONLY for the current month to keep it fast
+      const perVideoStats = await AdImpression.aggregate([
+        { 
+          $match: { 
+            creatorId: user._id, 
+            isViewed: true, 
+            timestamp: { $gte: startOfMonth } 
+          } 
+        },
+        { 
+          $group: { 
+            _id: { videoId: '$videoId', adType: '$adType' }, 
+            count: { $sum: 1 } 
+          } 
+        },
+        { 
+          $group: { 
+            _id: '$_id.videoId', 
+            stats: { $push: { adType: '$_id.adType', count: '$count' } } 
+          } 
+        }
+      ]);
+
+      // Map back to video names and titles
+      for (const stat of perVideoStats) {
+        const videoId = stat._id;
+        const videoFull = userVideos.find(v => v._id.toString() === videoId.toString());
         
-        return await AdImpression.countDocuments({
-          videoId: { $in: videoIds },
-          adType: adType,
-          impressionType: 'view',
-          timestamp: { $gte: start, $lt: end }
+        let bannerViews = 0, carouselViews = 0;
+        stat.stats.forEach(s => {
+          if (s.adType === 'banner') bannerViews = s.count;
+          else carouselViews += s.count;
         });
-    };
-    
-    const curMonthBanner = await getMonthlyImpressions(currentMonth, currentYear, 'banner');
-    const curMonthCarousel = await getMonthlyImpressions(currentMonth, currentYear, 'carousel');
-    
-    console.log(`📊 REVENUE BREAKDOWN (Month ${currentMonth}/${currentYear}):`);
-    console.log(`   - Banner Impressions: ${curMonthBanner}`);
-    console.log(`   - Carousel Impressions: ${curMonthCarousel}`);
 
-    const curMonthRev = ((curMonthBanner / 1000) * bannerCpm) + ((curMonthCarousel / 1000) * carouselCpm);
-    const curMonthCreatorRev = curMonthRev * 0.80;
+        const grossRev = (bannerViews / 1000) * bannerCpm + (carouselViews / 1000) * carouselCpm;
+        const creatorRev = grossRev * creatorShare;
+
+        videoStatsArray.push({
+          videoId: videoId,
+          title: videoFull ? videoFull.videoName : 'Unknown Video',
+          videoName: videoFull ? videoFull.videoName : 'Unknown Video',
+          thumbnailUrl: videoFull ? videoFull.thumbnailUrl : '',
+          impressions: bannerViews + carouselViews,
+          bannerImpressions: bannerViews,
+          carouselImpressions: carouselViews,
+          grossRevenue: grossRev,
+          creatorRevenue: creatorRev,
+          views: videoFull ? videoFull.views : 0,
+          likes: videoFull ? videoFull.likes : 0
+        });
+      }
+    } catch (err) {
+      console.error('⚠️ Error populating video stats breakdown:', err);
+    }
+
+    // Monthly Growth (percentage)
+    let monthlyGrowth = 0;
+    if (lastMonthCreatorRev > 0) {
+      monthlyGrowth = ((curMonthCreatorRev - lastMonthCreatorRev) / lastMonthCreatorRev) * 100;
+    } else if (curMonthCreatorRev > 0) {
+      monthlyGrowth = 100; // 100% growth if starting from 0
+    }
     
-    // Last Month
-    const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
-    const lastMonth = lastMonthDate.getMonth();
-    const lastMonthYear = lastMonthDate.getFullYear();
-    
-    const lastMonthBanner = await getMonthlyImpressions(lastMonth, lastMonthYear, 'banner');
-    const lastMonthCarousel = await getMonthlyImpressions(lastMonth, lastMonthYear, 'carousel');
-    
-    const lastMonthRev = ((lastMonthBanner / 1000) * bannerCpm) + ((lastMonthCarousel / 1000) * carouselCpm);
-    const lastMonthCreatorRev = lastMonthRev * 0.80;
+    // Sum exact stats from our pre-aggregated CreatorMonthlyStat collection
+    const totalBannerImpressions = allStats.reduce((sum, s) => sum + (s.bannerImpressions || 0), 0);
+    const totalCarouselImpressions = allStats.reduce((sum, s) => sum + (s.carouselImpressions || 0), 0);
 
     // **NEW: Response with per-video breakdown**
     const response = {

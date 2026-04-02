@@ -1943,7 +1943,7 @@
                         <td>${createdAt}</td>
                         <td>
                             <div style="display: flex; gap: 5px;">
-                                <button class="btn btn-danger btn-sm" onclick="removeReportedVideo('${report.targetId}', '${videoName.replace(/'/g, "\\'")}', '${report._id}')">
+                                <button class="btn btn-warning btn-sm" onclick="removeVideoWithTransparency('${report.targetId}', '${videoName.replace(/'/g, "\\'")}', '${report._id}', '${reason.replace(/'/g, "\\'")}')">
                                     🗑️ Remove Video
                                 </button>
                                 <button class="btn btn-success btn-sm" onclick="dismissReport('${report._id}')">
@@ -2131,8 +2131,8 @@
                         <td>${formatNumber(video.likes || 0)}</td>
                         <td>${createdAt}</td>
                         <td>
-                            <button class="btn btn-danger btn-sm" onclick="deleteVideo('${videoId}', '${escapeHtml(name)}')">
-                                🗑️ Delete
+                            <button class="btn btn-danger btn-sm" onclick="removeVideoWithTransparency('${videoId}', '${escapeHtml(name)}')">
+                                🗑️ Remove
                             </button>
                         </td>
                     </tr>
@@ -2178,8 +2178,44 @@
             `;
         }
 
+        async function removeVideoWithTransparency(videoId, videoName, reportId = null, defaultReason = 'Community Guidelines Violation') {
+            const reason = prompt(`Reason for removing "${videoName}":\n(Creator will see this)`, defaultReason);
+            if (reason === null) return;
+
+            if (!confirm(`⚠️ PERMANENT DELETION ⚠️\n\nThis will delete the video from the DB, but keep a 3-day log for the creator.\n\nContinue?`)) {
+                return;
+            }
+
+            try {
+                setLoading(true);
+                const response = await authorizedFetch(`${API_BASE}/admin/videos/${videoId}/remove`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason.trim() })
+                });
+
+                if (response && response.ok) {
+                    showSuccess(`Video removed and logged for transparency.`);
+                    if (reportId) dismissReport(reportId, false);
+                    loadVideos();
+                    loadReportedVideos();
+                    loadPayoutStats();
+                } else {
+                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    showError(`Failed: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error removing video:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
         async function deleteVideo(videoId, videoName) {
-            if (!confirm(`Are you sure you want to delete this video?\n\nVideo: ${videoName}\n\nThis action cannot be undone!`)) {
+            // Keep this as a backup hard-delete method if needed, 
+            // but we'll use removeVideoWithTransparency for standard moderation.
+            if (!confirm(`Are you sure you want to PERMANENTLY delete this video without logging it for the creator?\n\nVideo: ${videoName}`)) {
                 return false;
             }
 

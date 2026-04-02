@@ -225,6 +225,7 @@ router.get('/profile', verifyToken, async (req, res) => {
       name: currentUser.name,
       email: currentUser.email,
       profilePic: currentUser.profilePic,
+      websiteUrl: currentUser.websiteUrl, // Adding websiteUrl to payload
       videos: currentUser.videos,
       preferredCurrency: currentUser.preferredCurrency,
       preferredPaymentMethod: currentUser.preferredPaymentMethod,
@@ -552,6 +553,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
       googleId: user.googleId,
       name: user.name,
       profilePic: user.profilePic,
+      websiteUrl: user.websiteUrl, // Adding websiteUrl to payload
       videos: user.videos,
       rank,
       // **SENSITIVE FIELDS**: Only include if owner

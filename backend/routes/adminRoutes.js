@@ -8,6 +8,7 @@ import CreatorPayout from '../models/CreatorPayout.js';
 import AdImpression from '../models/AdImpression.js';
 import View from '../models/View.js';
 import Notice from '../models/Notice.js';
+import RemovedVideoRecord from '../models/RemovedVideoRecord.js';
 import { AD_CONFIG } from '../constants/index.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 
@@ -1012,6 +1013,73 @@ router.delete('/videos/:videoId', requireAdminDashboardKey, async (req, res) => 
   } catch (error) {
     console.error('❌ Error deleting video:', error);
     res.status(500).json({ success: false, error: 'Failed to delete video' });
+  }
+});
+
+// **NEW: Video Soft-Removal (Transparency Logging then Permanent Deletion)**
+router.post('/videos/:videoId/remove', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ error: 'Reason for removal is required' });
+    }
+
+    const video = await Video.findById(videoId).populate('uploader');
+    if (!video) {
+        return res.status(404).json({ error: 'Video not found' });
+    }
+
+    const uploaderId = video.uploader ? video.uploader.googleId : null;
+    
+    if (!uploaderId) {
+      return res.status(400).json({ error: 'Uploader information not found' });
+    }
+
+    // 1. Create a record in RemovedVideoRecord for transparency (3-day history)
+    await RemovedVideoRecord.create({
+      originalVideoId: video._id,
+      uploaderId: uploaderId,
+      videoName: video.videoName,
+      thumbnailUrl: video.thumbnailUrl,
+      reason: reason,
+      removedAt: new Date()
+    });
+
+    // 2. Notify the creator via Notice system
+    try {
+      await Notice.create({
+        userId: uploaderId,
+        title: `Content Removed: ${video.videoName}`,
+        type: 'warning'
+      });
+    } catch (noticeError) {
+      console.warn('⚠️ Admin Moderation: Failed to create notice', noticeError);
+    }
+
+    // 3. Remove the video ID from the user's videos array
+    await User.findOneAndUpdate(
+      { googleId: uploaderId },
+      { $pull: { videos: video._id } }
+    );
+
+    // 4. PERMANENTLY DELETE the video from the database
+    await Video.findByIdAndDelete(videoId);
+
+    res.json({
+      success: true,
+      message: 'Video permanently removed and logged for creator transparency.',
+      removalInfo: {
+        id: videoId,
+        name: video.videoName,
+        reason: reason
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Admin Moderation Error:', error);
+    res.status(500).json({ error: 'Internal server error during removal' });
   }
 });
 

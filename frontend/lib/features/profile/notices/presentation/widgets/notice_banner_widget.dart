@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/typography.dart';
 
 class NoticeBannerWidget extends StatelessWidget {
   final ProfileStateManager manager;
@@ -25,13 +27,13 @@ class NoticeBannerWidget extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: isWarning ? Colors.red.shade50 : Colors.blue.shade50,
+        color: isWarning ? AppColors.error.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
         border: Border(
           bottom: BorderSide(
-            color: isWarning ? Colors.red.shade200 : Colors.blue.shade200,
-            width: 1,
+            color: isWarning ? AppColors.error.withOpacity(0.3) : AppColors.primary.withOpacity(0.3),
+            width: 0.5,
           ),
         ),
       ),
@@ -39,18 +41,20 @@ class NoticeBannerWidget extends StatelessWidget {
         children: [
           Icon(
             isWarning ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-            color: isWarning ? Colors.red.shade700 : Colors.blue.shade700,
-            size: 20,
+            color: isWarning ? AppColors.error : AppColors.primary,
+            size: 18,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               notice.title,
-              style: TextStyle(
-                color: isWarning ? Colors.red.shade900 : Colors.blue.shade900,
-                fontSize: 14,
+              style: AppTypography.bodySmall.copyWith(
+                color: isWarning ? AppColors.error : AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

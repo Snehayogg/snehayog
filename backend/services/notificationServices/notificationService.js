@@ -55,10 +55,7 @@ const initializeFirebase = () => {
     });
 
     firebaseInitialized = true;
-    console.log(
-      '✅ Firebase Admin initialized successfully for project:',
-      serviceAccountJson.project_id || '(unknown project)'
-    );
+    console.log('✅ Firebase Admin initialized successfully');
   } catch (error) {
     console.error('❌ Error initializing Firebase Admin:', error.message);
     console.warn('⚠️ Push notifications will be disabled');

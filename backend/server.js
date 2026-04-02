@@ -463,11 +463,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Start server - PRODUCTION SAFE with proper error handling
 const startServer = async () => {
   try {
-    // Log server configuration for debugging
-    console.log('🔍 Server Configuration:');
-    console.log(`   PORT: ${PORT} (from ${process.env.PORT ? 'process.env.PORT' : 'fallback'})`);
-    console.log(`   HOST: ${HOST}`);
-    console.log(`   NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+    console.log('🔍 Starting server...');
 
     // **FIX: Start HTTP server FIRST so healthcheck works immediately**
     // Database connection will happen in background (non-blocking)

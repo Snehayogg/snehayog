@@ -12,6 +12,7 @@ import redisService from '../services/caching/redisService.js';
 import FeedQueueService from '../services/yugFeedServices/feedQueueService.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 import queueService from '../services/yugFeedServices/queueService.js';
+import RemovedVideoRecord from '../models/RemovedVideoRecord.js';
 import { VideoCacheKeys, invalidateCache } from '../middleware/cacheMiddleware.js';
 import { AD_CONFIG } from '../constants/index.js';
 import { calculateVideoHash, convertLikedByToGoogleIds } from '../utils/videoUtils.js';
@@ -826,6 +827,43 @@ export const getUserVideos = async (req, res) => {
 };
 
 /**
+ * Get Removed Videos for Creator Dashboard (Transparency)
+ * Fetches from the Moderation Log collection.
+ */
+export const getRemovedVideos = async (req, res) => {
+  try {
+    const googleId = req.user.googleId;
+    if (!googleId) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Fetch records from the log collection instead of the main Video collection
+    const removedStats = await RemovedVideoRecord.find({ uploaderId: googleId })
+      .sort({ removedAt: -1 })
+      .lean();
+
+    const result = removedStats.map(v => {
+      // Safely handle Date vs String for removedAt (lean results can vary)
+      const removedDate = v.removedAt instanceof Date ? v.removedAt : new Date(v.removedAt);
+      const expiresAt = new Date(removedDate.getTime() + (3 * 24 * 60 * 60 * 1000));
+
+      return {
+        _id: v._id.toString(),
+        id: v._id.toString(), // Support both mappings
+        videoName: v.videoName,
+        thumbnailUrl: v.thumbnailUrl,
+        reason: v.reason || 'Violation of Terms',
+        removedAt: removedDate.toISOString(),
+        expiresAt: expiresAt.toISOString()
+      };
+    });
+
+    return res.json(result);
+  } catch (error) {
+    console.error('❌ Error fetching removed videos:', error);
+    res.status(500).json({ error: 'Failed to fetch removed videos' });
+  }
+};
+
+/**
  * Get Global Leaderboard
  */
 export const getGlobalLeaderboard = async (req, res) => {
@@ -884,7 +922,7 @@ export const getFeed = async (req, res) => {
       const skip = (pageNum - 1) * limitNum;
       const query = { 
         videoType: type,
-        processingStatus: 'completed'
+        processingStatus: 'completed' // This already excludes 'removed'
       };
       
       finalVideos = await Video.find(query)

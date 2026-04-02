@@ -69,6 +69,7 @@ class ProfileStateManager extends ChangeNotifier {
   bool _isEarningsLoading = false;
   bool _needsVideoRefresh = false; // Flag for post-upload refresh
   Timer? _processingStatusPoller;
+  Timer? _noticeTimer;
   bool _isProcessingPollInFlight = false;
   static const Duration _processingStatusPollInterval = Duration(seconds: 5);
 
@@ -631,7 +632,8 @@ class ProfileStateManager extends ChangeNotifier {
       final loggedInUser = await _authService.getUserData();
       final bool isMyProfile = userId == null ||
           userId == loggedInUser?['id'] ||
-          userId == loggedInUser?['googleId'];
+          userId == loggedInUser?['googleId'] ||
+          userId == loggedInUser?['_id'];
 
       if (page == 1) {
         // **PRESERVE OPTIMISTIC VIDEOS during refresh**
@@ -797,7 +799,7 @@ class ProfileStateManager extends ChangeNotifier {
           // Summary returns { 'thisMonth': double, 'lastMonth': double, ... }
           if (summary.containsKey('thisMonth')) {
             final thisMonth = summary['thisMonth'];
-            if (thisMonth is num && thisMonth > 0) {
+            if (thisMonth is num && thisMonth >= 0) {
               earnings = thisMonth.toDouble();
               usedBackend = true;
               AppLogger.log(
@@ -2028,6 +2030,25 @@ class ProfileStateManager extends ChangeNotifier {
   }
 
   // Cleanup
+  void _scheduleNoticeRemoval() {
+    _noticeTimer?.cancel();
+    if (_activeNotice?.firstSeenAt == null) return;
+
+    final now = DateTime.now();
+    final elapsed = now.difference(_activeNotice!.firstSeenAt!);
+    final remaining = const Duration(hours: 1) - elapsed;
+
+    if (remaining.isNegative) {
+      _activeNotice = null;
+      notifyListenersSafe();
+    } else {
+      _noticeTimer = Timer(remaining, () {
+        _activeNotice = null;
+        notifyListenersSafe();
+      });
+    }
+  }
+
   Future<void> _fetchActiveNotice() async {
     try {
       _isNoticeLoading = true;
@@ -2041,6 +2062,8 @@ class ProfileStateManager extends ChangeNotifier {
         // If it was already seen but expired, clear it
         if (_activeNotice!.isExpired) {
           _activeNotice = null;
+        } else if (_activeNotice!.firstSeenAt != null) {
+          _scheduleNoticeRemoval();
         }
       } else {
         _activeNotice = null;
@@ -2062,6 +2085,16 @@ class ProfileStateManager extends ChangeNotifier {
   Future<void> markNoticeAsSeen() async {
     if (_activeNotice == null) return;
     try {
+      if (_activeNotice!.firstSeenAt == null) {
+        _activeNotice = NoticeModel(
+          id: _activeNotice!.id,
+          title: _activeNotice!.title,
+          type: _activeNotice!.type,
+          firstSeenAt: DateTime.now(),
+          createdAt: _activeNotice!.createdAt,
+        );
+        _scheduleNoticeRemoval();
+      }
       await _noticeService.markAsSeen(_activeNotice!.id);
     } catch (e) {
       AppLogger.log('⚠️ ProfileStateManager: Error marking notice as seen: $e');
@@ -2073,6 +2106,7 @@ class ProfileStateManager extends ChangeNotifier {
   void dispose() {
     _isDisposed = true; // Mark as disposed for background tasks
     _stopProcessingStatusPolling();
+    _noticeTimer?.cancel();
     _isProcessingPollInFlight = false;
 
     nameController.dispose();

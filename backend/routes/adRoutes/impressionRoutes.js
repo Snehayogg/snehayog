@@ -4,6 +4,8 @@ import AdCreative from '../../models/AdCreative.js';
 import AdImpression from '../../models/AdImpression.js';
 import User from '../../models/User.js';
 import Video from '../../models/Video.js'; // Import Video model to fetch creatorId
+import CreatorMonthlyStat from '../../models/CreatorMonthlyStat.js';
+import { AD_CONFIG } from '../../constants/index.js';
 
 const router = express.Router();
 const DAILY_VIEW_FREQUENCY_CAP = 3;
@@ -45,6 +47,39 @@ async function normalizeUserId(userId) {
   
   // If user not found, return null (will be stored as anonymous)
   return null;
+}
+
+// **NEW: Helper to update real-time revenue stats**
+async function updateMonthlyStats(creatorId, adType) {
+  if (!creatorId) return;
+
+  try {
+    // Calculate IST yearMonth
+    const now = new Date();
+    const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const yearMonth = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    const update = { $inc: {} };
+    const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
+    const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
+
+    if (adType === 'banner') {
+      update.$inc.bannerImpressions = 1;
+      update.$inc.grossRevenue = (1 / 1000) * bannerCpm;
+    } else if (adType === 'carousel') {
+      update.$inc.carouselImpressions = 1;
+      update.$inc.grossRevenue = (1 / 1000) * carouselCpm;
+    }
+
+    await CreatorMonthlyStat.findOneAndUpdate(
+      { creatorId, yearMonth },
+      update,
+      { upsert: true, new: true }
+    );
+    // console.log(`📈 Real-time stats updated for ${creatorId} [${yearMonth}] (${adType})`);
+  } catch (error) {
+    console.error('⚠️ Error updating real-time revenue stats:', error);
+  }
 }
 
 // POST /ads/impressions/banner - Track banner ad impression
@@ -361,7 +396,17 @@ router.post('/impressions/banner/view', async (req, res) => {
 
       if (impression) {
         // ... update existing impression
+        impression.isViewed = true;
+        impression.viewDuration = viewDuration;
+        impression.viewCount = (impression.viewCount || 0) + 1;
+        await impression.save();
+        
+        // **NEW: Update real-time stats**
+        if (impression.creatorId) {
+          await updateMonthlyStats(impression.creatorId, 'banner');
+        }
       } else {
+
         // **OPTIMIZATION: Get creatorId from request or fetch from Video**
         let creatorId = providedCreatorId;
         
@@ -393,6 +438,9 @@ router.post('/impressions/banner/view', async (req, res) => {
         frequencyCap: DAILY_VIEW_FREQUENCY_CAP,
         timestamp: new Date()
       });
+      
+      // **NEW: Update real-time stats**
+      await updateMonthlyStats(creatorId, 'banner');
       // console.log(`✅ New banner ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     }
 
@@ -477,7 +525,17 @@ router.post('/impressions/carousel/view', async (req, res) => {
 
       if (impression) {
         // ... update existing impression
+        impression.isViewed = true;
+        impression.viewDuration = viewDuration;
+        impression.viewCount = (impression.viewCount || 0) + 1;
+        await impression.save();
+        
+        // **NEW: Update real-time stats**
+        if (impression.creatorId) {
+          await updateMonthlyStats(impression.creatorId, 'carousel');
+        }
       } else {
+
         // **OPTIMIZATION: Get creatorId from request or fetch from Video**
         let creatorId = providedCreatorId;
         
@@ -508,6 +566,9 @@ router.post('/impressions/carousel/view', async (req, res) => {
         frequencyCap: DAILY_VIEW_FREQUENCY_CAP,
         timestamp: new Date()
       });
+      
+      // **NEW: Update real-time stats**
+      await updateMonthlyStats(creatorId, 'carousel');
       // console.log(`✅ New carousel ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     }
 

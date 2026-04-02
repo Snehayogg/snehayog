@@ -13,9 +13,7 @@ class AnalyticsService {
   Future<CreatorAnalytics> getCreatorAnalytics(String userId) async {
     try {
       final token = await AuthService.getToken();
-      if (token == null) {
-        throw Exception('Not authenticated');
-      }
+      if (token == null) throw Exception('Not authenticated');
 
       final response = await httpClientService.get(
         Uri.parse('$baseUrl/api/videos/creator/analytics/$userId'),
@@ -35,6 +33,41 @@ class AnalyticsService {
     } catch (e) {
       AppLogger.log('❌ AnalyticsService: Error in getCreatorAnalytics: $e');
       rethrow;
+    }
+  }
+
+  Future<List<RemovedVideo>> getRemovedVideos() async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await httpClientService.get(
+        Uri.parse('$baseUrl/api/videos/removed'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        final List<RemovedVideo> result = [];
+        for (var v in data) {
+          try {
+            result.add(RemovedVideo.fromJson(v));
+          } catch (e) {
+            AppLogger.log('❌ AnalyticsService: JSON Parsing Error: $e');
+            AppLogger.log('❌ Raw Item: $v');
+          }
+        }
+        return result;
+      } else {
+        AppLogger.log('❌ AnalyticsService: Server Error ${response.statusCode}: ${response.body}');
+        return [];
+      }
+    } catch (e) {
+      AppLogger.log('❌ AnalyticsService: Error in getRemovedVideos: $e');
+      return [];
     }
   }
 }

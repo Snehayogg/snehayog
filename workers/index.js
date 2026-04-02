@@ -17,12 +17,14 @@ export default {
     }
 
     // ROUTE: API Gateway (Phase 2)
-    if (request.method === 'GET' && url.pathname.startsWith('/api')) {
+    // Support GET and HEAD (for curl -I tests)
+    if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname.startsWith('/api')) {
       return handleApiGateway(request, env);
     }
 
-    console.log(`⚠️ Not Found: ${url.pathname}`);
-    return new Response('Not Found', { status: 404 });
+    // Default: Forward to Backend (Origin) instead of 404
+    console.log(`⏩ Passthrough: ${url.pathname}`);
+    return fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
   },
 
   // --- 2. R2 Event Handler (Phase 3) ---
@@ -100,41 +102,76 @@ async function handleUploadRequest(request, env) {
 }
 
 /**
- * Phase 2: API Gateway Logic
+ * Phase 2: API Gateway Logic (Optimized for Edge Caching)
  */
 async function handleApiGateway(request, env) {
   const url = new URL(request.url);
-  
+  const authHeader = request.headers.get('Authorization');
+  const deviceId = request.headers.get('X-Device-Id');
+
+  // Identify Cacheable Routes
   const cacheableRoutes = [
-    { pattern: /^\/api\/users\/profile\/([\w-]+)/, ttl: 3600 },
-    { pattern: /^\/api\/videos$/, ttl: 300 }
+    { pattern: /^\/api\/app-config$/, ttl: 3600, isPrivate: false },
+    { pattern: /^\/api\/videos\/user\/([\w-]+)$/, ttl: 600, isPrivate: true }, // Private because of "earnings" injection
+    { pattern: /^\/api\/videos\/([\da-fA-F]{24})$/, ttl: 3600, isPrivate: false },
+    { pattern: /^\/api\/creator\/analytics\/([\w-]+)$/, ttl: 600, isPrivate: true },
+    { pattern: /^\/api\/users\/profile\/([\w-]+)$/, ttl: 3600, isPrivate: true }
   ];
 
   const route = cacheableRoutes.find(r => r.pattern.test(url.pathname));
-  if (!route) {
+
+  // 1. If not cacheable or it's the personalized feed (/api/videos), passthrough
+  if (!route || url.pathname === '/api/videos') {
     console.log(`⏩ Bypassing Cache for: ${url.pathname}`);
     return fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
   }
 
-  const cacheKey = `cache:${url.pathname}${url.search}`;
-  const cachedBody = await env.VAYUG_CACHE.get(cacheKey);
-
-  if (cachedBody) {
-    console.log(`🚀 Edge Cache HIT: ${url.pathname}`);
-    return new Response(cachedBody, { headers: { 'Content-Type': 'application/json', 'X-Edge-Cache': 'HIT' } });
+  // 2. Build Cache Key
+  let cacheKey = `cache:${url.pathname}${url.search}`;
+  if (route.isPrivate) {
+    // For private routes, key by Auth token or Device ID to prevent leak
+    const identity = authHeader ? await hashString(authHeader) : (deviceId || 'anon');
+    cacheKey += `:${identity}`;
   }
 
-  console.log(`☁️ Edge Cache MISS: ${url.pathname} (Fetching from Backend)`);
-  const response = await fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
-  if (response.ok) {
+  // 3. Try Cache
+  const cachedBody = await env.VAYUG_CACHE.get(cacheKey);
+  if (cachedBody) {
+    console.log(`🚀 Edge Cache HIT: ${url.pathname} (Key: ${cacheKey.split(':').pop()})`);
+    return new Response(cachedBody, { 
+      headers: { 'Content-Type': 'application/json', 'X-Edge-Cache': 'HIT' } 
+    });
+  }
+
+  // 4. Cache Miss: Fetch from Backend
+  console.log(`☁️ Edge Cache MISS: ${url.pathname}. Fetching from origin...`);
+  const response = await fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { 
+    headers: request.headers,
+    method: request.method // Use the original method (GET or HEAD)
+  });
+
+  if (response.ok && request.method === 'GET') {
     const body = await response.clone().text();
+    // Cache the response with TTL
     await env.VAYUG_CACHE.put(cacheKey, body, { expirationTtl: route.ttl });
+    
     const newResponse = new Response(body, response);
     newResponse.headers.set('X-Edge-Cache', 'MISS');
     return newResponse;
   }
 
+  // For non-GET or failed requests, just return the response
   return response;
+}
+
+/**
+ * Helper: Simple SHA-256 hash for cache keys
+ */
+async function hashString(str) {
+  const msgUint8 = new TextEncoder().encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).slice(0, 16).join('');
 }
 
 /**

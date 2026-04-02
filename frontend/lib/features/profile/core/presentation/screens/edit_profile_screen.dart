@@ -108,9 +108,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         widget.stateManager.websiteController.text = _websiteController.text.trim();
         
         await widget.stateManager.saveProfile();
+        
         if (mounted) {
+          // Navigate back to ProfileScreen
           Navigator.pop(context);
-          VayuSnackBar.showSuccess(context, 'Profile updated successfully');
+          
+          // Show success message on the Profile screen
+          VayuSnackBar.showSuccess(
+            context, 
+            AppText.get('profile_updated_success', fallback: 'Profile updated successfully'),
+          );
         }
       } catch (e) {
         if (mounted) {

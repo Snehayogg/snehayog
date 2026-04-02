@@ -168,3 +168,41 @@ class NewVsReturning {
     );
   }
 }
+
+class RemovedVideo {
+  final String id;
+  final String videoName;
+  final String thumbnailUrl;
+  final String reason;
+  final DateTime removedAt;
+  final DateTime expiresAt;
+
+  RemovedVideo({
+    required this.id,
+    required this.videoName,
+    required this.thumbnailUrl,
+    required this.reason,
+    required this.removedAt,
+    required this.expiresAt,
+  });
+
+  factory RemovedVideo.fromJson(Map<String, dynamic> json) {
+    return RemovedVideo(
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      videoName: json['videoName'] ?? 'Unnamed Video',
+      thumbnailUrl: json['thumbnailUrl'] ?? '',
+      reason: json['reason'] ?? 'Violation of Guidelines',
+      removedAt: json['removedAt'] != null 
+          ? DateTime.parse(json['removedAt']) 
+          : DateTime.now(),
+      expiresAt: json['expiresAt'] != null 
+          ? DateTime.parse(json['expiresAt']) 
+          : DateTime.now().add(const Duration(days: 3)),
+    );
+  }
+
+  int get daysLeft {
+    final difference = expiresAt.difference(DateTime.now()).inDays;
+    return difference < 0 ? 0 : difference;
+  }
+}

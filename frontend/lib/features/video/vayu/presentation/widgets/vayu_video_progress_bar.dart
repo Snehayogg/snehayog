@@ -100,21 +100,7 @@ class _VayuVideoProgressBarState extends State<VayuVideoProgressBar> with Ticker
         widget.controller.value.duration.inMilliseconds;
   }
 
-  void _handleTapDown(TapDownDetails details) {
-    if (!widget.controller.value.isInitialized) return;
-    
-    final width = context.size?.width ?? 1.0;
-    final relative = (details.localPosition.dx / width).clamp(0.0, 1.0);
-    
-    HapticFeedback.mediumImpact(); // Grab feel
-    _dragPosition.value = relative;
-    _seekTo(relative);
-    
-    if (widget.onProgressUpdate != null) {
-      final position = Duration(milliseconds: (widget.controller.value.duration.inMilliseconds * relative).toInt());
-      widget.onProgressUpdate!(relative, position);
-    }
-  }
+  // Tap-to-seek removed to prevent accidental jump when interacting with controls
 
   void _handleDragStart(DragStartDetails details) {
     if (!widget.controller.value.isInitialized) return;
@@ -185,7 +171,7 @@ class _VayuVideoProgressBarState extends State<VayuVideoProgressBar> with Ticker
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: _handleTapDown,
+      // onTapDown removed to disable tap-to-seek (prevent accidental seeks)
       onHorizontalDragStart: _handleDragStart,
       onHorizontalDragUpdate: _handleDragUpdate,
       onHorizontalDragEnd: _handleDragEnd,

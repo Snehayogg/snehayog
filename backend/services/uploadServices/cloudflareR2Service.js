@@ -15,10 +15,7 @@ class CloudflareR2Service {
     // **NEW: Presigned URL support**
     this.getSignedUrl = getSignedUrl;
     
-    console.log('🔧 Cloudflare R2 Service Configuration:');
-    console.log('   Account ID:', this.accountId ? '✓ Set' : '✗ Missing');
-    console.log('   Bucket Name:', this.bucketName ? '✓ Set' : '✗ Missing');
-    console.log('   Custom Domain:', this.publicDomain ? `✓ ${this.publicDomain}` : '⚠ Using direct R2 URLs');
+    // **REMOVED: Sensitive configuration logging**
     
     // S3-compatible client for Cloudflare R2
     this.s3Client = new S3Client({
@@ -97,13 +94,11 @@ class CloudflareR2Service {
       // Use custom domain with HTTPS
       const cleanDomain = this.publicDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
       const url = `https://${cleanDomain}/${normalizedKey}`;
-      console.log('🔗 Generated custom domain URL:', url);
       return url;
     }
 
     // Fallback to direct R2 URL if custom domain not set
     const directR2Url = `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${normalizedKey}`;
-    console.log('🔗 Generated direct R2 URL (fallback):', directR2Url);
     return directR2Url;
   }
 

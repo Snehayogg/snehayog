@@ -6,7 +6,6 @@ import 'package:vayug/core/providers/auth_providers.dart';
 
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
-
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/features/ads/data/services/ad_service.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
@@ -35,6 +34,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   
   Map<String, dynamic>? _revenueData;
   CreatorAnalytics? _analytics;
+  List<RemovedVideo> _removedVideos = [];
   
   bool _isLoading = true;
   String? _errorMessage;
@@ -63,6 +63,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
         await Future.wait([
           _fetchRevenueData(forceRefresh),
           _fetchAnalytics(userId),
+          _fetchRemovedVideos(),
         ]);
 
         if (mounted) {
@@ -101,6 +102,17 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
       }
     } catch (e) {
       AppLogger.log('⚠️ Analytics load failed: $e');
+    }
+  }
+
+  Future<void> _fetchRemovedVideos() async {
+    try {
+      final data = await _analyticsService.getRemovedVideos();
+      if (mounted) {
+        setState(() => _removedVideos = data);
+      }
+    } catch (e) {
+      AppLogger.log('⚠️ Removed videos load failed: $e');
     }
   }
 
@@ -213,6 +225,10 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
             _buildRevenueOverviewCard(),
             AppSpacing.vSpace24,
             _buildRevenueBreakdownCard(),
+            if (_removedVideos.isNotEmpty) ...[
+              AppSpacing.vSpace24,
+              _buildRemovedVideosSection(),
+            ],
           ],
         ),
       ),
@@ -405,7 +421,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   Widget _buildRevenueOverviewCard() {
     final thisMonth = (_revenueData?['thisMonth'] as num?)?.toDouble() ?? 0.0;
     final lastMonth = (_revenueData?['lastMonth'] as num?)?.toDouble() ?? 0.0;
-    final grossPoints = thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
+    final totalPoints = thisMonth > 0 ? thisMonth / AppConfig.creatorRevenueShare : 0.0;
 
     return Container(
       padding: EdgeInsets.all(AppSpacing.spacing5),
@@ -419,17 +435,17 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
           const Text("Creator Performance Points", style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
           AppSpacing.vSpace8,
           Text(
-            thisMonth.toStringAsFixed(1),
+            thisMonth.toStringAsFixed(2),
             style: AppTypography.displaySmall.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
           ),
           AppSpacing.vSpace24,
           Row(
             children: [
               Expanded(
-                child: _buildRevenueStat("Total Points", grossPoints.toStringAsFixed(1), Icons.stars),
+                child: _buildRevenueStat("Total Points", totalPoints.toStringAsFixed(2), Icons.stars),
               ),
               Expanded(
-                child: _buildRevenueStat("Last Period", lastMonth.toStringAsFixed(1), Icons.history),
+                child: _buildRevenueStat("Last Period", lastMonth.toStringAsFixed(2), Icons.history),
               ),
             ],
           ),
@@ -467,9 +483,9 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
           ),
           child: Column(
             children: [
-              _buildBreakdownRow("Creator Points", thisMonth.toStringAsFixed(1), AppColors.success),
+              _buildBreakdownRow("Creator Points", thisMonth.toStringAsFixed(2), AppColors.success),
               const Divider(height: 24),
-              _buildBreakdownRow("Platform Support", (thisMonth * 0.25).toStringAsFixed(1), AppColors.textSecondary),
+              _buildBreakdownRow("Platform Support", (thisMonth * 0.25).toStringAsFixed(2), AppColors.textSecondary),
             ],
           ),
         ),
@@ -483,6 +499,86 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
       children: [
         Text(label, style: AppTypography.bodyMedium),
         Text(value, style: AppTypography.bodyLarge.copyWith(color: color, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildRemovedVideosSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 20),
+            AppSpacing.hSpace8,
+            Text("Content Violations", style: AppTypography.titleMedium.copyWith(color: AppColors.error)),
+          ],
+        ),
+        AppSpacing.vSpace12,
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _removedVideos.length,
+          separatorBuilder: (_, __) => AppSpacing.vSpace12,
+          itemBuilder: (context, index) {
+            final video = _removedVideos[index];
+            return Container(
+              padding: EdgeInsets.all(AppSpacing.spacing3),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundSecondary,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  // Non-playable Thumbnail with overlay
+                  Stack(
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 45,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          image: DecorationImage(
+                            image: NetworkImage(video.thumbnailUrl),
+                            fit: BoxFit.cover,
+                            colorFilter: ColorFilter.mode(
+                              Colors.black.withOpacity(0.6),
+                              BlendMode.darken,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Positioned.fill(
+                        child: Center(
+                          child: Icon(Icons.block, color: Colors.white, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
+                  AppSpacing.hSpace12,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          video.videoName,
+                          style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          "Reason: ${video.reason}",
+                          style: TextStyle(color: AppColors.error.withOpacity(0.8), fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }

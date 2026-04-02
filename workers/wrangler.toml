@@ -14,5 +14,5 @@ id = "272b4726d4ad49fc9538b96aa116495c" # User will need to create this via `wra
 
 [vars]
 # API Base URL for your Fly.io/Backend
-BACKEND_URL = "https://api.snehayog.site" 
+BACKEND_URL = "https://vayug.fly.dev" 
 # JWT Secret should be set using `wrangler secret put JWT_SECRET`

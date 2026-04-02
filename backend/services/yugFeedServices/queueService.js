@@ -31,7 +31,7 @@ if (redisUrl) {
         rejectUnauthorized: false
       } : undefined,
     };
-    console.log(`🔧 QueueService: Configured using Redis URL (TLS): ${parsedUrl.hostname}:${parsedUrl.port}`);
+    console.log('✅ QueueService: Connected to Redis');
   } catch (err) {
     console.error('❌ QueueService: Error parsing REDIS_URL:', err.message);
   }
@@ -47,7 +47,6 @@ const videoQueue = new Queue('video-processing', {
 
 class FeedQueueService {
     constructor() {
-        console.log('🔄 FeedQueueService: Initialized (with actual Queue support)');
         this.addRankCalculationJob(); // Schedule initial job
     }
 

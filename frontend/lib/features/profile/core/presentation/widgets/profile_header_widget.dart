@@ -50,104 +50,111 @@ class ProfileHeaderWidget extends ConsumerWidget {
               _buildAvatar(stateManager),
               const SizedBox(width: 20),
               Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        context,
-                        label: AppText.get('profile_stat_subscribers'),
-                        value:
-                            _getFollowersCountString(context, stateManager, ref),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: _buildStatItem(
+                            context,
+                            label: AppText.get('profile_stat_subscribers'),
+                            value:
+                                _getFollowersCountString(context, stateManager, ref),
+                          ),
+                        ),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: AppColors.borderPrimary,
+                        ),
+                        Expanded(
+                          child: _buildStatItem(
+                            context,
+                            label: AppText.get('profile_stat_content'),
+                            value: stateManager.totalVideoCount.toString(),
+                          ),
+                        ),
+                        Container(
+                          height: 24,
+                          width: 1,
+                          color: AppColors.borderPrimary,
+                        ),
+                        Expanded(
+                          child: _buildStatItem(
+                            context,
+                            label: isViewingOwnProfile
+                                ? AppText.get('profile_stat_earnings')
+                                : AppText.get('profile_stat_rank'),
+                            isHighlighted: true,
+                            value: _getEarningsOrRankValue(stateManager),
+                            onTap: isViewingOwnProfile ? onEarningsTap : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (stateManager.userData?['websiteUrl'] != null &&
+                        stateManager.userData!['websiteUrl']
+                            .toString()
+                            .isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: () async {
+                          final urlStr =
+                              stateManager.userData!['websiteUrl'].toString();
+                          final enrichedUrl = UrlUtils.enrichUrl(
+                            urlStr,
+                            source: 'vayug',
+                            medium: 'profile',
+                            campaign: 'creator_visit',
+                          );
+                          final uri = Uri.tryParse(enrichedUrl);
+                          if (uri != null && await canLaunchUrl(uri)) {
+                            await launchUrl(uri,
+                                mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.link,
+                              size: 14,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                () {
+                                  var link = stateManager.userData!['websiteUrl']
+                                      .toString()
+                                      .replaceFirst(RegExp(r'^https?://'), '')
+                                      .replaceFirst(RegExp(r'^www\.'), '');
+                                  if (link.length > 25) {
+                                    link = '${link.substring(0, 22)}...';
+                                  }
+                                  return link;
+                                }(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400, // Reduced font weight
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Container(
-                      height: 24,
-                      width: 1,
-                      color: AppColors.borderPrimary,
-                    ),
-                    Expanded(
-                      child: _buildStatItem(
-                        context,
-                        label: AppText.get('profile_stat_content'),
-                        value: stateManager.totalVideoCount.toString(),
-                      ),
-                    ),
-                    Container(
-                      height: 24,
-                      width: 1,
-                      color: AppColors.borderPrimary,
-                    ),
-                    Expanded(
-                      child: _buildStatItem(
-                        context,
-                        label: isViewingOwnProfile
-                            ? AppText.get('profile_stat_earnings')
-                            : AppText.get('profile_stat_rank'),
-                        isHighlighted: true,
-                        value: _getEarningsOrRankValue(stateManager),
-                        onTap: isViewingOwnProfile ? onEarningsTap : null,
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            stateManager.userData?['bio'] ?? '',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          if (stateManager.userData?['websiteUrl'] != null &&
-              stateManager.userData!['websiteUrl'].toString().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            GestureDetector(
-              onTap: () async {
-                final urlStr = stateManager.userData!['websiteUrl'].toString();
-                final enrichedUrl = UrlUtils.enrichUrl(
-                  urlStr,
-                  source: 'vayug',
-                  medium: 'profile',
-                  campaign: 'creator_visit',
-                );
-                final uri = Uri.tryParse(enrichedUrl);
-                if (uri != null && await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.link,
-                    size: 14,
-                    color: AppColors.textTertiary,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      stateManager.userData!['websiteUrl']
-                          .toString()
-                          .replaceFirst(RegExp(r'^https?://'), '')
-                          .replaceFirst(RegExp(r'^www\.'), ''),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 16),
           _buildActionButtons(stateManager),
         ],

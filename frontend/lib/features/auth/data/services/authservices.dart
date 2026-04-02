@@ -894,6 +894,7 @@ class AuthService {
 
           // **FIXED: Always update fallback with fresh backend data**
           final fallbackData = {
+            '_id': userData['_id'],
             'id': userData['googleId'] ?? userData['id'],
             'googleId':
                 userData['googleId'] ?? userData['id'], // Preserve googleId
@@ -905,6 +906,7 @@ class AuthService {
           AppLogger.log('✅ Updated fallback_user with fresh backend data');
 
           return {
+            '_id': userData['_id'],
             'id': userData['googleId'] ?? userData['id'],
             'googleId':
                 userData['googleId'] ?? userData['id'], // Preserve googleId
@@ -926,6 +928,7 @@ class AuthService {
                '✅ Using fallback user data for offline access (User: ${userData['name']})');
           
           return {
+            '_id': userData['_id'],
             'id': userData['id'],
             'googleId': userData['googleId'] ??
                 userData['id'], // Add googleId if available

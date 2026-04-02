@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
 import 'package:vayug/shared/widgets/report_dialog_widget.dart';
@@ -695,6 +697,56 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     });
   }
 
+  void _showShareOptions(VideoModel video) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    
+    // Using explicit sizes to match the Vayu UI design pattern
+    final iconSize = isLandscape ? 17.0 : 20.0;
+    final titleSize = isLandscape ? 12.0 : AppTypography.bodyMedium.fontSize;
+    
+    VayuBottomSheet.show<void>(
+      context: context,
+      title: 'Share',
+      maxWidth: isLandscape ? 380.0 : null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            leading: Icon(Icons.share_rounded, color: AppColors.textPrimary, size: iconSize),
+            title: Text('Share Link', style: AppTypography.bodyMedium.copyWith(fontSize: titleSize)),
+            onTap: () {
+              Navigator.pop(context);
+              Share.share('Check out this video: ${video.videoUrl}');
+            },
+          ),
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            leading: Icon(Icons.play_circle_outline_rounded, color: AppColors.textPrimary, size: iconSize),
+            title: Text('Play in External App', style: AppTypography.bodyMedium.copyWith(fontSize: titleSize)),
+            onTap: () async {
+              Navigator.pop(context);
+              final intent = AndroidIntent(
+                action: 'action_view',
+                data: video.videoUrl,
+                type: 'video/*',
+                flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+              );
+              try {
+                await intent.launch();
+              } catch (e) {
+                 AppLogger.log('Error launching intent: $e');
+              }
+            },
+          ),
+          if (!isLandscape) const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleToggleSave([int? requestedIndex]) async {
     if (_isSaving) return;
     final index = requestedIndex ?? _currentIndex;
@@ -1288,42 +1340,60 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final v = _videos[index];
     return Padding(padding: EdgeInsets.fromLTRB(isPortrait ? 16 : 16, 0, isPortrait ? 16 : 16, isPortrait ? 4 : 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
+      if (v.tags != null && v.tags!.isNotEmpty) ...[
+        SizedBox(height: isPortrait ? 8 : 8),
+        Wrap(
+          spacing: isPortrait ? 6 : 6,
+          runSpacing: isPortrait ? 4 : 4,
+          children: v.tags!.map((tag) => Text(
+            '#$tag',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontSize: isPortrait ? 12 : 12,
+              fontWeight: FontWeight.w500,
+            ),
+          )).toList(),
+        ),
+      ],
+      SizedBox(height: isPortrait ? 8 : 8),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text('${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary, fontSize: isPortrait ? 12 : 12)),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
-              if (v.tags != null && v.tags!.isNotEmpty) ...[
-                SizedBox(height: isPortrait ? 8 : 8),
-                Wrap(
-                  spacing: isPortrait ? 6 : 6,
-                  runSpacing: isPortrait ? 4 : 4,
-                  children: v.tags!.map((tag) => Text(
-                    '#$tag',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: isPortrait ? 12 : 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  )).toList(),
+              IconButton(
+                onPressed: () => _showShareOptions(v),
+                icon: Icon(
+                  Icons.share_outlined,
+                  color: AppColors.textSecondary,
+                  size: isPortrait ? 20 : 20,
                 ),
-              ],
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: () { 
+                  _handleToggleSave(index); 
+                }, 
+                icon: Icon(
+                  v.isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, 
+                  color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
+                  size: isPortrait ? 20 : 20,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                constraints: const BoxConstraints(),
+              ),
             ],
           ),
-        ),
-        IconButton(
-          onPressed: () { 
-            _handleToggleSave(index); 
-          }, 
-          icon: Icon(
-            v.isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, 
-            color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
-            size: isPortrait ? 20 : 20,
-          ),
-        ),
-      ]),
-      Transform.translate(offset: Offset(0, isPortrait ? -8 : -8), child: Text('${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary, fontSize: isPortrait ? 12 : 12))),
+        ],
+      ),
     ]));
   }
 
@@ -1898,8 +1968,8 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
 
       if (controller != null && controllerIsHealthy && widget.isCurrent)
         Positioned(
-          left: lateralPadding, 
-          right: lateralPadding, 
+          left: 0, 
+          right: 0, 
           bottom: isFull ? 32.0 : 0.0, 
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
@@ -1908,72 +1978,78 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Top Row: Duration and Buttons (Aligned on the same line)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Duration text
-                    ValueListenableBuilder<VideoPlayerValue>(
-                      valueListenable: controller,
-                      builder: (context, v, _) => Text(
-                        '${widget.formatDuration(v.position)} / ${widget.formatDuration(v.duration)}',
-                        style: TextStyle(
-                          color: Colors.white, 
-                          fontSize: isFull ? 12.0 : 12, 
-                          fontWeight: FontWeight.bold, 
-                          shadows: const [Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))]
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: lateralPadding),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Duration text
+                      ValueListenableBuilder<VideoPlayerValue>(
+                        valueListenable: controller,
+                        builder: (context, v, _) => Text(
+                          '${widget.formatDuration(v.position)} / ${widget.formatDuration(v.duration)}',
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontSize: isFull ? 12.0 : 12, 
+                            fontWeight: FontWeight.bold, 
+                            shadows: const [Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))]
+                          ),
                         ),
                       ),
-                    ),
-                    
-                    // Buttons: Aspect Ratio and Full Screen
-                    if (!widget.isControlsLocked) Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Cycle Aspect Ratio
-                        IconButton(
-                          constraints: const BoxConstraints(),
-                          tooltip: 'Aspect Ratio', 
-                          onPressed: widget.onCycleAspectRatio, 
-                          icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white, size: 21),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black26,
-                            padding: EdgeInsets.zero,
-                            fixedSize: const Size(30, 30),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      
+                      // Buttons: Aspect Ratio and Full Screen
+                      if (!widget.isControlsLocked) Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Cycle Aspect Ratio
+                          IconButton(
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Aspect Ratio', 
+                            onPressed: widget.onCycleAspectRatio, 
+                            icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white, size: 21),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black26,
+                              padding: EdgeInsets.zero,
+                              fixedSize: const Size(30, 30),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Toggle Full Screen
-                        IconButton(
-                          constraints: const BoxConstraints(),
-                          tooltip: 'Full Screen', 
-                          onPressed: widget.onToggleFullScreen, 
-                          icon: Icon(isPortrait ? Icons.fullscreen_rounded : Icons.fullscreen_exit_rounded, color: Colors.white, size: 21),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black26,
-                            padding: EdgeInsets.zero,
-                            fixedSize: const Size(30, 30),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          const SizedBox(width: 8),
+                          // Toggle Full Screen
+                          IconButton(
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Full Screen', 
+                            onPressed: widget.onToggleFullScreen, 
+                            icon: Icon(isPortrait ? Icons.fullscreen_rounded : Icons.fullscreen_exit_rounded, color: Colors.white, size: 21),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black26,
+                              padding: EdgeInsets.zero,
+                              fixedSize: const Size(30, 30),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
                 
-                const SizedBox(height: 8), // Gap between duration/buttons and progress bar
+                if (isFull) const SizedBox(height: 7), // Gap only in fullscreen to minimize spacing in portrait
                 
                 // Progress Bar
-                SizedBox(
-                  height: 20,
-                  child: VayuVideoProgressBar(
-                    controller: controller, 
-                    height: 20, 
-                    barHeight: isFull ? 4 : 2,
-                    activeBarHeight: isFull ? 10 : 4,
-                    thumbRadius: isFull ? 8 : 4,
-                    barCenterOffset: isFull ? null : 19,
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: isFull ? lateralPadding : 0.0),
+                  child: SizedBox(
+                    height: 17,
+                    child: VayuVideoProgressBar(
+                      controller: controller, 
+                      height: 17, 
+                      barHeight: isFull ? 4 : 2,
+                      activeBarHeight: isFull ? 10 : 4,
+                      thumbRadius: isFull ? 8 : 4,
+                      barCenterOffset: isFull ? null : 19,
+                    ),
                   ),
                 ),
               ],

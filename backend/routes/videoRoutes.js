@@ -34,6 +34,7 @@ router.post('/image', verifyToken, videoController.createImageFeedEntry);
 router.get('/', videoController.getFeed);
 router.get('/user/:googleId', passiveVerifyToken, videoController.getUserVideos);
 router.get('/saved', verifyToken, videoController.getSavedVideos);
+router.get('/removed', verifyToken, videoController.getRemovedVideos);
 router.get('/:id', videoController.getVideoById);
 router.get('/creator/analytics/:userId', verifyToken, videoController.getCreatorAnalytics);
 
