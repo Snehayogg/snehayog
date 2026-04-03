@@ -35,4 +35,4 @@ jobs:
         
       - name: Run Integration Tests
         working-directory: frontend
-        run: flutter test integration_test --driver=test_driver/integration_test.dart
+        run: flutter test integration_test
