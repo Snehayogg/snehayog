@@ -1098,6 +1098,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
       if (result != null) {
         // **BATCHED UPDATE: Use ValueNotifiers**
+        if (!mounted) return;
         _isProcessing.value = true;
         _errorMessage.value = null;
 
@@ -1140,6 +1141,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           try {
             final controller = VideoPlayerController.file(pickedFile);
             await controller.initialize();
+            if (!mounted) {
+              await controller.dispose();
+              return;
+            }
             final durationSeconds = controller.value.duration.inSeconds;
             await controller.dispose();
 
@@ -1158,6 +1163,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               '🔍 UploadScreen: Calculating video hash for duplicate detection...');
           try {
             final videoHash = await _calculateFileHash(pickedFile);
+            if (!mounted) return;
             AppLogger.log(
                 '✅ UploadScreen: Video hash calculated: ${videoHash.substring(0, 16)}...');
 
@@ -1175,6 +1181,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   body: json.encode({'videoHash': videoHash}),
                   timeout: const Duration(seconds: 10),
                 );
+                
+                if (!mounted) return;
 
                 if (response.statusCode == 200) {
                   final data = json.decode(response.body);
@@ -1297,16 +1305,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 ),
             ],
           ),
-          body: ValueListenableBuilder<bool>(
-            valueListenable: _isProcessing,
-            builder: (context, isProcessing, _) {
-              // State 1.5: Analyzing video (hashing/duplicate check) — shown immediately
-              // after gallery pick, before _selectedVideo is even set.
-              if (isProcessing) {
-                return _buildAnalyzingVideoView(context);
-              }
-
-              return ValueListenableBuilder<bool>(
+          body: Stack(
+            children: [
+              // 1. Layer: Main Content
+              ValueListenableBuilder<bool>(
                 valueListenable: _isUploading,
                 builder: (context, isUploading, _) {
                   return ValueListenableBuilder<File?>(
@@ -1322,8 +1324,22 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     },
                   );
                 },
-              );
-            },
+              ),
+
+              // 2. Layer: Analyzing Overlay (prevents assertion failure from framework by keeping tree stable)
+              ValueListenableBuilder<bool>(
+                valueListenable: _isProcessing,
+                builder: (context, isProcessing, _) {
+                  if (!isProcessing) return const SizedBox.shrink();
+                  return Positioned.fill(
+                    child: Container(
+                      color: AppColors.backgroundPrimary,
+                      child: _buildAnalyzingVideoView(context),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         );
       },
@@ -1726,10 +1742,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                               child: AppButton(
                                 onPressed: () {
                                   _isMinimizing.value = true;
-                                  // Navigate to Profile/Account tab (index 4) so user can track upload status
+                                  // Navigate to Profile/Account tab (index 3) so user can track upload status
                                   ref
                                       .read(mainControllerProvider)
-                                      .changeIndex(4);
+                                      .changeIndex(3);
                                   // Re-notify listeners so the Consumer in ProfileVideosWidget
                                   // immediately rebuilds and shows the optimistic video already
                                   // injected by addVideoOptimistically().

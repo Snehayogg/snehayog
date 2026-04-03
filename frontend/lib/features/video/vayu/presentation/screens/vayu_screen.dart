@@ -10,8 +10,6 @@ import 'package:vayug/features/profile/core/presentation/widgets/video_creator_s
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/widgets/vayu_logo.dart';
-import 'package:vayug/features/agent/presentation/screens/agent_screen.dart';
-import 'package:vayug/shared/config/feature_flags.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
@@ -276,18 +274,6 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
             },
             tooltip: 'Search',
           ),
-          if (FeatureFlags.isAgentEnabled)
-            IconButton(
-              icon: const Icon(Icons.auto_awesome_outlined,
-                  color: AppColors.textPrimary, size: 22),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AgentScreen()),
-                );
-              },
-              tooltip: 'Agent',
-            ),
           SizedBox(width: AppSpacing.spacing2),
         ],
       ),

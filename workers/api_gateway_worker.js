@@ -26,7 +26,7 @@ export default {
 
     // 3. Check KV Cache
     const cacheKey = `cache:${url.pathname}${url.search}`;
-    const cachedResponse = await env.SNEHAYOG_CACHE.get(cacheKey);
+    const cachedResponse = await env.VAYUG_CACHE.get(cacheKey);
 
     if (cachedResponse) {
       console.log(`🚀 Edge Cache HIT: ${cacheKey}`);
@@ -40,15 +40,13 @@ export default {
 
     // 4. Cache Miss: Fetch from Origin Backend
     console.log(`☁️ Edge Cache MISS: ${cacheKey}. Fetching from origin...`);
-    const originUrl = `${env.BACKEND_URL}${url.pathname}${url.search}`;
-    const response = await fetch(originUrl, {
-      headers: request.headers
-    });
+    const missRequest = new Request(`${env.BACKEND_URL}${url.pathname}${url.search}`, request);
+    const response = await fetch(missRequest);
 
     if (response.ok) {
       const body = await response.clone().text();
       // Store in KV with TTL
-      await env.SNEHAYOG_CACHE.put(cacheKey, body, {
+      await env.VAYUG_CACHE.put(cacheKey, body, {
         expirationTtl: route.ttl
       });
       

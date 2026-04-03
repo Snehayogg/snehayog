@@ -27,8 +27,8 @@ class NoticeModel {
 
   bool get isExpired {
     if (firstSeenAt == null) return false;
-    final now = DateTime.now();
-    return now.difference(firstSeenAt!).inHours >= 1;
+    final now = DateTime.now().toUtc();
+    return now.difference(firstSeenAt!.toUtc()).inMinutes >= 60;
   }
 
   bool get isWarning => type == 'warning';

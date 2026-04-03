@@ -5,9 +5,9 @@ import 'package:vayug/features/video/core/presentation/screens/video_screen.dart
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // Needed for the new method
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/core/design/colors.dart';
-import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart'; // **NEW: Import Long Form Player**
+import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
@@ -32,12 +32,9 @@ class ProfileVideosWidget extends StatelessWidget {
     this.filterVideoType,
   });
 
-  /// **NEW: Preload video thumbnails for faster loading**
   void _preloadVideoThumbnails(BuildContext context, List<VideoModel> videos) {
-    // Preload thumbnails in background for better performance
     Future.microtask(() async {
       for (final video in videos.take(5)) {
-        // Preload first 5 videos
         if (video.thumbnailUrl.isNotEmpty) {
           try {
             await precacheImage(NetworkImage(video.thumbnailUrl), context);
@@ -107,14 +104,10 @@ class ProfileVideosWidget extends StatelessWidget {
     );
   }
 
-  /// **FIXED: Keep normalization only for navigation routing (which player to use)**
-  /// But NOT for filtering - backend handles all filtering
   String _normalizedVideoType(VideoModel video) {
-    // **PRIORITY 1: Physical Aspect Ratio (Source of Truth for Layout)**
-    if (video.aspectRatio > 1.1) return 'vayu'; // Landscape
-    if (video.aspectRatio < 0.9) return 'yog';  // Portrait
+    if (video.aspectRatio > 1.1) return 'vayu';
+    if (video.aspectRatio < 0.9) return 'yog';
 
-    // **PRIORITY 2: Metadata (If roughly square, trust backend or previous inference)**
     final normalized = video.videoType.trim().toLowerCase();
     if (normalized == 'long' ||
         normalized == 'longform' ||
@@ -129,7 +122,6 @@ class ProfileVideosWidget extends StatelessWidget {
         normalized == 'reel') {
       return 'yog';
     }
-    // Trust backend values directly if they are already normalized
     if (normalized == 'vayu' || normalized == 'yog') {
       return normalized;
     }
@@ -167,7 +159,6 @@ class ProfileVideosWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // **OPTIMIZED: Preload video thumbnails for better performance**
     if (stateManager.userVideos.isNotEmpty) {
       _preloadVideoThumbnails(context, stateManager.userVideos);
     }
@@ -268,7 +259,6 @@ class ProfileVideosWidget extends StatelessWidget {
               : emptyWidget;
         }
 
-        // **PRE-PROCESSING: Group Series Videos**
         final List<VideoModel> displayVideos = [];
         final Set<String> processedSeriesIds = {};
 
@@ -283,7 +273,6 @@ class ProfileVideosWidget extends StatelessWidget {
           }
         }
 
-        // **NEW: Dynamic Grid Layout**
         final bool isVayu = filterVideoType?.toLowerCase() == 'vayu';
         final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: isVayu ? 2 : 3,
@@ -360,20 +349,17 @@ class ProfileVideosWidget extends StatelessWidget {
             return;
           }
 
-          if (isSeries && !manager.isSelecting) {
+          if (isSeries && video.episodes != null && video.episodes!.isNotEmpty && !manager.isSelecting) {
+            AppLogger.log('🎬 ProfileVideosWidget: Series detected: ${video.id}. Opening episode list.');
             _showEpisodeList(context, video);
             return;
           }
 
           if (!manager.isSelecting) {
             final sharedPool = SharedVideoControllerPool();
-            // **FIX: Stop using clearAll() as it destroys controllers needed by Other tabs**
-            // sharedPool.clearAll();
             sharedPool.pauseAllControllers();
 
-            // **NEW: Check video category and navigate accordingly**
             if (_normalizedVideoType(video) == 'vayu') {
-              // Navigate to Long Form Player for Vayu videos
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -384,7 +370,6 @@ class ProfileVideosWidget extends StatelessWidget {
                 ),
               );
             } else {
-              // Navigate to Short Form Player (VideoScreen) for Yug videos
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -422,7 +407,6 @@ class ProfileVideosWidget extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: Stack(
               children: [
-                // Video Thumbnail
                 Hero(
                   tag: 'video_player_${video.id}',
                   child: Container(
@@ -434,7 +418,6 @@ class ProfileVideosWidget extends StatelessWidget {
                     child: video.thumbnailUrl.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: video.thumbnailUrl,
-                            memCacheWidth: 350, // Optimize memory for grid
                             fit: BoxFit.cover,
                             width: double.infinity,
                             height: double.infinity,
@@ -458,7 +441,6 @@ class ProfileVideosWidget extends StatelessWidget {
                   ),
                 ),
 
-                // SERIES BADGE
                 if (isSeries)
                   Positioned(
                     top: 8,
@@ -492,7 +474,6 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   ),
 
-                // Processing overlay
                 if (isProcessing)
                   Positioned.fill(
                     child: Container(
@@ -528,7 +509,6 @@ class ProfileVideosWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Cross Post Status
                 if (!isProcessing && video.crossPostStatus != null)
                   Positioned(
                     top: 8,
@@ -536,7 +516,6 @@ class ProfileVideosWidget extends StatelessWidget {
                     child: _buildCrossPostStatus(video),
                   ),
                 
-                // EDIT ICON (For Vayu/Long-form only, if owner)
                 if (manager.isOwner && !manager.isSelecting && _normalizedVideoType(video) == 'vayu')
                   Positioned(
                     top: 8,
@@ -551,7 +530,6 @@ class ProfileVideosWidget extends StatelessWidget {
                         );
                         
                          if (result != null) {
-                           // Fully refresh state to show updated tags/title
                            manager.refreshData();
                         }
                       },
@@ -570,7 +548,6 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   ),
 
-                // Selection Overlay
                 if (isSelected)
                   Positioned.fill(
                     child: Container(
@@ -600,7 +577,6 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   ),
 
-                // Video views count
                 if (!isProcessing)
                   Positioned(
                     bottom: 8,
@@ -630,7 +606,6 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   ),
 
-                // Selection Checkbox
                 if (manager.isSelecting && canSelectVideo)
                   Positioned(
                     top: 12,
@@ -673,6 +648,7 @@ class ProfileVideosWidget extends StatelessWidget {
   }
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
+    AppLogger.log('🎬 ProfileVideosWidget: Showing episode list for series: ${video.seriesId}');
     VayuBottomSheet.show(
       context: context,
       title: 'More Episodes',
@@ -681,116 +657,118 @@ class ProfileVideosWidget extends StatelessWidget {
       minChildSize: 0.3,
       maxChildSize: 0.8,
       padding: const EdgeInsets.all(16),
-      child: GridView.builder(
-        padding: EdgeInsets.zero,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 0.7,
-        ),
-        itemCount: video.episodes!.length,
-        itemBuilder: (context, index) {
-          final episodeData = video.episodes![index];
-          final String episodeId = (episodeData['_id'] ?? episodeData['id']);
-          final String thumbnailUrl =
-              (episodeData['thumbnailUrl'] ?? video.thumbnailUrl);
-          final String sequenceNumber = (index + 1).toString();
+      builder: (context, scrollController) {
+        return GridView.builder(
+          controller: scrollController,
+          padding: EdgeInsets.zero,
+          physics: const BouncingScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.7,
+          ),
+          itemCount: video.episodes!.length,
+          itemBuilder: (context, index) {
+            final episodeData = video.episodes![index];
+            final String episodeId = (episodeData['_id'] ?? episodeData['id'])?.toString() ?? '';
+            final String thumbnailUrl =
+                (episodeData['thumbnailUrl'] ?? video.thumbnailUrl)?.toString() ?? '';
+            final String sequenceNumber = (index + 1).toString();
 
-          return GestureDetector(
-            onTap: () {
-              Navigator.pop(context);
-              final parentType = _normalizedVideoType(video);
-              final filteredVideos = stateManager.userVideos
-                  .where((item) => _normalizedVideoType(item) == parentType)
-                  .toList(growable: false);
-              if (parentType == 'vayu') {
-                final selectedEpisodeIndex =
-                    filteredVideos.indexWhere((item) => item.id == episodeId);
-                final selectedEpisode = selectedEpisodeIndex >= 0
-                    ? filteredVideos[selectedEpisodeIndex]
-                    : video;
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => VayuLongFormPlayerScreen(
-                      video: selectedEpisode,
-                      relatedVideos: filteredVideos,
+            return GestureDetector(
+              onTap: () {
+                AppLogger.log('🎬 ProfileVideosWidget: Selected episode: $episodeId');
+                Navigator.pop(context);
+                final parentType = _normalizedVideoType(video);
+                final filteredVideos = stateManager.userVideos
+                    .where((item) => _normalizedVideoType(item) == parentType)
+                    .toList(growable: false);
+                if (parentType == 'vayu') {
+                  final selectedEpisodeIndex =
+                      filteredVideos.indexWhere((item) => item.id == episodeId);
+                  final selectedEpisode = selectedEpisodeIndex >= 0
+                      ? filteredVideos[selectedEpisodeIndex]
+                      : video;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => VayuLongFormPlayerScreen(
+                        video: selectedEpisode,
+                        relatedVideos: filteredVideos,
+                      ),
                     ),
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => VideoScreen(
+                        initialVideos: filteredVideos,
+                        initialVideoId: episodeId,
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: thumbnailUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: thumbnailUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) =>
+                                Container(color: Colors.grey[300]),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.error),
+                            ),
+                          )
+                        : Container(color: Colors.black12),
                   ),
-                );
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => VideoScreen(
-                      initialVideos: filteredVideos,
-                      initialVideoId: episodeId,
-                    ),
-                  ),
-                );
-              }
-              AppLogger.log('Selected episode $sequenceNumber: $episodeId');
-            },
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: thumbnailUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: thumbnailUrl,
-                          memCacheWidth: 350,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) =>
-                              Container(color: Colors.grey[300]),
-                          errorWidget: (context, url, error) => Container(
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.error),
-                          ),
-                        )
-                      : Container(color: Colors.black12),
-                ),
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      sequenceNumber,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        sequenceNumber,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 16,
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
-

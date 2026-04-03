@@ -372,36 +372,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     bool isActive,
     int index,
   ) {
-    // ... existing logic ...
-
-    // **NEW: Agent Entry Point (Top Right)**
-    return Stack(
-      children: [
-        _buildVideoPageContent(video, controller, isActive, index),
-        if (FeatureFlags.isAgentEnabled)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            right: 16,
-            child: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundPrimary.withValues(alpha: 0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.more_vert,
-                    color: AppColors.white, size: 20),
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AgentScreen()),
-                );
-              },
-            ),
-          ),
-      ],
-    );
+    return _buildVideoPageContent(video, controller, isActive, index);
   }
 
   Widget _buildVideoPageContent(

@@ -1,5 +1,3 @@
-import 'package:vayug/features/auth/data/services/authservices.dart';
-import 'package:provider/provider.dart' as provider;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -11,6 +9,7 @@ import 'package:vayug/features/video/core/presentation/screens/video_screen.dart
 import 'package:vayug/core/design/theme.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 
@@ -89,11 +88,11 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       length: 3,
       child: Column(
         children: [
-          TabBar(
+          const TabBar(
             labelColor: AppColors.primary,
             unselectedLabelColor: AppColors.textSecondary,
             indicatorColor: AppColors.primary,
-            tabs: const [
+            tabs: [
               Tab(text: 'Top'),
               Tab(text: 'Videos'),
               Tab(text: 'Creators'),
@@ -510,25 +509,23 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       trailing: const Icon(Icons.arrow_forward_ios,
           size: 14, color: AppColors.textTertiary),
       onTap: () {
-        // **FIX: Store navigator reference BEFORE closing SearchDelegate**
+        // **FIX: Correct navigation order**
+        // 1. Capture references
         final navigator = Navigator.of(context);
+        final creatorId = creator.id;
+        
+        AppLogger.log('🔍 SearchDelegate: Tapped Creator Result. ID: $creatorId');
+
+        // 2. Close the search UI FIRST
         close(context, null);
 
-        final authService = provider.Provider.of<AuthService>(context, listen: false);
-        final myId = authService.currentUserId;
-
-        if (creator.id == myId) {
-          // If navigating to self, pop to root (Profile Tab root)
-          navigator.popUntil((route) => route.isFirst);
-        } else {
-          // Push profile screen
-          navigator.push(
-            MaterialPageRoute(
-              settings: const RouteSettings(name: 'profile_creator'),
-              builder: (_) => ProfileScreen(userId: creator.id),
-            ),
-          );
-        }
+        // 3. Push the ProfileScreen on top of the parent screen
+        navigator.push(
+          MaterialPageRoute(
+            settings: const RouteSettings(name: 'profile_creator'),
+            builder: (_) => ProfileScreen(userId: creatorId),
+          ),
+        );
       },
     );
   }
@@ -560,25 +557,23 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
       trailing:
           const Icon(Icons.north_west, size: 14, color: AppColors.textTertiary),
       onTap: () {
-        // **FIX: Store navigator reference BEFORE closing SearchDelegate**
+        // **FIX: Correct navigation order for Suggestions**
+        // 1. Capture references
         final navigator = Navigator.of(context);
+        final creatorId = creator.id;
+
+        AppLogger.log('🔍 SearchDelegate: Tapped Creator Suggestion. ID: $creatorId');
+
+        // 2. Close the search UI FIRST
         close(context, null);
 
-        final authService = provider.Provider.of<AuthService>(context, listen: false);
-        final myId = authService.currentUserId;
-
-        if (creator.id == myId) {
-          // If navigating to self, pop to root (Profile Tab root)
-          navigator.popUntil((route) => route.isFirst);
-        } else {
-          // Push profile screen
-          navigator.push(
-            MaterialPageRoute(
-              settings: const RouteSettings(name: 'profile_creator'),
-              builder: (_) => ProfileScreen(userId: creator.id),
-            ),
-          );
-        }
+        // 3. Push the ProfileScreen on top of the parent screen
+        navigator.push(
+          MaterialPageRoute(
+            settings: const RouteSettings(name: 'profile_creator'),
+            builder: (_) => ProfileScreen(userId: creatorId),
+          ),
+        );
       },
     );
   }

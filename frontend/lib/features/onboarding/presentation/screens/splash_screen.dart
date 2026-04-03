@@ -32,7 +32,7 @@ class _SplashScreenState extends State<SplashScreen>
     // Fade controller for the Vayu text
     _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 400),
     );
 
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -42,16 +42,14 @@ class _SplashScreenState extends State<SplashScreen>
     // **SMART PROGRESS: Adaptive Controller**
     _progressController = AnimationController(
       vsync: this,
-      duration:
-          const Duration(milliseconds: 800), // Fast crawl to match quick auth
+      duration: const Duration(milliseconds: 150),
     );
 
     // 1. Start Fade
     _fadeController.forward();
 
-    // 2. Start slow "Predictive Crawl" (Bar moves to 70% even if network is slow)
-    // This gives a "Professional" active feel immediately.
-    _progressController.animateTo(0.7, curve: Curves.easeOutCubic);
+    // 2. Start slow predictive crawl from 0 for immediate but professional feedback
+    _progressController.animateTo(0.3, duration: const Duration(seconds: 4));
 
     // 3. Listen to real logic progress
     AppInitializationManager.instance.initializationProgress
@@ -78,10 +76,11 @@ class _SplashScreenState extends State<SplashScreen>
       );
     }
 
-    // If logic is 100% complete, finish the bar quickly and navigate
+    // If logic is 100% complete, surge to the end and launch
     if (realProgress >= 1.0) {
       _isNavigating = true;
-      _navigateToHome(); // Direct navigation for maximum speed
+      _progressController.animateTo(1.0, duration: const Duration(milliseconds: 150))
+          .then((_) => _navigateToHome());
     }
   }
 

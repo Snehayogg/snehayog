@@ -776,7 +776,10 @@ export const getUserVideos = async (req, res) => {
     const episodesMap = new Map();
     if (seriesIds.size > 0) {
       try {
-        const allEpisodes = await Video.find({ seriesId: { $in: Array.from(seriesIds) }, processingStatus: 'completed' })
+        const allEpisodes = await Video.find({ 
+          seriesId: { $in: Array.from(seriesIds) }, 
+          processingStatus: 'completed'
+        })
           .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
           .sort({ episodeNumber: 1 }).lean();
         allEpisodes.forEach(ep => {

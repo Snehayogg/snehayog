@@ -20,7 +20,7 @@ class NoticeBannerWidget extends StatelessWidget {
 
     // Mark as seen once displayed
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (notice.firstSeenAt == null) {
+      if (manager.activeNotice?.id == notice.id && notice.firstSeenAt == null) {
         manager.markNoticeAsSeen();
       }
     });

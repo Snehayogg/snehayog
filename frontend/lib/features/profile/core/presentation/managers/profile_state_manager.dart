@@ -2034,14 +2034,17 @@ class ProfileStateManager extends ChangeNotifier {
     _noticeTimer?.cancel();
     if (_activeNotice?.firstSeenAt == null) return;
 
-    final now = DateTime.now();
-    final elapsed = now.difference(_activeNotice!.firstSeenAt!);
+    final now = DateTime.now().toUtc();
+    final firstSeen = _activeNotice!.firstSeenAt!.toUtc();
+    final elapsed = now.difference(firstSeen);
     final remaining = const Duration(hours: 1) - elapsed;
 
     if (remaining.isNegative) {
+      AppLogger.log('👤 ProfileStateManager: Notice expired, removing.');
       _activeNotice = null;
       notifyListenersSafe();
     } else {
+      AppLogger.log('👤 ProfileStateManager: Notice expires in ${remaining.inMinutes}m');
       _noticeTimer = Timer(remaining, () {
         _activeNotice = null;
         notifyListenersSafe();
@@ -2082,22 +2085,33 @@ class ProfileStateManager extends ChangeNotifier {
     }
   }
 
+  final Set<String> _pendingNoticeSeenIds = {};
+
   Future<void> markNoticeAsSeen() async {
     if (_activeNotice == null) return;
+    final noticeId = _activeNotice!.id;
+    if (_pendingNoticeSeenIds.contains(noticeId)) return;
+
     try {
+      _pendingNoticeSeenIds.add(noticeId);
       if (_activeNotice!.firstSeenAt == null) {
         _activeNotice = NoticeModel(
           id: _activeNotice!.id,
           title: _activeNotice!.title,
           type: _activeNotice!.type,
-          firstSeenAt: DateTime.now(),
+          firstSeenAt: DateTime.now().toUtc(),
           createdAt: _activeNotice!.createdAt,
         );
         _scheduleNoticeRemoval();
       }
-      await _noticeService.markAsSeen(_activeNotice!.id);
+      await _noticeService.markAsSeen(noticeId);
     } catch (e) {
       AppLogger.log('⚠️ ProfileStateManager: Error marking notice as seen: $e');
+    } finally {
+      // Keep in pending for a short while to avoid race conditions during re-builds
+      Future.delayed(const Duration(seconds: 2), () {
+        _pendingNoticeSeenIds.remove(noticeId);
+      });
     }
   }
 

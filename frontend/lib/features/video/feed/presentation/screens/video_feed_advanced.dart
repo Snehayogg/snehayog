@@ -35,8 +35,6 @@ import 'package:vayug/features/video/feed/presentation/screens/video_feed_advanc
 import 'package:vayug/shared/services/connectivity_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:vayug/features/agent/presentation/screens/agent_screen.dart';
-import 'package:vayug/shared/config/feature_flags.dart';
 import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -71,7 +69,6 @@ part 'video_feed_advanced/video_feed_advanced_data.dart';
 part 'video_feed_advanced/video_feed_advanced_preload.dart';
 part 'video_feed_advanced/video_feed_advanced_ui.dart';
 
-// #region agent log
 // Debug logging helper for instrumentation
 Future<void> _debugLog(String location, String message,
     Map<String, dynamic> data, String hypothesisId) async {
@@ -105,11 +102,22 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     with
         WidgetsBindingObserver,
         AutomaticKeepAliveClientMixin,
+        RestorationMixin,
         VideoFeedStateFieldsMixin {
   final Map<String, bool> _likeInProgress = {};
   Timer?
       _pageChangeDebounceTimer; // **NEW: Timer for debouncing page rapid scrolls**
   final ShareService _shareService = ShareService();
+
+  @override
+  String get restorationId => 'video_feed_advanced';
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_restorableIndex, 'current_index');
+    registerForRestoration(_restorableVideosJson, 'videos_json');
+    registerForRestoration(_restorableTimestamp, 'last_updated');
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -1782,37 +1790,71 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
         'E');
     // #endregion
 
+    // **ACCELERATED BOOT: Determine if we should show the initial skeleton**
+    // We show it if:
+    // 1. We are still fetching the initial batch of videos
+    // 2. OR we have videos, but the first one isn't ready to play yet (No Partial Loading)
+    Widget buildBody() {
+      if (_isLoading && _videos.isEmpty) {
+        return const VideoFeedSkeleton();
+      }
+
+      if (_videos.isEmpty && _errorMessage != null) {
+        return RefreshIndicator(
+          onRefresh: refreshVideos,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height,
+              child: _buildErrorState(),
+            ),
+          ),
+        );
+      }
+
+      if (_videos.isEmpty) {
+        return RefreshIndicator(
+          onRefresh: refreshVideos,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height,
+              child: _buildEmptyState(),
+            ),
+          ),
+        );
+      }
+
+      // We have videos! Now handle the "No Partial Loading" transition.
+      final firstVideoId = _videos[0].id;
+      final firstFrameReadyNotifier = _getOrCreateNotifier<bool>(
+        _firstFrameReady, 
+        firstVideoId, 
+        false
+      );
+
+      return Stack(
+        children: [
+          _buildVideoFeed(),
+          // Overlay skeleton until first frame is ready
+          ValueListenableBuilder<bool>(
+            valueListenable: firstFrameReadyNotifier,
+            builder: (context, isReady, _) {
+              if (isReady || _openedFromProfile || _openedFromDeepLink) {
+                return const SizedBox.shrink();
+              }
+              return const VideoFeedSkeleton();
+            },
+          ),
+        ],
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          _isLoading && _videos.isEmpty
-              ? const VideoFeedSkeleton()
-              : _videos.isEmpty && _errorMessage != null
-                  ? RefreshIndicator(
-                      onRefresh: refreshVideos,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: SizedBox(
-                          height: MediaQuery.of(context).size.height,
-                          child: _buildErrorState(),
-                        ),
-                      ),
-                    )
-                  : _videos.isEmpty
-                      ? RefreshIndicator(
-                          onRefresh: refreshVideos,
-                          child: SingleChildScrollView(
-                            physics:
-                                const AlwaysScrollableScrollPhysics(),
-                            child: SizedBox(
-                              height:
-                                  MediaQuery.of(context).size.height,
-                              child: _buildEmptyState(),
-                            ),
-                          ),
-                        )
-                      : _buildVideoFeed(),
+          buildBody(),
           // **OFFLINE INDICATOR: Show when no internet connection**
           _buildOfflineIndicator(),
         ],

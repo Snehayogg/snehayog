@@ -22,7 +22,6 @@ import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayug/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayug/shared/widgets/follow_button_widget.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
-import 'package:vayug/core/design/radius.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -41,13 +40,7 @@ import 'package:vayug/features/video/core/presentation/managers/shared_video_con
 import 'package:vayug/features/video/core/presentation/managers/main_controller.dart';
 import 'package:vayug/features/video/core/data/services/video_view_tracker.dart';
 import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
-
-enum AspectRatioMode {
-  fit,
-  crop,
-  stretch,
-  ratio16x9,
-}
+import 'package:url_launcher/url_launcher.dart';
 
 class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   final VideoModel video;
@@ -110,9 +103,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   bool _isSaving = false;
   double _playbackSpeed = 1.0;
-  AspectRatioMode _aspectRatioMode = AspectRatioMode.fit;
-  String? _aspectRatioOverlayText;
-  Timer? _aspectRatioOverlayTimer;
   final List<double> _playbackSpeedOptions = <double>[
     0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0,
   ];
@@ -498,7 +488,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _pageController.dispose();
     _controlsTimer?.cancel(); // Changed from _hideControlsTimer
     _overlayTimer?.cancel();
-    _aspectRatioOverlayTimer?.cancel();
     _stopViewTracking(_currentIndex);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
@@ -728,23 +717,37 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             title: Text('Play in External App', style: AppTypography.bodyMedium.copyWith(fontSize: titleSize)),
             onTap: () async {
               Navigator.pop(context);
-              final intent = AndroidIntent(
-                action: 'action_view',
-                data: video.videoUrl,
-                type: 'video/*',
-                flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
-              );
-              try {
-                await intent.launch();
-              } catch (e) {
-                 AppLogger.log('Error launching intent: $e');
-              }
+              _openInExternalPlayer(video);
             },
           ),
           if (!isLandscape) const SizedBox(height: 12),
         ],
       ),
     );
+  }
+
+  Future<void> _openInExternalPlayer(VideoModel video) async {
+    if (Theme.of(context).platform == TargetPlatform.android) {
+        final intent = AndroidIntent(
+          action: 'action_view',
+          data: video.videoUrl,
+          type: 'video/*',
+          flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+        );
+        try {
+          await intent.launch();
+        } catch (e) {
+          AppLogger.log('Error launching intent: $e');
+          _showSnackBar('No external player found', type: VayuSnackBarType.error);
+        }
+    } else {
+        final url = Uri.parse(video.videoUrl);
+        if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+        } else {
+            _showSnackBar('Could not launch external player', type: VayuSnackBarType.error);
+        }
+    }
   }
 
   Future<void> _handleToggleSave([int? requestedIndex]) async {
@@ -955,18 +958,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     );
   }
 
-  void _cycleAspectRatioMode() {
-    const modes = AspectRatioMode.values;
-    final next = modes[(modes.indexOf(_aspectRatioMode) + 1) % modes.length];
-    setState(() { _aspectRatioMode = next; _showControls = true; _aspectRatioOverlayText = 'Aspect ratio: ${_aspectRatioLabel(next)}'; });
-    _startHideControlsTimer();
-    _aspectRatioOverlayTimer?.cancel();
-    _aspectRatioOverlayTimer = Timer(const Duration(milliseconds: 1200), () { if (mounted) setState(() => _aspectRatioOverlayText = null); });
-  }
-
-  String _aspectRatioLabel(AspectRatioMode mode) {
-    switch (mode) { case AspectRatioMode.fit: return 'Fit'; case AspectRatioMode.crop: return 'Crop'; case AspectRatioMode.stretch: return 'Stretch'; case AspectRatioMode.ratio16x9: return '16:9'; }
-  }
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
     
@@ -1267,16 +1258,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
 
 
-  Widget _buildAspectRatioOverlay() {
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    return IgnorePointer(child: Align(alignment: Alignment.topCenter, child: Container(
-      margin: EdgeInsets.only(top: isLandscape ? 40 : 72), 
-      padding: EdgeInsets.symmetric(horizontal: isLandscape ? 12 : 12, vertical: isLandscape ? 6 : 6), 
-      decoration: BoxDecoration(color: Colors.black54, borderRadius: AppRadius.borderRadiusLG), 
-      child: Text(_aspectRatioOverlayText!, style: TextStyle(color: Colors.white, fontSize: isLandscape ? 12 : 12, fontWeight: FontWeight.bold))
-    )));
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_videos.isEmpty) return const Scaffold(backgroundColor: AppColors.backgroundPrimary, body: Center(child: CircularProgressIndicator(color: AppColors.primary)));
@@ -1319,8 +1300,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     key: ValueKey('feed_${index}_${_videos[index].id}'),
     index: index, video: _videos[index], controller: _controllers[index], chewie: _chewieControllers[index],
     isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: _showControls,
-    isControlsLocked: _isControlsLocked, aspectRatioMode: _aspectRatioMode, showScrubbingOverlay: _showScrubbingOverlay,
-    aspectRatioOverlayText: _aspectRatioOverlayText, onToggleFullScreen: _toggleFullScreen, onCycleAspectRatio: _cycleAspectRatioMode,
+    isControlsLocked: _isControlsLocked, showScrubbingOverlay: _showScrubbingOverlay,
+    onToggleFullScreen: _toggleFullScreen, onOpenExternalPlayer: () => _openInExternalPlayer(_videos[index]),
     onHandleTap: _handleTap, onDoubleTapToSeek: _handleDoubleTapToSeek,    onHorizontalDragEnd: _handleHorizontalDragEnd,
     onVerticalDragUpdate: _handleVerticalDragUpdate, onVerticalDragEnd: _handleVerticalDragEnd, 
     onUnifiedHorizontalDrag: _handleUnifiedHorizontalDrag,
@@ -1330,7 +1311,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     onShowSnackBar: _showSnackBar,
     buildAdSection: _buildAdSection, 
     buildVideoInfo: _buildVideoInfo, buildChannelRow: _buildChannelRow,
-    buildScrubbingOverlay: _buildScrubbingOverlay, buildAspectRatioOverlay: _buildAspectRatioOverlay,
+    buildScrubbingOverlay: _buildScrubbingOverlay,
     buildCustomControls: _buildCustomControls, formatDuration: _formatDuration,
     buildDubbingProgress: _buildDubbingProgress,
   );
@@ -1726,11 +1707,9 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   final bool isFullScreenManual;
   final bool showControls;
   final bool isControlsLocked;
-  final AspectRatioMode aspectRatioMode;
   final bool showScrubbingOverlay;
-  final String? aspectRatioOverlayText;
   final VoidCallback onToggleFullScreen;
-  final VoidCallback onCycleAspectRatio;
+  final VoidCallback onOpenExternalPlayer;
   final VoidCallback onHandleTap;
   final void Function(TapDownDetails) onDoubleTapToSeek;
   final VoidCallback onHorizontalDragEnd;
@@ -1743,7 +1722,6 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   final Widget Function(int) buildVideoInfo;
   final Widget Function(int) buildChannelRow;
   final Widget Function() buildScrubbingOverlay;
-  final Widget Function() buildAspectRatioOverlay;
   final Widget Function(int) buildCustomControls;
   final Widget Function(int) buildDubbingProgress;
   final String Function(Duration) formatDuration;
@@ -1751,17 +1729,18 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   const VayuFeedItem({
     super.key, required this.index, required this.video, this.controller, this.chewie,
     required this.isCurrent, required this.isFullScreenManual, required this.showControls,
-    required this.isControlsLocked, required this.aspectRatioMode, required this.showScrubbingOverlay,
-    this.aspectRatioOverlayText, required this.onToggleFullScreen, required this.onCycleAspectRatio,
+    required this.isControlsLocked, required this.showScrubbingOverlay,
+    required this.onToggleFullScreen,
     required this.onHandleTap, required this.onDoubleTapToSeek, required this.onHorizontalDragEnd,
     required this.onVerticalDragUpdate, required this.onVerticalDragEnd,    required this.onUnifiedHorizontalDrag,
     required this.onScrollingLock, // **NEW: Required callback**
     required this.onShowSnackBar, // **NEW: Required callback**
     required this.buildAdSection,
     required this.buildVideoInfo, required this.buildChannelRow,
-    required this.buildScrubbingOverlay, required this.buildAspectRatioOverlay,
+    required this.buildScrubbingOverlay,
     required this.buildCustomControls, required this.buildDubbingProgress, 
     required this.formatDuration,
+    required this.onOpenExternalPlayer,
   });
 
   @override
@@ -1843,9 +1822,7 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
             ..scale(_scale),
           child: SizedBox.expand(
             child: FittedBox(
-              fit: widget.aspectRatioMode == AspectRatioMode.stretch || widget.aspectRatioMode == AspectRatioMode.ratio16x9
-                  ? BoxFit.fill
-                  : (widget.aspectRatioMode == AspectRatioMode.crop ? BoxFit.cover : BoxFit.contain),
+              fit: BoxFit.contain,
               clipBehavior: Clip.hardEdge,
               child: SizedBox(
                 width: controller.value.size.width,
@@ -1963,7 +1940,6 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
       if (widget.isCurrent) ...[
         AnimatedOpacity(duration: const Duration(milliseconds: 200), opacity: widget.showControls ? 1.0 : 0.0, child: IgnorePointer(ignoring: !widget.showControls, child: widget.buildCustomControls(widget.index))),
         AnimatedOpacity(duration: const Duration(milliseconds: 150), opacity: widget.showScrubbingOverlay ? 1.0 : 0.0, child: IgnorePointer(ignoring: !widget.showScrubbingOverlay, child: widget.buildScrubbingOverlay())),
-        if (widget.aspectRatioOverlayText != null) widget.buildAspectRatioOverlay(),
       ],
 
       if (controller != null && controllerIsHealthy && widget.isCurrent)
@@ -2005,9 +1981,9 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
                           // Cycle Aspect Ratio
                           IconButton(
                             constraints: const BoxConstraints(),
-                            tooltip: 'Aspect Ratio', 
-                            onPressed: widget.onCycleAspectRatio, 
-                            icon: const Icon(Icons.aspect_ratio_rounded, color: Colors.white, size: 21),
+                            tooltip: 'External Player', 
+                            onPressed: widget.onOpenExternalPlayer, 
+                            icon: const Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 21),
                             style: IconButton.styleFrom(
                               backgroundColor: Colors.black26,
                               padding: EdgeInsets.zero,

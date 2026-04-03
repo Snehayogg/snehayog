@@ -15,6 +15,7 @@ class VayuBottomSheet extends StatelessWidget {
   final ScrollController? scrollController;
   final double? height;
   final double? maxWidth;
+  final Widget Function(BuildContext context, ScrollController? scrollController)? builder;
 
   const VayuBottomSheet({
     super.key,
@@ -28,12 +29,14 @@ class VayuBottomSheet extends StatelessWidget {
     this.scrollController,
     this.height,
     this.maxWidth,
+    this.builder,
   });
 
   /// Static helper to show the bottom sheet with consistent styling.
   static Future<T?> show<T>({
     required BuildContext context,
-    required Widget child,
+    Widget? child,
+    Widget Function(BuildContext context, ScrollController? scrollController)? builder,
     String? title,
     IconData? icon,
     Color? iconColor,
@@ -48,6 +51,7 @@ class VayuBottomSheet extends StatelessWidget {
     double? height,
     double? maxWidth,
   }) {
+    assert(child != null || builder != null, 'Either child or builder must be provided');
     return showModalBottomSheet<T>(
       context: context,
       isScrollControlled: isScrollControlled,
@@ -70,7 +74,8 @@ class VayuBottomSheet extends StatelessWidget {
               scrollController: scrollController,
               height: height,
               maxWidth: maxWidth,
-              child: child,
+              builder: builder,
+              child: child ?? const SizedBox.shrink(),
             ),
           );
         }
@@ -83,7 +88,8 @@ class VayuBottomSheet extends StatelessWidget {
           actions: actions,
           height: height,
           maxWidth: maxWidth,
-          child: child,
+          builder: builder,
+          child: child ?? const SizedBox.shrink(),
         );
       },
     );
@@ -166,12 +172,14 @@ class VayuBottomSheet extends StatelessWidget {
             
             // Main Content
             Flexible(
-              child: SingleChildScrollView(
-                controller: scrollController,
-                physics: const BouncingScrollPhysics(),
-                padding: padding ?? const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: child,
-              ),
+              child: builder != null 
+                ? builder!(context, scrollController)
+                : SingleChildScrollView(
+                  controller: scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  padding: padding ?? const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: child,
+                ),
             ),
           ],
         ),

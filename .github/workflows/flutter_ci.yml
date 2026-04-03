@@ -1,0 +1,39 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: 'stable'
+          cache: true
+          
+      - name: Install dependencies
+        working-directory: frontend
+        run: flutter pub get
+        
+      - name: Run Widget & Unit Tests
+        working-directory: frontend
+        run: flutter test
+        
+      - name: Run Integration Tests
+        working-directory: frontend
+        run: flutter test integration_test --driver=test_driver/integration_test.dart

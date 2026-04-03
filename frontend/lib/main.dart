@@ -225,6 +225,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      restorationScopeId: 'vayu_app_root',
       navigatorKey: AuthService.navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Vayug',

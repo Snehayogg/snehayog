@@ -274,7 +274,18 @@ router.get('/notices', verifyToken, async (req, res) => {
     
     const activeNotices = notices.filter(notice => {
       if (!notice.firstSeenAt) return true; // Not seen yet
-      return (now - new Date(notice.firstSeenAt).getTime()) < hourInMs;
+      
+      const firstSeenTime = new Date(notice.firstSeenAt).getTime();
+      if (isNaN(firstSeenTime)) return true; // Fallback for invalid dates
+      
+      const elapsed = now - firstSeenTime;
+      const isExpired = elapsed >= hourInMs;
+      
+      if (isExpired) {
+        console.log(`👤 Notice API: Notice ${notice._id} for ${googleId} has expired (${Math.round(elapsed/60000)}m elapsed)`);
+      }
+      
+      return !isExpired;
     });
 
     res.json({ success: true, notices: activeNotices });
@@ -292,12 +303,17 @@ router.put('/notices/:id/seen', verifyToken, async (req, res) => {
 
     const notice = await Notice.findOne({ _id: id, userId: googleId });
     if (!notice) {
+      console.log(`⚠️ Notice API: Notice ${id} not found for user ${googleId}`);
       return res.status(404).json({ success: false, error: 'Notice not found' });
     }
 
     if (!notice.firstSeenAt) {
-      notice.firstSeenAt = new Date();
+      const now = new Date();
+      notice.firstSeenAt = now;
       await notice.save();
+      console.log(`✅ Notice API: Marked notice ${id} as seen at ${now.toISOString()}`);
+    } else {
+      console.log(`ℹ️ Notice API: Notice ${id} already marked as seen at ${notice.firstSeenAt.toISOString()}`);
     }
 
     res.json({ success: true, message: 'Notice marked as seen', notice });

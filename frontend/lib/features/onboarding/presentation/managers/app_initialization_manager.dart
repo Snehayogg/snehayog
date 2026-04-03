@@ -42,6 +42,10 @@ class AppInitializationManager {
   List<VideoModel>? initialVideos;
   DateTime? _initialVideosTimestamp;
   bool hasInitialVideosMore = false;
+  
+  // **NEW: Completer for background fetch synchronization**
+  Completer<List<VideoModel>?> _backgroundFetchCompleter = Completer<List<VideoModel>?>();
+  Future<List<VideoModel>?> get backgroundFetchFuture => _backgroundFetchCompleter.future;
 
   // **NEW: Track if a forced update is required**
   final ValueNotifier<bool> isUpdateRequired = ValueNotifier(false);
@@ -107,40 +111,45 @@ class AppInitializationManager {
       AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
       
       final stopwatch = Stopwatch()..start();
+      
+      // Reset completer for this run
+      if (_backgroundFetchCompleter.isCompleted) {
+        _backgroundFetchCompleter = Completer<List<VideoModel>?>();
+      }
 
-      // **PARALLELISM: Start Stage 1 if skipped/pending, but don't await strictly**
+      // **PARALLELISM: Start Stage 1 and Stage 2 tasks in parallel**
+      // We only strictly await the essential local checks to unlock UI.
       final stage1Future = initializeStage1();
 
       final videoService = VideoService();
 
       // Task B: Fast local auth gate — validates token state without a network call.
-      // Full profile fetch runs in the background after navigation.
       try {
         AppLogger.log('🔐 InitManager: Fast local auth gate...');
         initializationStatus.value = 'Authenticating...';
-        initializationProgress.value = 0.50; // checkpoint
         await _fastAuthGate();
-        initializationProgress.value = 0.65; // checkpoint
         AppLogger.log('✅ InitManager: Fast auth gate complete');
       } catch (e) {
         AppLogger.log('⚠️ InitManager: Auth gate error (non-critical): $e');
       }
 
-      // Task A: Video fetching (Now has access to validated tokens/user ID)
-      initializationStatus.value = 'Loading videos...';
-      initializationProgress.value = 0.70; // checkpoint
-      
-      // **SMART CHANGE: Revert to unawaited for maximum logic speed**
-      unawaited(_fetchAndPreloadFirstVideos(videoService));
-
-      // Ensure Stage 1 is atleast triggered/checked
+      // Ensure Stage 1 (Config) is triggered/checked before continuing
       await stage1Future;
 
+      // Task A: Video fetching - Start in background immediately
+      // We no longer block the 1.0 progress on this network call.
+      unawaited(_fetchAndPreloadFirstVideos(videoService));
+
       stopwatch.stop();
-      AppLogger.log('✅ InitManager: Stage 2 Complete (Auth Verified) in ${stopwatch.elapsedMilliseconds}ms');
+      AppLogger.log('✅ InitManager: Stage 2 Logic Unlocked in ${stopwatch.elapsedMilliseconds}ms');
+      
+      // **INSTANT BOOT: Report ready for UI transition now**
+      initializationProgress.value = 1.0;
+      initializationStatus.value = 'Ready!';
       _isStage2Complete = true;
     } catch (e) {
       AppLogger.log('❌ InitManager: Stage 2 Failed: $e');
+      initializationProgress.value = 1.0;
       _isStage2Complete = true;
     }
   }
@@ -164,20 +173,27 @@ class AppInitializationManager {
         initialVideos = videos;
         hasInitialVideosMore = result['hasMore'] ?? false;
         _initialVideosTimestamp = DateTime.now();
-        AppLogger.log('✅ InitManager: Fetched ${videos.length} videos.');
-        initializationProgress.value = 0.90;
-
-        // 2. Pre-initialize FIRST video only (The one user sees instantly)
-        // **OPTIMIZED: Skip blocking pre-init to reduce startup latency**
-        // User will see thumbnail first, then player initializes in Feed
-        initializationProgress.value = 1.0;
-        initializationStatus.value = 'Ready!';
+        AppLogger.log('✅ InitManager: Background fetch complete (${videos.length} videos).');
         
-        // 3. Warm up HLS for next few (Network only, low priority) - Non-blocking
+        // Complete the future for listeners
+        if (!_backgroundFetchCompleter.isCompleted) {
+          _backgroundFetchCompleter.complete(videos);
+        }
+
+        // 2. Warm up HLS for next few in background
         unawaited(_warmUpNextVideos(videos));
+      } else {
+        if (!_backgroundFetchCompleter.isCompleted) {
+          _backgroundFetchCompleter.complete(null);
+        }
       }
     } catch (e) {
-       AppLogger.log('❌ InitManager: Video Fetch Failed: $e');
+       AppLogger.log('❌ InitManager: Background Video Fetch Failed: $e');
+       
+       // Complete the future even on error
+       if (!_backgroundFetchCompleter.isCompleted) {
+         _backgroundFetchCompleter.complete(null);
+       }
        
        // **NEW: Check for Version Error (Force Update)**
        // Using string representation since DioException might be wrapped
