@@ -23,8 +23,9 @@ export default {
     }
 
     // Default: Forward to Backend (Origin) instead of 404
-    console.log(`⏩ Passthrough: ${url.pathname}`);
-    return fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
+    console.log(`⏩ Passthrough: ${request.method} ${url.pathname}`);
+    const passthroughRequest = new Request(`${env.BACKEND_URL}${url.pathname}${url.search}`, request);
+    return fetch(passthroughRequest);
   },
 
   // --- 2. R2 Event Handler (Phase 3) ---
@@ -123,7 +124,8 @@ async function handleApiGateway(request, env) {
   // 1. If not cacheable or it's the personalized feed (/api/videos), passthrough
   if (!route || url.pathname.startsWith('/api/videos')) {
     console.log(`⏩ Bypassing Cache for: ${url.pathname}`);
-    const response = await fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { headers: request.headers });
+    const passthroughRequest = new Request(`${env.BACKEND_URL}${url.pathname}${url.search}`, request);
+    const response = await fetch(passthroughRequest);
     const newResponse = new Response(response.body, response);
     newResponse.headers.set('X-Edge-Cache', 'BYPASS');
     return newResponse;
@@ -148,10 +150,8 @@ async function handleApiGateway(request, env) {
 
   // 4. Cache Miss: Fetch from Backend
   console.log(`☁️ Edge Cache MISS: ${url.pathname}. Fetching from origin...`);
-  const response = await fetch(`${env.BACKEND_URL}${url.pathname}${url.search}`, { 
-    headers: request.headers,
-    method: request.method // Use the original method (GET or HEAD)
-  });
+  const missRequest = new Request(`${env.BACKEND_URL}${url.pathname}${url.search}`, request);
+  const response = await fetch(missRequest);
 
   if (response.ok && request.method === 'GET') {
     const body = await response.clone().text();
