@@ -1102,34 +1102,32 @@ class ProfileStateManager extends ChangeNotifier {
       // Create a copy of selected IDs for processing
       final videoIdsToDelete = List<String>.from(_selectedVideoIds);
 
-      // Attempt to delete videos from the backend
-      bool allDeleted = true;
-      for (final videoId in videoIdsToDelete) {
-        try {
-          final success = await _videoService.deleteVideo(videoId);
-          if (!success) {
-            allDeleted = false;
-            AppLogger.log(
-                '❌ ProfileStateManager: Failed to delete video: $videoId');
-          }
-        } catch (e) {
-          allDeleted = false;
-          AppLogger.log(
-              '❌ ProfileStateManager: Error deleting video $videoId: $e');
-        }
+      // **OPTIMIZED: Use Bulk Delete API instead of individual calls**
+      final deletedCount = await _videoService.deleteVideos(videoIdsToDelete);
+      
+      final bool allDeleted = deletedCount >= videoIdsToDelete.length;
+      
+      if (!allDeleted && deletedCount > 0) {
+        AppLogger.log('⚠️ ProfileStateManager: Partial deletion successful ($deletedCount/${videoIdsToDelete.length})');
       }
 
-      if (allDeleted) {
-        AppLogger.log(
-            '✅ ProfileStateManager: All videos deleted successfully from backend');
+      if (deletedCount > 0) {
+        AppLogger.log('✅ ProfileStateManager: Deletion successful ($deletedCount videos)');
 
-        // Remove deleted videos from local list
+        // Remove deleted videos from local list (since we don't know which ones failed in a partial, 
+        // we'll remove all and then the refresh will restore anything that failed if needed)
+        // But for total reliability, if it's partial, we should definitely force a full refresh.
         _userVideos.removeWhere((video) => videoIdsToDelete.contains(video.id));
 
         // Clear selection and exit selection mode
         exitSelectionMode();
 
         _isLoading = false;
+        
+        // If it was partial, we MUST force a refresh to be sure
+        if (!allDeleted) {
+          _error = 'Some videos could not be deleted. Refreshing list...';
+        }
 
         // **NEW: Invalidate SmartCacheManager video cache to prevent deleted videos from showing**
         try {

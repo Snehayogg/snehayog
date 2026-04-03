@@ -1669,9 +1669,17 @@ export const deleteVideo = async (req, res) => {
     await User.findByIdAndUpdate(user._id, { $pull: { videos: videoId } });
 
     if (redisService.getConnectionStatus()) {
-      await invalidateCache(['videos:feed:*', `videos:user:${googleId}`, VideoCacheKeys.all(), VideoCacheKeys.single(videoId)]);
+      // **FIX: Robust cache invalidation using patterns**
+      await invalidateCache([
+        'videos:feed:*', 
+        `videos:user:${googleId}`, 
+        `user:feed:${googleId}:*`,
+        VideoCacheKeys.all(), 
+        VideoCacheKeys.single(videoId)
+      ]);
     }
 
+    console.log(`✅ Video ${videoId} deleted successfully by user ${googleId}`);
     res.json({ success: true, message: 'Video deleted successfully' });
   } catch (error) {
     console.error('❌ Error deleting video:', error);
@@ -1758,15 +1766,41 @@ export const bulkDeleteVideos = async (req, res) => {
     const user = await User.findOne({ googleId });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const result = await Video.deleteMany({ _id: { $in: videoIds }, uploader: user._id });
-    await User.findByIdAndUpdate(user._id, { $pull: { videos: { $in: videoIds } } });
+    // **FIX: Explicitly convert hex strings to ObjectIds for $in query reliability**
+    const objectIds = videoIds.map(id => new mongoose.Types.ObjectId(id));
+
+    const result = await Video.deleteMany({ 
+      _id: { $in: objectIds }, 
+      uploader: user._id 
+    });
+
+    await User.findByIdAndUpdate(user._id, { 
+      $pull: { videos: { $in: objectIds } } 
+    });
 
     if (redisService.getConnectionStatus()) {
-      await invalidateCache(['videos:feed:*', `videos:user:${googleId}`, VideoCacheKeys.all()]);
-      for (const id of videoIds) await invalidateCache(VideoCacheKeys.single(id));
+      // **FIX: Robust cache invalidation for bulk delete**
+      const patterns = [
+        'videos:feed:*',
+        `videos:user:${googleId}`,
+        `user:feed:${googleId}:*`,
+        VideoCacheKeys.all()
+      ];
+      
+      // Also clear individual video caches
+      for (const id of videoIds) {
+        patterns.push(VideoCacheKeys.single(id));
+      }
+
+      await invalidateCache(patterns);
     }
 
-    res.json({ success: true, message: `Deleted ${result.deletedCount} videos` });
+    console.log(`✅ Bulk delete: ${result.deletedCount} videos deleted for user ${googleId}`);
+    res.json({ 
+      success: true, 
+      message: `Successfully deleted ${result.deletedCount} videos`,
+      deletedCount: result.deletedCount
+    });
   } catch (error) {
     console.error('❌ Bulk delete error:', error);
     res.status(500).json({ error: 'Failed to delete videos' });

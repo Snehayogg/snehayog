@@ -34,7 +34,7 @@ class VideoService {
   static String get baseUrl => NetworkHelper.getBaseUrl();
 
   // **NEW: Get base URL with Railway first, local fallback**
-  static Future<String> getBaseUrlWithFallback() =>
+  Future<String> getBaseUrlWithFallback() =>
       NetworkHelper.getBaseUrlWithFallback();
   static const int maxRetries = 2;
   static const int retryDelay = 1;
@@ -827,13 +827,55 @@ class VideoService {
       } else if (res.statusCode == 404) {
         throw Exception('Video not found');
       } else {
-        final error = json.decode(res.body);
-        throw Exception(error['error'] ?? 'Failed to delete video');
+        // **FIX: Robust parsing for non-JSON error responses**
+        try {
+          final error = json.decode(res.body);
+          throw Exception(error['error'] ?? 'Failed to delete video');
+        } catch (e) {
+          AppLogger.log('⚠️ VideoService: Could not parse error JSON: ${res.body}');
+          throw Exception('Server error (${res.statusCode}): Failed to delete video');
+        }
       }
     } catch (e) {
       AppLogger.log('❌ VideoService: Error deleting video: $e');
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
+      }
+      rethrow;
+    }
+  }
+
+  /// **Delete multiple videos (Bulk Deletion)**
+  Future<int> deleteVideos(List<String> videoIds) async {
+    if (videoIds.isEmpty) return 0;
+
+    try {
+      AppLogger.log('🗑️ VideoService: Attempting bulk delete for ${videoIds.length} videos');
+
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
+      final res = await httpClientService.post(
+        Uri.parse('$resolvedBaseUrl/api/videos/bulk-delete'),
+        body: json.encode({'videoIds': videoIds}),
+      ).timeout(const Duration(seconds: 20));
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final deletedCount = data['deletedCount'] ?? videoIds.length;
+        AppLogger.log('✅ VideoService: Bulk delete successful. Deleted $deletedCount videos');
+        return deletedCount;
+      } else {
+        // Handle error response
+        try {
+          final error = json.decode(res.body);
+          throw Exception(error['error'] ?? 'Failed to delete videos');
+        } catch (e) {
+          throw Exception('Server error (${res.statusCode}): Bulk deletion failed');
+        }
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error in bulk delete: $e');
+      if (e is TimeoutException) {
+        throw Exception('Bulk deletion timed out. Some videos may have been deleted.');
       }
       rethrow;
     }
