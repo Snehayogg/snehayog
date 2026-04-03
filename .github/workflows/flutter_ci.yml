@@ -29,10 +29,15 @@ jobs:
         working-directory: frontend
         run: flutter pub get
         
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev libgcrypt20-dev xvfb
+          
       - name: Run Widget & Unit Tests
         working-directory: frontend
         run: flutter test
         
       - name: Run Integration Tests
         working-directory: frontend
-        run: flutter test integration_test
+        run: xvfb-run flutter test integration_test -d linux
