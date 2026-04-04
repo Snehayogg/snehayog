@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/video/feed/presentation/screens/video_feed_advanced/widgets/video_aspect_surface.dart';
+import 'package:vayug/core/design/colors.dart';
 
 class VideoPage extends StatelessWidget {
   final VideoModel video;
@@ -33,7 +34,33 @@ class VideoPage extends StatelessWidget {
       color: Colors.black,
       child: Stack(
         children: [
-          Positioned.fill(child: _buildVideoThumbnail(video)),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: AspectRatio(
+              aspectRatio: video.aspectRatio,
+              child: _buildVideoThumbnail(video),
+            ),
+          ),
+          if (controller == null ||
+              (() {
+                try {
+                  return !controller!.value.isInitialized;
+                } catch (_) {
+                  return true;
+                }
+              }()))
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: AspectRatio(
+                aspectRatio: video.aspectRatio,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+              ),
+            ),
           if (controller != null &&
               showPlayer &&
               (() {
@@ -59,11 +86,18 @@ class VideoPage extends StatelessWidget {
   }
 
   Widget _buildVideoThumbnail(VideoModel video) {
-    // TEMPORARY: Disabled thumbnail to test direct video loading
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: Colors.black,
+    if (video.thumbnailUrl.isEmpty) {
+      return Container(color: Colors.black);
+    }
+
+    return Image.network(
+      video.thumbnailUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(color: Colors.black);
+      },
     );
   }
 }

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 User Behavior & Analytics - Vayug Admin</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1c2c 0%, #4a1942 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: #ccc;
+            font-size: 1.1rem;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .stat-number {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .stat-label {
+            color: #aaa;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-section {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #feb47b;
+        }
+
+        .data-table-section {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        #userSearch {
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            width: 300px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        #userSearch:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .behavior-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .behavior-table th,
+        .behavior-table td {
+            padding: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .behavior-table th {
+            background: rgba(255, 255, 255, 0.05);
+            color: #feb47b;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        .behavior-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-info { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+        .badge-success { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+        .badge-warning { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 28, 44, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            display: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>📊 User Behavior & Content Analytics</h1>
+            <p>Deep dive into how users interact with your content</p>
+            <div class="nav-buttons">
+                <a href="admin_dashboard.html" class="btn btn-outline">🏠 Back to Dashboard</a>
+                <select id="timeRange" class="btn btn-outline" onchange="refreshData()" style="background: rgba(0,0,0,0.2); cursor: pointer;">
+                    <option value="all">🕒 All Time</option>
+                    <option value="month">📅 This Month</option>
+                </select>
+                <button onclick="refreshData()" class="btn btn-primary">🔄 Sync Analytics</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-icon">⏱️</span>
+                <div class="stat-number" id="totalWatchTime">-</div>
+                <div class="stat-label">Total Watch Time</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">👥</span>
+                <div class="stat-number" id="totalUsers">-</div>
+                <div class="stat-label">Active Analyzed Users</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">📱</span>
+                <div class="stat-number" id="avgDurationPerUser">-</div>
+                <div class="stat-label">Avg Time / User</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-icon">👁️</span>
+                <div class="stat-number" id="avgDurationPerView">-</div>
+                <div class="stat-label">Avg Retention / View</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-section">
+                <h2 class="section-title">⏭️ Video Skip distribution</h2>
+                <canvas id="skipChart"></canvas>
+            </div>
+            <div class="chart-section">
+                <h2 class="section-title">🔥 Content Interest (By Category)</h2>
+                <canvas id="interestChart"></canvas>
+            </div>
+        </div>
+
+        <div class="data-table-section">
+            <h2 class="section-title">👤 Individual User Behavior</h2>
+            <div class="table-controls">
+                <input type="text" id="userSearch" placeholder="Search by name, email or ID..." onkeyup="filterUsers()">
+                <div style="color: #aaa; font-size: 0.9rem;" id="userCount">Showing 0 users</div>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="behavior-table">
+                    <thead>
+                        <tr>
+                            <th>User Details</th>
+                            <th>Total Watch Time</th>
+                            <th>Videos Watched</th>
+                            <th>Last Active</th>
+                            <th>Engagement Level</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_KEY_STORAGE_KEY = 'vayu_admin_dashboard_key';
+        
+        const getAdminKey = () => localStorage.getItem(ADMIN_KEY_STORAGE_KEY);
+
+        const detectApiBase = () => {
+            const params = new URLSearchParams(window.location.search);
+            const override = params.get('apiBase');
+            if (override) return override.replace(/\/$/, '');
+
+            const { protocol, hostname, port } = window.location;
+            // If running on localhost or a local network IP
+            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.')) {
+                return `${protocol}//${hostname}:${port || '5001'}/api`;
+            }
+            return 'https://snehayog.site/api';
+        };
+
+        const API_BASE = detectApiBase();
+        let userData = [];
+        let skipChart, interestChart;
+
+        async function authorizedFetch(url, options = {}) {
+            const key = getAdminKey();
+            const headers = new Headers(options.headers || {});
+            if (key) headers.set('x-admin-key', key);
+            
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401) {
+                alert('Session expired or unauthorized. Please re-login on the dashboard.');
+                window.location.href = 'admin_dashboard.html';
+                return null;
+            }
+            return response;
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '0s';
+            if (seconds < 60) return seconds.toFixed(1) + 's';
+            const m = Math.floor(seconds / 60);
+            const s = Math.round(seconds % 60);
+            if (m < 60) return `${m}m ${s}s`;
+            const h = Math.floor(m / 60);
+            const rm = m % 60;
+            return `${h}h ${rm}m`;
+        }
+
+        function getEngagementBadge(duration) {
+            if (duration > 3600) return '<span class="status-badge badge-success">Super Active</span>';
+            if (duration > 600) return '<span class="status-badge badge-info">Regular</span>';
+            return '<span class="status-badge badge-warning">Casual</span>';
+        }
+
+        async function refreshData() {
+            const range = document.getElementById('timeRange')?.value || 'all';
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            try {
+                const response = await authorizedFetch(`${API_BASE}/admin/user-behavior/stats?range=${range}`);
+                if (!response || !response.ok) throw new Error('Failed to fetch data');
+                
+                const data = await response.json();
+                renderStats(data);
+                renderCharts(data);
+                renderUserTable(data.userTable);
+                userData = data.userTable;
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to load metrics. Ensure you are authorized.');
+            } finally {
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }
+        }
+
+        function renderStats(data) {
+            const m = data.metrics;
+            document.getElementById('totalWatchTime').textContent = formatDuration(m.totalWatchTime);
+            document.getElementById('totalUsers').textContent = m.totalUniqueUsers.toLocaleString();
+            document.getElementById('avgDurationPerUser').textContent = formatDuration(m.avgDurationPerUser);
+            document.getElementById('avgDurationPerView').textContent = m.avgDurationPerView.toFixed(1) + 's';
+        }
+
+        function renderCharts(data) {
+            // Skip Distribution Chart
+            const skipCtx = document.getElementById('skipChart').getContext('2d');
+            const skipLabels = data.skipDistribution.map(d => d._id + (typeof d._id === 'number' ? 's' : ''));
+            const skipValues = data.skipDistribution.map(d => d.count);
+
+            if (skipChart) skipChart.destroy();
+            skipChart = new Chart(skipCtx, {
+                type: 'bar',
+                data: {
+                    labels: skipLabels,
+                    datasets: [{
+                        label: 'Skip Frequency',
+                        data: skipValues,
+                        backgroundColor: '#ff7e5f',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#aaa' } },
+                        x: { grid: { display: false }, ticks: { color: '#aaa' } }
+                    }
+                }
+            });
+
+            // Interest Chart
+            const interestCtx = document.getElementById('interestChart').getContext('2d');
+            const sortedInterests = [...data.interests].sort((a,b) => b.totalDuration - a.totalDuration);
+            const intLabels = sortedInterests.map(i => i._id || 'Uncategorized');
+            const intValues = sortedInterests.map(i => i.totalDuration / 60); // In minutes
+
+            if (interestChart) interestChart.destroy();
+            interestChart = new Chart(interestCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: intLabels,
+                    datasets: [{
+                        data: intValues,
+                        backgroundColor: [
+                            '#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff', 
+                            '#ff9f40', '#c9cbcf', '#7e57c2', '#26a69a', '#ef5350'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#ccc', font: { size: 12 } } },
+                        tooltip: { callbacks: { label: (c) => `${c.label}: ${c.raw.toFixed(1)} minutes` } }
+                    }
+                }
+            });
+        }
+
+        function renderUserTable(users) {
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = '';
+            
+            users.forEach(u => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <strong>${u.name}</strong><br>
+                        <small style="color: #aaa;">${u.email || u.googleId}</small>
+                    </td>
+                    <td style="font-weight: 600;">${formatDuration(u.totalWatchTime)}</td>
+                    <td>${u.videoCount}</td>
+                    <td>${new Date(u.lastActivity).toLocaleDateString()}</td>
+                    <td>${getEngagementBadge(u.totalWatchTime)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            const range = document.getElementById('timeRange')?.value || 'all';
+            const rangeSuffix = range === 'month' ? ' (This Month)' : ' (All Time)';
+            document.getElementById('userCount').textContent = `Showing ${users.length} users${rangeSuffix}`;
+        }
+
+        function filterUsers() {
+            const query = document.getElementById('userSearch').value.toLowerCase();
+            const filtered = userData.filter(u => 
+                u.name.toLowerCase().includes(query) || 
+                u.email.toLowerCase().includes(query) || 
+                u.googleId?.toLowerCase().includes(query)
+            );
+            renderUserTable(filtered);
+        }
+
+        window.onload = refreshData;
+    </script>
+</body>
+
+</html>

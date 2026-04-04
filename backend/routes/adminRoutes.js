@@ -11,6 +11,7 @@ import Notice from '../models/Notice.js';
 import RemovedVideoRecord from '../models/RemovedVideoRecord.js';
 import { AD_CONFIG } from '../constants/index.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
+import WatchHistory from '../models/WatchHistory.js';
 
 const router = express.Router();
 
@@ -653,6 +654,144 @@ router.get('/recommender/stats', requireAdminDashboardKey, async (req, res) => {
   } catch (error) {
     console.error('❌ Error loading recommendation stats:', error);
     res.status(500).json({ success: false, error: 'Failed to load recommendation stats' });
+  }
+});
+
+// **NEW: Route to get detailed user behavior metrics**
+router.get('/user-behavior/stats', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { range = 'all' } = req.query;
+    let matchStage = {};
+
+    if (range === 'month') {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      matchStage = { createdAt: { $gte: startOfMonth } };
+    }
+
+    // 1. Global Metrics
+    const globalMetricsAgg = await WatchHistory.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: null,
+          totalWatchTime: { $sum: '$watchDuration' },
+          totalEntries: { $sum: 1 },
+          avgWatchDuration: { $avg: '$watchDuration' }
+        }
+      }
+    ]);
+
+    const globalMetrics = globalMetricsAgg[0] || { totalWatchTime: 0, totalEntries: 0, avgWatchDuration: 0 };
+    
+    // Count unique users across watch history
+    const uniqueUsersCountAgg = await WatchHistory.aggregate([
+      { $match: matchStage },
+      { $group: { _id: '$userId' } },
+      { $count: 'count' }
+    ]);
+    const totalUniqueUsers = uniqueUsersCountAgg[0]?.count || 0;
+
+    // 2. Skip Distribution (Bucketed watch duration for skips)
+    const skipDistribution = await WatchHistory.aggregate([
+      { 
+        $match: { 
+          ...matchStage,
+          isSkip: true 
+        } 
+      },
+      {
+        $bucket: {
+          groupBy: '$watchDuration',
+          boundaries: [0, 3, 10, 30, 60],
+          default: '60+'
+        }
+      }
+    ]);
+
+    // 3. Interest & Category Performance
+    const interestStats = await WatchHistory.aggregate([
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'videos',
+          localField: 'videoId',
+          foreignField: '_id',
+          as: 'video'
+        }
+      },
+      { $unwind: '$video' },
+      {
+        $group: {
+          _id: '$video.category',
+          totalDuration: { $sum: '$watchDuration' },
+          viewCount: { $sum: 1 },
+          skipCount: {
+            $sum: { $cond: ['$isSkip', 1, 0] }
+          }
+        }
+      },
+      { $sort: { totalDuration: -1 } },
+      { $limit: 15 }
+    ]);
+
+    // 4. User-Specific Usage Table (Top 100 most active users)
+    const userUsageTable = await WatchHistory.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: '$userId',
+          totalWatchTime: { $sum: '$watchDuration' },
+          videoCount: { $sum: 1 },
+          lastActivity: { $max: '$updatedAt' }
+        }
+      },
+      { $sort: { totalWatchTime: -1 } },
+      { $limit: 100 }
+    ]);
+
+    // Fetch user details (names/emails) to populate the table
+    const userIds = userUsageTable.map(u => u._id);
+    // Find by either googleId or _id (depending on how userId is stored in WatchHistory)
+    const users = await User.find({
+      $or: [
+        { googleId: { $in: userIds } },
+        { _id: { $in: userIds.filter(id => mongoose.Types.ObjectId.isValid(id)) } }
+      ]
+    }).select('name email googleId').lean();
+
+    const userMap = new Map();
+    users.forEach(u => {
+      userMap.set(u.googleId || String(u._id), u);
+    });
+
+    const populatedUserTable = userUsageTable.map(u => {
+      const userData = userMap.get(u._id) || { name: 'Anonymous/Deleted', email: '—' };
+      return {
+        ...u,
+        name: userData.name,
+        email: userData.email,
+        googleId: userData.googleId || u._id
+      };
+    });
+
+    res.json({
+      success: true,
+      metrics: {
+        totalWatchTime: globalMetrics.totalWatchTime,
+        totalUniqueUsers,
+        avgDurationPerUser: totalUniqueUsers > 0 ? (globalMetrics.totalWatchTime / totalUniqueUsers) : 0,
+        avgDurationPerView: globalMetrics.avgWatchDuration,
+        totalViews: globalMetrics.totalEntries
+      },
+      skipDistribution,
+      interests: interestStats,
+      userTable: populatedUserTable
+    });
+
+  } catch (error) {
+    console.error('❌ Error loading user behavior stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to load user behavior statistics' });
   }
 });
 

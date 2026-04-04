@@ -185,6 +185,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   // Carousel ads - **REFACTORED: Now using _carouselAdManager directly**
 
   final Map<String, ValueNotifier<int>> _currentHorizontalPage = {};
+  final Map<String, PageController> _horizontalControllers = {};
 
   // **Long-press ad overlay state**
   final ValueNotifier<bool> _showLongPressAdOverlayVN = ValueNotifier<bool>(false);

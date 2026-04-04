@@ -1564,8 +1564,19 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     final videoId = _videos[index].id;
     if (_carouselAdManager.getTotalCarouselAds() > 0 &&
         _currentHorizontalPage.containsKey(videoId)) {
-      _currentHorizontalPage[videoId]!.value =
-          1; // Switch to carousel ad page - no setState needed!
+      
+      // **FLUID TRANSITION: Animate the horizontal PageView for a premium feel**
+      final controller = _horizontalControllers[videoId];
+      if (controller != null && controller.hasClients) {
+        controller.animateToPage(
+          1,
+          duration: const Duration(milliseconds: 300), 
+          curve: Curves.easeInOut,
+        );
+      } else {
+        // Fallback: Just update the value (will be used as initialPage)
+        _currentHorizontalPage[videoId]!.value = 1;
+      }
     } else {
       // Attempt to reload ads if empty
       if (_carouselAdManager.getTotalCarouselAds() == 0) {
@@ -1939,12 +1950,23 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     }
     _showHeartAnimation.clear();
 
+    for (final notifier in _currentHorizontalPage.values) {
+      notifier.dispose();
+    }
+    _currentHorizontalPage.clear();
+
     // **NEW: Dispose VideoControllerManager**
     _videoControllerManager.dispose();
     AppLogger.log('🗑️ VideoFeedAdvanced: Disposed VideoControllerManager');
 
     // Dispose page controller
     _pageController.dispose();
+
+    // Dispose horizontal page controllers
+    for (final controller in _horizontalControllers.values) {
+      controller.dispose();
+    }
+    _horizontalControllers.clear();
 
     // Cancel timers
     _preloadTimer?.cancel();

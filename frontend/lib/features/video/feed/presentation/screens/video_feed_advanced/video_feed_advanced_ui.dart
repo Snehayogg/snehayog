@@ -296,7 +296,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   width: 30,
                   height: 30,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.textTertiary)),
+                      strokeWidth: 2, color: AppColors.primary)),
               AppSpacing.vSpace16,
               Text("Loading more videos...",
                   style: TextStyle(
@@ -342,24 +342,26 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       color: AppColors.backgroundPrimary,
       child: Stack(
         children: [
-          ValueListenableBuilder<int>(
-            valueListenable: _currentHorizontalPage[videoId]!,
-            builder: (context, currentPage, child) {
-              if (currentPage == 1) {
-                AppLogger.log(
-                    '🏗️ Stack Rebuild: video=$videoId, page=$currentPage, ads=${_carouselAdManager.getTotalCarouselAds()}');
+          PageView(
+            controller: _horizontalControllers.putIfAbsent(videoId, () => PageController(initialPage: _currentHorizontalPage[videoId]!.value)),
+            onPageChanged: (page) {
+              _currentHorizontalPage[videoId]!.value = page;
+              if (page == 1) {
+                // Pause video when swiping to ad
+                _pauseCurrentVideo();
+              } else if (page == 0 && isActive) {
+                // Resume video when swiping back (if it's the active one)
+                _tryAutoplayCurrent();
               }
-              return IndexedStack(
-                index: currentPage,
-                children: [
-                  _buildVideoPage(video, controller, isActive, index),
-                  if (_carouselAdManager.shouldShowCarouselAd(index))
-                    _buildCarouselAdPage(index)
-                  else
-                    const SizedBox.shrink(),
-                ],
-              );
             },
+            physics: const BouncingScrollPhysics(),
+            children: [
+              _buildVideoPage(video, controller, isActive, index),
+              if (_carouselAdManager.shouldShowCarouselAd(index))
+                _buildCarouselAdPage(index)
+              else
+                const SizedBox.shrink(),
+            ],
           ),
         ],
       ),
@@ -439,9 +441,28 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: RepaintBoundary(
         child: Stack(
           children: [
-            // Show thumbnail only when no controller is available
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: AspectRatio(
+                aspectRatio: video.aspectRatio,
+                child: _buildVideoThumbnail(video),
+              ),
+            ),
+
+            // **FEEDBACK: Show spinner while loading, identical to Vayu player**
             if (controller == null || !controllerUsable)
-              Positioned.fill(child: _buildVideoThumbnail(video)),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: AspectRatio(
+                  aspectRatio: video.aspectRatio,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primary,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+              ),
 
             // **SIMPLIFIED: Mount VideoPlayer directly when controller is ready.**
 
@@ -509,7 +530,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                               children: [
                                 const Center(
                                   child: CircularProgressIndicator(
-                                      color: AppColors.white),
+                                      color: AppColors.primary,
+                                      strokeWidth: 2),
                                 ),
                                 // **NEW: Slow Internet message**
                                 ValueListenableBuilder<bool>(
@@ -866,19 +888,28 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     final sharedPool = SharedVideoControllerPool();
     if (sharedPool.isControllerDisposed(controller)) {
       return const Center(
-        child: CircularProgressIndicator(color: AppColors.white),
+        child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 2,
+        ),
       );
     }
 
     try {
       if (!controller.value.isInitialized) {
         return const Center(
-          child: CircularProgressIndicator(color: AppColors.white),
+          child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 2,
+        ),
         );
       }
     } catch (_) {
       return const Center(
-        child: CircularProgressIndicator(color: AppColors.white),
+        child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 2,
+        ),
       );
     }
 
@@ -1027,32 +1058,20 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
   Widget _buildVideoThumbnail(VideoModel video) {
     if (video.thumbnailUrl.isEmpty) {
-      return Positioned.fill(
-        child: Container(
-          color: AppColors.backgroundPrimary,
-        ),
-      );
+      return Container(color: AppColors.backgroundPrimary);
     }
 
-    return Positioned.fill(
-      child: CachedNetworkImage(
-        imageUrl: video.thumbnailUrl,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          color: AppColors.backgroundPrimary,
-          child: const Center(
-            child: CircularProgressIndicator(
-              color: AppColors.white,
-              strokeWidth: 2,
-            ),
-          ),
-        ),
-        errorWidget: (context, url, error) => Container(
-          color: AppColors.backgroundPrimary,
-          child: const Icon(
-            Icons.video_camera_back_outlined,
-            color: AppColors.textSecondary,
-          ),
+    return CachedNetworkImage(
+      imageUrl: video.thumbnailUrl,
+      fit: BoxFit.cover,
+      fadeInDuration: Duration.zero, // **ZERO-BLINK: Remove fade-in delay**
+      fadeOutDuration: Duration.zero,
+      placeholder: (context, url) => Container(color: AppColors.backgroundPrimary),
+      errorWidget: (context, url, error) => Container(
+        color: AppColors.backgroundPrimary,
+        child: const Icon(
+          Icons.video_camera_back_outlined,
+          color: AppColors.textSecondary,
         ),
       ),
     );

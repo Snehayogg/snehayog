@@ -41,6 +41,7 @@ class _VayuVideoProgressBarState extends State<VayuVideoProgressBar> with Ticker
   late double _currentRelative;
   double _lastVibrateProgress = 0.0; // **YUG MATCH: Track last haptic position**
   DateTime _lastUpdate = DateTime.now();
+  DateTime? _lastSeekTime; // Track last seek to prevent "jump-back"
   static const Duration _updateInterval = Duration(milliseconds: 33); // ~30fps
 
   @override
@@ -81,6 +82,11 @@ class _VayuVideoProgressBarState extends State<VayuVideoProgressBar> with Ticker
 
   void _videoListener() {
     if (_isDragging || !widget.controller.value.isInitialized) return; // **YUG MATCH: Pause updates while dragging**
+    
+    // **NEW: Seek Stability - Ignore updates for 300ms after a seek/drag end**
+    if (_lastSeekTime != null && DateTime.now().difference(_lastSeekTime!) < const Duration(milliseconds: 300)) {
+      return;
+    }
 
     final now = DateTime.now();
     if (now.difference(_lastUpdate) >= _updateInterval) {
@@ -151,6 +157,7 @@ class _VayuVideoProgressBarState extends State<VayuVideoProgressBar> with Ticker
     if (!_isDragging) return;
 
     _isDragging = false;
+    _lastSeekTime = DateTime.now(); // Mark seeking start
     _seekTo(_dragPosition.value);
 
     if (_wasPlayingBeforeDrag) {

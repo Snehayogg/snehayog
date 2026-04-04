@@ -43,10 +43,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.separated(
-              padding: EdgeInsets.all(AppSpacing.spacing4),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing2, vertical: AppSpacing.spacing1),
               itemCount: 3,
               separatorBuilder: (_, __) =>
-                  SizedBox(height: AppSpacing.spacing4),
+                  const SizedBox(height: 1.0),
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return _buildActionTile(
