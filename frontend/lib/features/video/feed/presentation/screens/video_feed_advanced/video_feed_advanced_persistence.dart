@@ -1,35 +1,7 @@
 part of '../video_feed_advanced.dart';
 
 extension _VideoFeedPersistence on _VideoFeedAdvancedState {
-  Future<void> _saveBackgroundState() async {
-    try {
-      // 1. Update Native Restoration Bucket (OS-managed)
-      // This data is automatically wiped if user clears the app.
-      _restorableIndex.value = _currentIndex;
-      _restorableTimestamp.value = DateTime.now().millisecondsSinceEpoch;
 
-      // Aggressively save a small window of metadata (current + 4 next)
-      // This allows instant restoration without network calls.
-      if (_videos.isNotEmpty) {
-        final start = _currentIndex.clamp(0, _videos.length - 1);
-        final end = (start + 5).clamp(0, _videos.length);
-        final snapshot = _videos.sublist(start, end);
-        final jsonStr = jsonEncode(snapshot.map((v) => v.toJson()).toList());
-        _restorableVideosJson.value = jsonStr;
-        
-        AppLogger.log('💾 Snapshot saved to Restoration Bucket (${snapshot.length} videos)');
-      }
-
-      // 2. We stop saving index/videoId to SharedPreferences to respect 
-      // the "Fresh start on user clear" requirement.
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kSavedFeedIndexKey);
-      await prefs.remove(_kSavedVideoIdKey);
-      
-    } catch (e) {
-      AppLogger.log('❌ Error saving background state: $e');
-    }
-  }
 
 
   Future<void> _restoreBackgroundStateIfAny() async {
@@ -50,7 +22,7 @@ extension _VideoFeedPersistence on _VideoFeedAdvancedState {
               'ℹ️ Saved state is too old ($hoursSinceSaved hours), ignoring');
           // Clear old state
           await prefs.remove(_kSavedFeedIndexKey);
-          await prefs.remove(_kSavedFeedTypeKey);
+          // **Restoration logic removed**
           await prefs.remove(_kSavedVideoIdKey);
           await prefs.remove(_kSavedPageKey);
           await prefs.remove(_kSavedStateTimestampKey);

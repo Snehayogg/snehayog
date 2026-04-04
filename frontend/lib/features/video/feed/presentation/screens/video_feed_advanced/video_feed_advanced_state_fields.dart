@@ -142,8 +142,8 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   bool _wasLastScrollFast = false;
 
   // First-frame tracking
-  final Map<String, ValueNotifier<bool>> _firstFrameReady = {};
-  final Map<String, ValueNotifier<bool>> _forceMountPlayer = {};
+
+
 
   // Disposal subscription
   StreamSubscription<String>? _poolDisposalSubscription;
@@ -237,9 +237,6 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
 
   // **STATE RESTORATION: Native OS-managed properties**
   // These are automatically deleted by the OS if the user manually swipes the app away.
-  final RestorableInt _restorableIndex = RestorableInt(-1);
-  final RestorableString _restorableVideosJson = RestorableString('');
-  final RestorableInt _restorableTimestamp = RestorableInt(0);
 
   String videoIdentityKey(VideoModel video) {
     if (video.id.isNotEmpty) return video.id;

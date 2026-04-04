@@ -104,7 +104,7 @@ dependencies:
   hugeicons: ^1.1.2
   vibration: ^3.1.7
   firebase_crashlytics: ^4.3.10
-  #google_mlkit_translation: 0.13.0
+  google_mlkit_translation: 0.13.0
   flutter_tts: ^4.2.5
   ffmpeg_kit_flutter_new: ^4.1.0
   google_generative_ai: ^0.4.7

@@ -393,7 +393,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         sharedPool.addController(video.id, controller, index: index);
         
         if (mounted) {
-          _getOrCreateNotifier<bool>(_firstFrameReady, videoId, isReused);
+
           
           if (!_userPaused.containsKey(videoId)) {
             _userPaused[videoId] = false;
@@ -410,15 +410,8 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _attachBufferingListenerIfNeeded(controller, index);
         _attachErrorListenerIfNeeded(controller, index);
 
-        _getOrCreateNotifier<bool>(_firstFrameReady, videoId, isReused);
-        if (index <= 1 && !isReused) {
-          _forceMountPlayer[videoId] = ValueNotifier<bool>(false);
-          Future.delayed(const Duration(milliseconds: 700), () {
-            if (mounted && _firstFrameReady[videoId]?.value != true) {
-              _getOrCreateNotifier<bool>(_forceMountPlayer, videoId, true);
-            }
-          });
-        }
+
+
       }
 
       if (mounted && index == _currentIndex) {
@@ -656,10 +649,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
       _preloadedVideos.remove(videoId);
       _isBuffering.remove(videoId);
       
-      if (_firstFrameReady.containsKey(videoId)) {
-        _firstFrameReady[videoId]?.value = false;
-        _firstFrameReady.remove(videoId);
-      }
+
       _bufferingListeners.remove(videoId);
       _videoEndListeners.remove(videoId);
       _lastAccessedLocal.remove(videoId);
@@ -823,8 +813,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
              lastMoveTime ??= DateTime.now();
              
              if (DateTime.now().difference(lastMoveTime!) > const Duration(milliseconds: 3000)) {
-                 // **STALL DETECTED (>3s freeze)**
-                 AppLogger.log('❄️ Silent Stall detected for video $videoId (Frozen for 3s). Kicking...');
+                 // AppLogger.log('❄️ Silent Stall detected for video $videoId (Frozen for 3s). Kicking...');
                  
                  lastMoveTime = DateTime.now(); // Reset to prevent spamming
                  
@@ -1007,7 +996,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     if (_isBufferingVN[videoId]?.value == true) {
       _isBufferingVN[videoId]?.value = false;
     }
-    _firstFrameReady[videoId]?.value = true;
+
     _ensureWakelockForVisibility();
   }
 

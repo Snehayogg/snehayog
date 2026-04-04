@@ -252,7 +252,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         return _buildVideoItem(
           lastVideo,
           lastController,
-          false, // Not active
+          videoIndex == _currentIndex, // **FIX: Allow buffer item to be active**
           lastVideoIndex,
         );
       }
@@ -439,48 +439,15 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: RepaintBoundary(
         child: Stack(
           children: [
-            // **WEB FIX: Hide thumbnail when video is ready on web**
-            ValueListenableBuilder<bool>(
-              valueListenable:
-                  _firstFrameReady[videoId] ?? ValueNotifier<bool>(false),
-              builder: (context, firstFrameReady, _) {
-                final bool shouldShowOnWeb =
-                    kIsWeb && controller != null && controllerUsable;
-                final bool shouldHideThumbnail = firstFrameReady ||
-                    _forceMountPlayer[videoId]?.value == true ||
-                    shouldShowOnWeb;
+            // Show thumbnail only when no controller is available
+            if (controller == null || !controllerUsable)
+              Positioned.fill(child: _buildVideoThumbnail(video)),
 
-                return Positioned.fill(
-                  child: shouldHideThumbnail
-                      ? const SizedBox.shrink()
-                      : _buildVideoThumbnail(video),
-                );
-              },
-            ),
+            // **SIMPLIFIED: Mount VideoPlayer directly when controller is ready.**
+
             if (controller != null && controllerUsable)
-              ValueListenableBuilder<bool>(
-                valueListenable:
-                    _firstFrameReady[videoId] ?? ValueNotifier<bool>(false),
-                builder: (context, firstFrameReady, _) {
-                  // **WEB FIX: On web, always show video if controller is initialized**
-                  // Web video player doesn't always trigger firstFrameReady properly
-                  // So we force show video on web if controller is initialized
-                  // This ensures videos are visible even if firstFrameReady never triggers
-                  final bool shouldShowOnWeb = kIsWeb && controllerUsable;
-
-                  final shouldShowVideo = firstFrameReady ||
-                      _forceMountPlayer[videoId]?.value == true ||
-                      shouldShowOnWeb;
-
-                  if (shouldShowVideo) {
-                    final VideoPlayerController safeController = controller!;
-                    return Positioned.fill(
-                      child:
-                          _buildVideoPlayer(safeController, isActive, index, video),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
+              Positioned.fill(
+                child: _buildVideoPlayer(controller, isActive, index, video),
               ),
 
             Positioned.fill(
@@ -496,8 +463,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               child: IgnorePointer(
                 // **OPTIMIZED: Use ValueListenableBuilder for granular updates - avoid setState**
                 child: ValueListenableBuilder<bool>(
-                  valueListenable: _userPausedVN[videoId] ??=
-                      ValueNotifier<bool>(false),
+                  valueListenable:
+                      _getOrCreateNotifier<bool>(_userPausedVN, videoId, false),
                   builder: (context, isUserPaused, _) {
                     return Opacity(
                       opacity: isUserPaused ? 1.0 : 0.0,
@@ -527,13 +494,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             Positioned.fill(
               child: IgnorePointer(
                 child: ValueListenableBuilder<bool>(
-                  valueListenable: _isBufferingVN[videoId] ??=
-                      ValueNotifier<bool>(false),
+                  valueListenable: _getOrCreateNotifier<bool>(
+                      _isBufferingVN, videoId, false),
                   builder: (context, isBuffering, _) {
                     // **OPTIMIZED: Listen to userPausedVN too for correct visibility**
                     return ValueListenableBuilder<bool>(
-                        valueListenable: _userPausedVN[videoId] ??=
-                            ValueNotifier<bool>(false),
+                        valueListenable: _getOrCreateNotifier<bool>(
+                            _userPausedVN, videoId, false),
                         builder: (context, isUserPaused, _) {
                           final show = isBuffering && !isUserPaused;
                           return Opacity(
@@ -546,9 +513,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                                 ),
                                 // **NEW: Slow Internet message**
                                 ValueListenableBuilder<bool>(
-                                  valueListenable:
-                                      _isSlowConnectionVN[videoId] ??=
-                                          ValueNotifier<bool>(false),
+                                  valueListenable: _getOrCreateNotifier<bool>(
+                                      _isSlowConnectionVN, videoId, false),
                                   builder: (context, isSlow, _) {
                                     if (!isSlow) return const SizedBox.shrink();
                                     return Positioned(

@@ -691,11 +691,18 @@ class VideoControllerManager {
   }
 
   /// **TAB CHANGE DETECTION: Pause all videos when user switches tabs**
-  Future<void> pauseAllVideosOnTabChange() async {
-    AppLogger.log(
-        '⏸️ VideoControllerManager: Tab change detected - pausing all videos');
+  Future<void> pauseAllVideosOnTabChange({String? exceptVideoId}) async {
+    final bool isSpecificExclusion = exceptVideoId != null;
+    AppLogger.log(isSpecificExclusion
+        ? '⏸️ VideoControllerManager: Selective global pause (excluding $exceptVideoId)'
+        : '⏸️ VideoControllerManager: Tab change detected - pausing all videos');
 
     for (final index in _controllers.keys) {
+      // **FIX: If this is the current video, don't pause it**
+      if (isSpecificExclusion && _controllerVideoIds[index] == exceptVideoId) {
+        continue;
+      }
+
       final controller = _controllers[index];
       if (controller != null) {
         try {
@@ -742,11 +749,17 @@ class VideoControllerManager {
   }
 
   /// **TAB CHANGE DETECTION: Force pause all videos immediately (for critical situations)**
-  void forcePauseAllVideosSync() {
+  void forcePauseAllVideosSync({String? exceptVideoId}) {
     AppLogger.log(
-        '🛑 VideoControllerManager: Force pausing all videos immediately');
+        '🛑 VideoControllerManager: Force pausing all videos immediately' +
+            (exceptVideoId != null ? ' (excluding $exceptVideoId)' : ''));
 
     for (final index in _controllers.keys) {
+      // **FIX: Exclusion check**
+      if (exceptVideoId != null && _controllerVideoIds[index] == exceptVideoId) {
+        continue;
+      }
+
       final controller = _controllers[index];
       if (controller != null && controller.value.isInitialized) {
         try {

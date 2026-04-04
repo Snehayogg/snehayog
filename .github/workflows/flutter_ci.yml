@@ -32,7 +32,17 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev libgcrypt20-dev libsecret-1-dev xvfb
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libblkid-dev \
+            liblzma-dev \
+            libgcrypt20-dev \
+            libsecret-1-dev \
+            libasound2-dev \
+            libwebkit2gtk-4.0-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            xvfb
           
       - name: Run Widget & Unit Tests
         working-directory: frontend

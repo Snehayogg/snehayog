@@ -225,7 +225,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      restorationScopeId: 'vayu_app_root',
       navigatorKey: AuthService.navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Vayug',
@@ -472,16 +471,28 @@ class AppNavigatorObserver extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
-    AppLogger.log('🚀 NAV: Pushed ${route.settings.name} (Previous: ${previousRoute?.settings.name})');
-    if (route.settings.name == '/') {
-       AppLogger.log('⚠️ NAV ALERT: Pushed root (Splash?) route! StackTrace:');
-       AppLogger.log(StackTrace.current.toString().split('\n').take(10).join('\n'));
+    final String? routeName = route.settings.name;
+    AppLogger.log(
+        '🚀 NAV: Pushed $routeName (Previous: ${previousRoute?.settings.name})');
+
+    if (routeName == null) {
+      AppLogger.log('🔍 [NAV DIAGNOSTIC] Anonymous (null) route pushed. WHO CALLED THIS? StackTrace:');
+      AppLogger.log(StackTrace.current.toString().split('\n').take(10).join('\n'));
     }
 
-    // **AUTO-PAUSE: Pause all playing videos whenever a new route is pushed**
-    // This prevents audio leaks during any navigation transition globally
-    if (previousRoute != null) {
+    if (routeName == '/') {
+      AppLogger.log('⚠️ NAV ALERT: Pushed root (Splash?) route! StackTrace:');
+      AppLogger.log(
+          StackTrace.current.toString().split('\n').take(10).join('\n'));
+    }
+
+    // **AUTO-PAUSE: Pause all playing videos whenever a new named route is pushed**
+    // We skip null routes (dialogs/overlays) to prevent accidental pausing during feed active state
+    if (previousRoute != null && routeName != null) {
+      AppLogger.log('⏸️ NAV: Named route pushed - pausing videos');
       _pauseAllVideos();
+    } else if (previousRoute != null && routeName == null) {
+      AppLogger.log('ℹ️ NAV: Anonymous route pushed - NOT pausing videos by default');
     }
   }
 

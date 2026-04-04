@@ -56,7 +56,8 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       }
     });
 
-    _videoControllerManager.pauseAllVideosOnTabChange();
+    _videoControllerManager.pauseAllVideosOnTabChange(
+        exceptVideoId: currentVideoId);
 
     final sharedPool = SharedVideoControllerPool();
     sharedPool.pauseAllControllers(exceptVideoId: currentVideoId);

@@ -43,10 +43,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _controllerStates.remove(videoId);
         _preloadedVideos.remove(videoId);
         
-        // Ensure UI state for this video is reset
-        if (_firstFrameReady.containsKey(videoId)) {
-          _firstFrameReady[videoId]?.value = false;
-        }
+        
 
         // **CRITICAL FIX: Trigger UI rebuild to ensure VideoPlayer widgets 
         // are removed before they can access the now-disposed controller.**
@@ -116,46 +113,7 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
       // **ACCELERATED BOOT SYNC: If we don't have initialVideos, check for in-flight background fetch**
       if (widget.initialVideos == null && !(_openedFromProfile || _openedFromDeepLink)) {
         
-        // **NEW: Check Native Restoration Bucket (OS Kill/Restore)**
-        // Higher priority than normal background fetch because it contains the exact user spot.
-        if (_restorableIndex.value != -1 && _restorableVideosJson.value.isNotEmpty) {
-           final now = DateTime.now().millisecondsSinceEpoch;
-           final hoursSince = (now - _restorableTimestamp.value) / (1000 * 60 * 60);
-           
-           if (hoursSince < 2) {
-             try {
-               final List<dynamic> json = jsonDecode(_restorableVideosJson.value);
-               final restoredVideos = json.map((v) => VideoModel.fromJson(v)).toList();
-               
-               if (restoredVideos.isNotEmpty) {
-                 AppLogger.log('🚀 VideoFeedAdvanced: Restored snapshot from OS bucket (${restoredVideos.length} videos, ${hoursSince.toStringAsFixed(1)}h old)');
-                 _videos = restoredVideos;
-                 _currentIndex = 0; // The snapshot starts at the previously active video
-                 _isLoading = false;
-                 _isInitialDataLoaded = true;
-                 
-                 // Jump to start of snapshot
-                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                   if (mounted && _pageController.hasClients) {
-                     _pageController.jumpToPage(0);
-                   }
-                   _tryAutoplayCurrent();
-                 });
-                 
-                 // Trigger background refresh to fill the rest of the feed
-                 _loadMoreVideos(); 
-                 return;
-               }
-             } catch (e) {
-               AppLogger.log('⚠️ VideoFeedAdvanced: Failed to restore from OS bucket: $e');
-             }
-           } else {
-             AppLogger.log('ℹ️ VideoFeedAdvanced: Restoration bucket expired (${hoursSince.toStringAsFixed(1)}h old), starting fresh');
-             // Clear the stale bucket
-             _restorableIndex.value = -1;
-             _restorableVideosJson.value = '';
-           }
-        }
+        // Restoration logic removed. Fallback directly to background fetch or fresh load.
 
         AppLogger.log('⏳ VideoFeedAdvanced: Checking for accelerated boot background fetch...');
         final bgVideos = await AppInitializationManager.instance.backgroundFetchFuture

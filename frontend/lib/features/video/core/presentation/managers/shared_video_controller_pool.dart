@@ -366,6 +366,7 @@ class SharedVideoControllerPool {
 
       AppLogger.log('🗑️ SharedPool: Disposed controller for video: $videoId');
     }
+
   }
 
   /// **Attach listener to controller**

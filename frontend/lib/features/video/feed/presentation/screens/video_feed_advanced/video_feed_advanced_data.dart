@@ -355,10 +355,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
       _currentHorizontalPage.remove(videoId);
 
       // Cleanup ValueNotifiers
-      _firstFrameReady[videoId]?.dispose();
-      _firstFrameReady.remove(videoId);
-      _forceMountPlayer[videoId]?.dispose();
-      _forceMountPlayer.remove(videoId);
+
       _isBufferingVN[videoId]?.dispose();
       _isBufferingVN.remove(videoId);
       _isSlowConnectionVN[videoId]?.dispose();
@@ -422,8 +419,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
     _loadingVideos.clear();
     _initializingVideos.clear();
     _preloadRetryCount.clear();
-    _firstFrameReady.clear();
-    _forceMountPlayer.clear();
+
   }
 
   Future<void> refreshAds() async {
