@@ -18,7 +18,7 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.snehayog.app"
-    compileSdk = 36 // Required by latest AndroidX dependencies (core, activity, etc.)
+    compileSdk = 36 // Stable version for Android 15
     ndkVersion = "28.2.13676358" // r28 for latest 16KB support and alignment features
 
     compileOptions {

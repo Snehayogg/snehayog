@@ -39,7 +39,8 @@ jobs:
             libgcrypt20-dev \
             libsecret-1-dev \
             libasound2-dev \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libglu1-mesa-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             xvfb

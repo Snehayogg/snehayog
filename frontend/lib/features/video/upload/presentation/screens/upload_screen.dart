@@ -26,8 +26,6 @@ import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/core/design/spacing.dart';
-import 'package:vayug/shared/managers/activity_recovery_manager.dart';
-import 'package:vayug/shared/models/app_activity.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/upload/presentation/widgets/upload_advanced_settings_section.dart';
 import 'package:vayug/features/video/upload/presentation/screens/make_episode_screen.dart';
@@ -80,9 +78,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     _isUploading.value = false;
     _stopUnifiedProgress();
 
-    // Clear activity from disk
-    ActivityRecoveryManager().clearActivity();
-
     // Clear selection so user starts fresh
     _deselectVideo();
 
@@ -93,10 +88,38 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   /// Deselect current video and reset related fields
   void _deselectVideo() {
-    _selectedVideo.value = null;
-    _titleController.clear();
-    _errorMessage.value = null;
-    _showUploadForm.value = false;
+    _resetScreenState();
+  }
+
+  /// **NEW: Reset the entire screen state to its initial selection view**
+  void _resetScreenState() {
+    if (mounted) {
+      _selectedVideo.value = null;
+      _isUploading.value = false;
+      _isProcessing.value = false;
+      _errorMessage.value = null;
+      _showUploadForm.value = false;
+      _isMinimizing.value = false;
+      _unifiedProgress.value = 0.0;
+      _currentPhase.value = 'preparation';
+      _phaseDescription.value = '';
+      _titleController.clear();
+      _linkController.clear();
+      _selectedCategory.value = _defaultCategory;
+      _tags.value = [];
+      _showAdvancedSettings.value = false;
+      _selectedPlatforms.value = [];
+      _tagInputController.clear();
+      _crossPostStatusMap.value = {};
+      _crossPostProgressMap.value = {};
+
+      _stopUnifiedProgress();
+      
+      // ENSURE: Reset phase is the absolute last step so it's not overwritten
+      _currentPhase.value = 'preparation';
+
+      AppLogger.log('🔄 UploadScreen: Full state reset completed');
+    }
   }
 
   // **UNIFIED PROGRESS PHASES** - Complete video processing flow
@@ -190,10 +213,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     _progressTimer?.cancel();
     _progressTimer = null;
     if (mounted) {
-      // **BATCHED UPDATE: Update all progress values at once**
       _unifiedProgress.value = 1.0;
-      _currentPhase.value = 'completed';
-      _phaseDescription.value = AppText.get('upload_video_ready');
+      // Removed: phase setting to 'completed' here to avoid stickiness during resets
     }
   }
 
@@ -353,20 +374,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     _selectedVideo.addListener(_onFieldChanged);
     _selectedCategory.addListener(_onFieldChanged);
     _tags.addListener(_onFieldChanged);
-
-    // Check for saved activity
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkSavedActivity();
-    });
   }
 
   void _onFieldChanged() {
     // Only save if not currently uploading
     if (!_isUploading.value && !_isProcessing.value) {
-      _saveCurrentActivity();
-
-      // [REMOVED] Auto-trigger upload
-      // _uploadVideo();
     }
   }
 
@@ -387,52 +399,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           ),
         ),
       );
-    }
-  }
-
-  Future<void> _saveCurrentActivity() async {
-    if (_selectedVideo.value == null &&
-        _titleController.text.isEmpty &&
-        _linkController.text.isEmpty) {
-      // Don't save empty states
-      return;
-    }
-
-    final data = {
-      'videoPath': _selectedVideo.value?.path,
-      'title': _titleController.text,
-      'link': _linkController.text,
-      'category': _selectedCategory.value,
-      'tags': _tags.value,
-    };
-
-    await ActivityRecoveryManager()
-        .saveActivity(ActivityType.videoUpload, data);
-  }
-
-  Future<void> _checkSavedActivity() async {
-    final activity = await ActivityRecoveryManager().getSavedActivity();
-    if (activity != null && activity.type == ActivityType.videoUpload) {
-      if (!mounted) return;
-
-      final data = activity.data;
-      final videoPath = data['videoPath'] as String?;
-
-      AppLogger.log(
-          '🚀 UploadScreen: Automatically resuming saved upload activity');
-
-      if (videoPath != null && videoPath.isNotEmpty) {
-        _selectedVideo.value = File(videoPath);
-      }
-      _titleController.text = data['title'] ?? '';
-      _linkController.text = data['link'] ?? '';
-      _selectedCategory.value = data['category'] ?? _defaultCategory;
-      if (data['tags'] != null) {
-        _tags.value = List<String>.from(data['tags']);
-      }
-      _showUploadForm.value = true;
-
-      _showUploadForm.value = true;
     }
   }
 
@@ -673,7 +639,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           _tags.value = [];
           _showAdvancedSettings.value = false;
           _isMinimizing.value = false;
-          ActivityRecoveryManager().clearActivity();
           return;
         }
 
@@ -694,30 +659,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           AppLogger.log('❌ UploadScreen: onVideoUploaded callback is null');
         }
 
-        // **BATCHED UPDATE: Clear form using ValueNotifiers**
-        _selectedVideo.value = null;
-        _titleController.clear();
-        _linkController.clear();
-        _selectedCategory.value = null;
+        // Mark as completed/ready before UI reset
+        _updateProgressPhase('completed');
+        _phaseDescription.value = AppText.get('upload_video_ready');
 
-        // Clear activity after successful completion
-        ActivityRecoveryManager().clearActivity();
-        _tags.value = [];
-        // Video type selection removed; all uploads default to free (Yug).
-        _showAdvancedSettings.value = false;
-
-        // Stop unified progress tracking
-        _stopUnifiedProgress();
-
-        // **FIX: Skip success dialog if user chose to run in background**
-        // (This is a safety fallback — primary handling is done above via processingStatus check)
-        if (_isMinimizing.value) {
-          AppLogger.log('🏃 UploadScreen: Safety fallback minimizing handler');
-          _selectedVideo.value = null;
-          _isMinimizing.value = false;
-          ActivityRecoveryManager().clearActivity();
-          return;
-        }
+        // **BATCHED UPDATE: Clear form and reset state for next upload**
+        _resetScreenState();
 
         // Show beautiful success dialog
         await _showSuccessDialog();
@@ -1010,17 +957,19 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     Expanded(
                       child: AppButton(
                         onPressed: () {
+                          // 1. Reset screen state BEFORE navigating, 
+                          // so if user returns to this tab, it's fresh.
+                          _resetScreenState();
+                          
                           Navigator.of(context).pop(); // Close dialog
 
-                          // Switch to Vayu (Feed) tab - index 1
+                          // 2. Switch to Vayu (Feed) tab - index 1
                           try {
                             ref.read(mainControllerProvider)
                                 .changeIndex(1);
-                            // Navigator.of(context).pop(); // REMOVED: Pops MainScreen as UploadScreen is a tab
                           } catch (e) {
                             AppLogger.log(
                                 '❌ UploadScreen: Error switching to feed: $e');
-                            // Navigator.of(context).pop(); // REMOVED: Safety pop
                           }
                         },
                         label: AppText.get('btn_view_in_feed'),
@@ -1079,6 +1028,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         ref.read(mainControllerProvider)
             .setMediaPickerActive(true);
       }
+
+      // Revert to stable FilePicker
       FilePickerResult? result = await _filePickerService.pickFiles(
         type: FileType.custom,
         allowMultiple: false,
@@ -1091,6 +1042,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           'webm',
         ],
       );
+
       if (mounted) {
         ref.read(mainControllerProvider)
             .setMediaPickerActive(false);
@@ -1216,7 +1168,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           }
         }
 
-        // **BATCHED UPDATE: Update media selection**
+        // **BATCHED UPDATE: Update media selection and reset phase to preparation**
+        _currentPhase.value = 'preparation';
         _selectedVideo.value = pickedFile;
         _titleController.text = _deriveTitleFromFile(pickedFile);
         _selectedCategory.value ??= _defaultCategory;
@@ -1764,8 +1717,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                       if (isComplete)
                         AppButton(
                           onPressed: () {
+                            _resetScreenState();
                             widget.onVideoUploaded?.call();
-                            Navigator.pop(context);
                           },
                           label: 'Done',
                           variant: AppButtonVariant.primary,
