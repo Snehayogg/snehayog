@@ -156,9 +156,23 @@ class GoogleSignInController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// **FIXED: Force refresh authentication state after account switch**
+  /// **FIXED: Force refresh authentication state after account switch or session expiry**
   Future<void> refreshAuthState() async {
     try {
+      // **CHECK: If auth_needs_login is set, this is a definitive session expiry**
+      // In this case, we must clear userData to show sign-in screen, NOT show cached 0 data
+      final prefs = await SharedPreferences.getInstance();
+      final needsLogin = prefs.getBool('auth_needs_login') ?? false;
+      
+      if (needsLogin) {
+        // Session definitively expired — clear state immediately to trigger sign-in UI
+        _userData = null;
+        _error = 'Session expired. Please sign in again.';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
       // **OPTIMIZED: Only show loader if we have NO data. Otherwise refresh silently.**
       if (_userData == null) {
         _isLoading = true;
@@ -171,8 +185,10 @@ class GoogleSignInController extends ChangeNotifier {
       if (freshData != null) {
         _userData = freshData;
         _error = null;
-      } else if (_userData == null) {
-        _error = 'No authentication data found';
+      } else {
+        // getUserData returned null — treat as signed-out
+        _userData = null;
+        _error = 'Session expired. Please sign in again.';
       }
 
       _isLoading = false;

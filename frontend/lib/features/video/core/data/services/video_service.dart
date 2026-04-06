@@ -201,7 +201,7 @@ class VideoService {
       rethrow;
     }
   }
-
+  
   /// **Get video by ID - Enhanced with better error handling**
   Future<VideoModel> getVideoById(String id) async {
     try {
@@ -611,9 +611,11 @@ class VideoService {
     Function(double)? onProgress,
     CancelToken? cancelToken,
     List<String>? crossPostPlatforms,
+    String? seriesId,
+    int? episodeNumber,
   }) async {
     try {
-      AppLogger.log('?? VideoService: Starting video upload...');
+      AppLogger.log('🚀 VideoService: Starting video upload...');
 
       final isHealthy = await checkServerHealth();
       if (!isHealthy) {
@@ -655,6 +657,8 @@ class VideoService {
         onProgress: onProgress,
         cancelToken: cancelToken,
         crossPostPlatforms: crossPostPlatforms,
+        seriesId: seriesId,
+        episodeNumber: episodeNumber,
       );
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
@@ -679,6 +683,8 @@ class VideoService {
     Function(double)? onProgress,
     CancelToken? cancelToken,
     List<String>? crossPostPlatforms,
+    String? seriesId,
+    int? episodeNumber,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting Direct R2 Upload...');
@@ -754,6 +760,8 @@ class VideoService {
           'tags': tags,
           'videoType': videoType,
           'crossPostPlatforms': crossPostPlatforms,
+          'seriesId': seriesId,
+          'episodeNumber': episodeNumber,
         },
       );
 
@@ -765,7 +773,11 @@ class VideoService {
     }
   }
 
-  Future<bool> updateVideoMetadata(String videoId, String videoName, {String? link, List<String>? tags}) async {
+  Future<VideoModel> updateVideoMetadata(String videoId, String videoName,
+      {String? link,
+      List<String>? tags,
+      String? seriesId,
+      int? episodeNumber}) async {
     try {
       AppLogger.log('🔄 VideoService: Updating metadata for video: $videoId');
 
@@ -778,18 +790,21 @@ class VideoService {
 
       if (link != null) updateData['link'] = link;
       if (tags != null) updateData['tags'] = tags;
+      if (seriesId != null) updateData['seriesId'] = seriesId;
+      if (episodeNumber != null) updateData['episodeNumber'] = episodeNumber;
 
-      final res = await httpClientService
-          .patch(
-            Uri.parse(url),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode(updateData),
-            timeout: const Duration(seconds: 15),
-          );
+      final res = await httpClientService.patch(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(updateData),
+        timeout: const Duration(seconds: 15),
+      );
 
       if (res.statusCode == 200) {
+        final data = json.decode(res.body);
         AppLogger.log('✅ VideoService: Video updated successfully');
-        return true;
+        // The backend now returns the full video object in data['video']
+        return VideoModel.fromJson(data['video']);
       } else if (res.statusCode == 401) {
         throw Exception('Please sign in again to update video');
       } else if (res.statusCode == 403) {
@@ -803,6 +818,46 @@ class VideoService {
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       }
+      rethrow;
+    }
+  }
+
+  /// **Update series metadata for multiple videos**
+  /// Links a list of episode IDs to a series (bulk update)
+  Future<Map<String, dynamic>> updateVideoSeries(
+    String videoId,
+    List<String> episodeIds, {
+    String? seriesId,
+  }) async {
+    try {
+      AppLogger.log(
+          '🔄 VideoService: Updating series for ${episodeIds.length} videos');
+
+      final resolvedBaseUrl = await NetworkHelper.getBaseUrlWithFallback();
+      final url = '$resolvedBaseUrl/api/videos/$videoId/series';
+
+      final Map<String, dynamic> updateData = {
+        'episodeIds': episodeIds,
+      };
+      if (seriesId != null) updateData['seriesId'] = seriesId;
+
+      final res = await httpClientService.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(updateData),
+        timeout: const Duration(seconds: 30),
+      );
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        AppLogger.log('✅ VideoService: Series updated successfully');
+        return data;
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(error['error'] ?? 'Failed to update series');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error updating series: $e');
       rethrow;
     }
   }

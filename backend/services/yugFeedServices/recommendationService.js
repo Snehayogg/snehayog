@@ -151,6 +151,23 @@ class RecommendationService {
     return Math.max(recencyBoost, 0.1);
   }
 
+  /**
+   * Helper: Calculate cosine similarity between two vectors
+   */
+  static calculateCosineSimilarity(a, b) {
+    if (!a || !b || a.length !== b.length) return 0;
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < a.length; i++) {
+        dotProduct += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+    if (normA === 0 || normB === 0) return 0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
   static calculateFinalScore(videoData) {
     const {
       totalWatchTime = 0,
@@ -284,6 +301,20 @@ class RecommendationService {
         uploadedAt: video.uploadedAt || video.createdAt
       });
 
+      // **NEW: Ensure Vector Embedding exists and is current**
+      let updatedEmbedding = false;
+      if (!video.vectorEmbedding || video.vectorEmbedding.length === 0 || video.embeddingVersion !== 'v1_minilm') {
+        const text = `${video.videoName || ''} ${video.description || ''}`.trim();
+        if (text) {
+          const embedding = await aiSemanticService.getEmbedding(text);
+          if (embedding) {
+            video.vectorEmbedding = embedding;
+            video.embeddingVersion = 'v1_minilm';
+            updatedEmbedding = true;
+          }
+        }
+      }
+
       // Update video with new score and watch time
       video.totalWatchTime = totalWatchTime;
       video.finalScore = finalScore;
@@ -293,6 +324,7 @@ class RecommendationService {
 
       return {
         videoId: video._id,
+        embeddingGenerated: updatedEmbedding,
         totalWatchTime,
         finalScore,
         watchScore: this.calculateWatchScore(totalWatchTime, video.duration || 0),
@@ -618,11 +650,65 @@ class RecommendationService {
    * Learns from user's current session and recommends similar content using AI
    * 
    * @param {String} userId - User ID (Google ID or deviceId)
-   * @param {String} currentVideoId - Current video ID to exclude from results
-   * @param {Number} limit - Number of videos to return
-   * @returns {Promise<Array>} Array of recommended videos
+   * @returns {Promise<Array>} Interest vector (array of numbers) or null
    */
-  static async getSessionBasedRecommendations(userId, currentVideoId = null, limit = 20, excludeIds = []) {
+  static async getUserInterestVector(userId) {
+    try {
+      if (!userId || userId === 'anon') return null;
+      
+      const cacheKey = `user:interest_vector:${userId}`;
+      const cached = await redisService.get(cacheKey);
+      if (cached) return cached;
+
+      // Calculate vector from last 15 watched videos (Recency-weighted)
+      const recentWatches = await WatchHistory.find({ userId, isSkip: false })
+        .sort({ watchedAt: -1 })
+        .limit(15)
+        .populate('videoId')
+        .lean();
+
+      if (recentWatches.length === 0) return null;
+
+      const embeddings = [];
+      recentWatches.forEach((watch, index) => {
+        const video = watch.videoId;
+        if (video && video.vectorEmbedding && video.vectorEmbedding.length > 0) {
+          // **TIME DECAY:** Recent videos have more weight (1.0 down to 0.4)
+          const weight = 1.0 - (index * 0.04);
+          embeddings.push({ vector: video.vectorEmbedding, weight });
+        }
+      });
+
+      if (embeddings.length === 0) return null;
+
+      // Weighted Average
+      const dim = embeddings[0].vector.length;
+      const result = new Array(dim).fill(0);
+      let totalWeight = 0;
+
+      embeddings.forEach(item => {
+        totalWeight += item.weight;
+        for (let i = 0; i < dim; i++) {
+          result[i] += item.vector[i] * item.weight;
+        }
+      });
+
+      const finalVector = result.map(v => v / totalWeight);
+      
+      // Cache for 30 minutes (re-calculated on next request or when enough new data exists)
+      await redisService.set(cacheKey, finalVector, 1800);
+      return finalVector;
+    } catch (error) {
+      console.error('❌ Error calculating user interest vector:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Real-time session learning (like Instagram/YouTube Shorts)
+   * Learns from user's current session and recommends similar content using AI
+   * 
+   * @param {String} userId - User ID (Google ID or deviceId)
     try {
       console.log('🎯 RecommendationService: Getting session-based recommendations for user:', userId);
 

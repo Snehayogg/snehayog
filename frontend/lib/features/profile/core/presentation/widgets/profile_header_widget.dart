@@ -304,7 +304,8 @@ class ProfileHeaderWidget extends ConsumerWidget {
     return Row(
       children: [
         if (stateManager.isEditing ||
-            (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock))
+            ((stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock) &&
+                !stateManager.hasUpiId))
           Expanded(
             child: stateManager.isEditing
                 ? Row(

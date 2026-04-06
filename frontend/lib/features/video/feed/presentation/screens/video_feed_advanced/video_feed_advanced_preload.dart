@@ -686,22 +686,30 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     void handleVideoEnd() {
       if (!mounted) return;
-      final value = controller.value;
-      if (!value.isInitialized) return;
-
-      final duration = value.duration;
-      if (duration == Duration.zero) return;
-
-      final position = value.position;
-      final remaining = duration - position;
-
-      // **TRIGGER: 600ms before end for "Instant" feel**
-      if (remaining <= const Duration(milliseconds: 600)) {
-        if (_userPaused[videoId] == true) return;
-        if (_autoAdvancedForIndex.contains(index)) return;
+      
+      // **CRASH-PROOF: Safety check for disposal before accessing value**
+      try {
+        if (SharedVideoControllerPool().isControllerDisposed(controller)) return;
         
-        AppLogger.log('✅ Video $index near completion. Auto-advancing...');
-        _handleVideoCompleted(index);
+        final value = controller.value;
+        if (!value.isInitialized) return;
+
+        final duration = value.duration;
+        if (duration == Duration.zero) return;
+
+        final position = value.position;
+        final remaining = duration - position;
+
+        // **TRIGGER: 600ms before end for "Instant" feel**
+        if (remaining <= const Duration(milliseconds: 600)) {
+          if (_userPaused[videoId] == true) return;
+          if (_autoAdvancedForIndex.contains(index)) return;
+          
+          AppLogger.log('✅ Video $index near completion. Auto-advancing...');
+          _handleVideoCompleted(index);
+        }
+      } catch (e) {
+        // Silently ignore disposal errors in listener
       }
     }
  
@@ -727,10 +735,15 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     void handlePlaybackStatus() {
       if (!mounted) return;
-      final value = controller.value;
-      if (!value.isInitialized) return;
+      
+      // **CRASH-PROOF: Safety check for disposal before accessing value**
+      try {
+        if (SharedVideoControllerPool().isControllerDisposed(controller)) return;
+        
+        final value = controller.value;
+        if (!value.isInitialized) return;
 
-      final bool isBuffering = value.isBuffering;
+        final bool isBuffering = value.isBuffering;
       
       // **1. BUFFERING LOGIC**
       if (_isBuffering[videoId] != isBuffering) {
@@ -827,9 +840,12 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
              lastPosition = value.position;
              lastMoveTime = null;
           }
-      } else {
-          // Not playing or legitimately buffering, reset stall timer
-          lastMoveTime = null;
+        } else {
+            // Not playing or legitimately buffering, reset stall timer
+            lastMoveTime = null;
+        }
+      } catch (_) {
+        // Silently ignore disposal errors in listener
       }
     }
 
@@ -852,51 +868,57 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     }
     void handleError() {
       if (!mounted) return;
-      final value = controller.value;
-      
-      if (value.hasError) {
-        final errorMessage = value.errorDescription ?? 'Unknown playback error';
-        if (_videoErrors[videoId] != errorMessage) {
-          AppLogger.log('❌ Runtime Video Error for video $videoId: $errorMessage');
-          
-          // **VIP FALLBACK: If proxy fails on old phone, retry with Raw URL**
-          bool handledByFallback = false;
-          if (videoCacheProxy.isProxyUrl(controller.dataSource)) {
-             AppLogger.log('🔄 Fallback: Proxy failed on $videoId. Retrying with Raw URL...');
-             handledByFallback = true;
-             
-             safeSetState(() {
-                _videoErrors.remove(videoId);
-                _loadingVideos.add(videoId);
-             });
+      try {
+        if (SharedVideoControllerPool().isControllerDisposed(controller)) return;
+        
+        final value = controller.value;
+        
+        if (value.hasError) {
+          final errorMessage = value.errorDescription ?? 'Unknown playback error';
+          if (_videoErrors[videoId] != errorMessage) {
+            AppLogger.log('❌ Runtime Video Error for video $videoId: $errorMessage');
+            
+            // **VIP FALLBACK: If proxy fails on old phone, retry with Raw URL**
+            bool handledByFallback = false;
+            if (videoCacheProxy.isProxyUrl(controller.dataSource)) {
+               AppLogger.log('🔄 Fallback: Proxy failed on $videoId. Retrying with Raw URL...');
+               handledByFallback = true;
+               
+               safeSetState(() {
+                  _videoErrors.remove(videoId);
+                  _loadingVideos.add(videoId);
+               });
 
-             // Kill old controller and retry without proxy
-             _controllerPool[videoId]?.dispose();
-             _controllerPool.remove(videoId);
-             
-             // Trigger direct load (bypass proxy completely)
-             _preloadVideo(index, bypassProxy: true).then((_) {
-                 if (mounted && index == _currentIndex) {
-                    _tryAutoplayCurrentImmediate(index);
-                 }
-             });
-          }
+               // Kill old controller and retry without proxy
+               _controllerPool[videoId]?.dispose();
+               _controllerPool.remove(videoId);
+               
+               // Trigger direct load (bypass proxy completely)
+               _preloadVideo(index, bypassProxy: true).then((_) {
+                   if (mounted && index == _currentIndex) {
+                      _tryAutoplayCurrentImmediate(index);
+                   }
+               });
+            }
 
-          if (!handledByFallback) {
-            safeSetState(() {
-              _videoErrors[videoId] = errorMessage;
-              _loadingVideos.remove(videoId);
-              _isBuffering[videoId] = false;
-              _isBufferingVN[videoId]?.value = false;
-              
-              try {
-                 controller.pause();
-                 controller.setVolume(0.0);
-                 _controllerPool.remove(videoId);
-              } catch (_) {}
-            });
+            if (!handledByFallback) {
+              safeSetState(() {
+                _videoErrors[videoId] = errorMessage;
+                _loadingVideos.remove(videoId);
+                _isBuffering[videoId] = false;
+                _isBufferingVN[videoId]?.value = false;
+                
+                try {
+                   controller.pause();
+                   controller.setVolume(0.0);
+                   _controllerPool.remove(videoId);
+                } catch (_) {}
+              });
+            }
           }
         }
+      } catch (_) {
+        // Silently ignore disposal errors in listener
       }
     }
 

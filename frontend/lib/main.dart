@@ -363,6 +363,10 @@ class _MainScreenWithLocationCheckState
     setState(() {
       _shouldShowWelcome = false;
     });
+    
+    // **FIX: Mark onboarding as shown so it doesn't show again**
+    WelcomeOnboardingService.markWelcomeOnboardingShown();
+
     // Check permissions in background after welcome screen
     _checkLocationInBackground();
     _checkGalleryInBackground();

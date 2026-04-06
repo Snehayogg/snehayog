@@ -45,6 +45,7 @@ import adCleanupService from './services/adServices/adCleanupService.js';
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { apiVersioning } from './middleware/apiVersioning.js';
+import { versionTracking } from './middleware/versionTracking.js';
 
 const app = express();
 app.set('etag', 'strong');
@@ -138,7 +139,11 @@ app.use(cors({
       /^http:\/\/localhost:\d+$/, // Any localhost port (for Flutter web)
       'http://127.0.0.1', // Localhost alternative (any port)
       /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 port (for Flutter web)
-      'http:/192.168.0.197:5001', // Local development (User Laptop)
+      'http://192.168.0.197:5001', // Local development (User Laptop)
+      'http://10.78.84.104:5001', // Previous Wifi IP
+      'http://10.78.84.18:5001', // Current Wifi IP (New)
+      'http://172.19.176.1:5001', // vEthernet (Default Switch)
+      'http://172.25.112.1:5001', // vEthernet (WSL)
       /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Any LAN IP (for mobile devices)
       'http://10.0.2.2:5001', // Android emulator
     ];
@@ -301,7 +306,7 @@ import { verifyToken, passiveVerifyToken } from './utils/verifytoken.js';
 // Apply versioning middleware to the API router
 // **NEW: Apply Passive Auth BEFORE Rate Limiter**
 // This ensures req.user is populated so we can limit by User ID instead of IP
-app.use('/api', apiVersioning, passiveVerifyToken, apiLimiter, apiRouter);
+app.use('/api', apiVersioning, passiveVerifyToken, versionTracking, apiLimiter, apiRouter);
 
 // **FIX: Root route handler - serves the landing page for APK distribution
 app.get('/', (req, res) => {

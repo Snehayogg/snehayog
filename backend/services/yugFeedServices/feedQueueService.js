@@ -375,14 +375,20 @@ class FeedQueueService {
       // 2. Iterative Batch Search ("Discovery Aware")
 
       
-      // **SMART RATIO**: Popular (50%), Recent (30%), Discovery (20%)
-      let POPULAR_TARGET = Math.ceil(this.BATCH_SIZE * 0.5);
-      let RECENT_TARGET = Math.ceil(this.BATCH_SIZE * 0.3);
-      let DISCOVERY_TARGET = this.BATCH_SIZE - POPULAR_TARGET - RECENT_TARGET;
+      // **SMART RATIO**: Semantic (30%), Popular (30%), Recent (20%), Discovery (20%)
+      let SEMANTIC_TARGET = Math.ceil(this.BATCH_SIZE * 0.3);
+      let POPULAR_TARGET = Math.ceil(this.BATCH_SIZE * 0.3);
+      let RECENT_TARGET = Math.ceil(this.BATCH_SIZE * 0.2);
+      let DISCOVERY_TARGET = this.BATCH_SIZE - SEMANTIC_TARGET - POPULAR_TARGET - RECENT_TARGET;
       
+      let semanticVideos = [];
       let freshVideos = [];
       let recentVideos = [];
       let discoveryVideos = [];
+
+      // **STEP A: Get User Interest Vector (for Semantic Discovery)**
+      const interestVector = await RecommendationService.getUserInterestVector(userId);
+      console.log(`🤖 FeedQueue: User interests found? ${!!interestVector}`);
 
       let skip = 0;
       const BATCH_SIZE_QUERY = 250; 
@@ -448,14 +454,11 @@ class FeedQueueService {
          console.error('⚠️ FeedQueue: Error fetching recent bucket:', e.message);
       }
 
-      // **STEP B: Pagination Loop for Popular & Discovery**
-      while ((freshVideos.length < POPULAR_TARGET || discoveryVideos.length < DISCOVERY_TARGET) && pageCount < MAX_PAGES) {
+      // **STEP B: Pagination Loop for Popular, Discovery & Semantic**
+      while ((freshVideos.length < POPULAR_TARGET || discoveryVideos.length < DISCOVERY_TARGET || semanticVideos.length < SEMANTIC_TARGET) && pageCount < MAX_PAGES) {
           const candidateQuery = { processingStatus: 'completed' };
-          // **FIX: Use videoType field directly instead of duration**
           candidateQuery.videoType = videoType;
                 
-          // Exclude own videos from feed
-          // **FIX: Use ObjectId for uploader exclusion to prevent CastError**
           if (uploaderObjectId) {
               candidateQuery.uploader = { $ne: uploaderObjectId };
           }
@@ -464,67 +467,76 @@ class FeedQueueService {
             .sort({ finalScore: -1, createdAt: -1 })
             .skip(skip)
             .limit(BATCH_SIZE_QUERY)
-            .select('_id uploader createdAt score finalScore videoType seriesId episodeNumber views videoHash') 
+            .select('_id uploader createdAt score finalScore videoType seriesId episodeNumber views videoHash vectorEmbedding') 
             .lean();
 
           if (candidates.length === 0) break; 
 
           // Filter by Video ID (Redis) & Hash
           let candidatesToCheck = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
-          // (Redis check removed within loop for speed - relying on local seenVideoIds set which is synced at start + accumulated)
-          // Double check with Redis Seen Set only if not already in local block list (optimization: skip for now)
-          
-           if (candidatesToCheck.length > 0 && userId !== 'anon') {
-             // We already synced seenVideoIds from Redis at the start, so this check is redundant unless dirty read.
-             // But for safety against "just watched in another thread", we could check. 
-             // For speed, we trust the snapshot we took at start of function.
-           }
-
-          // **FATIGUE FILTER: Filter by Content Hash**
+          // Fatigue Filter
           candidatesToCheck = candidatesToCheck.filter(v => !seenHashesSet.has(v.videoHash));
           
           for (const video of candidatesToCheck) {
-             // **FIX: Normalize uploader ID correctly (handles ObjectId and plain string)**
              const uploaderId = video.uploader
                ? (typeof video.uploader === 'object'
                    ? (video.uploader._id || video.uploader).toString()
                    : video.uploader.toString())
                : 'unknown';
              const isDiscovery = (video.views || 0) < 1000;
+             const videoIdStr = video._id.toString();
              
-             // If this creator was in the "recent" window, skip entirely for this batch
              let currentCap = recentCreatorSet.has(uploaderId) ? THROTTLED_CAP : STANDARD_CAP;
-             if (pageCount > 2 && freshVideos.length + discoveryVideos.length < 5) {
-                 // Emergency fill mode: allow more per creator only if feed is seriously empty
+             if (pageCount > 2 && (freshVideos.length + discoveryVideos.length + semanticVideos.length < 5)) {
                  currentCap = Math.max(currentCap, 2); 
              }
 
              const currentCount = creatorCounts.get(uploaderId) || 0;
              if (currentCount < currentCap) {
-                if (isDiscovery && discoveryVideos.length < DISCOVERY_TARGET) {
-                    discoveryVideos.push(video);
-                    creatorCounts.set(uploaderId, currentCount + 1);
-                    seenVideoIds.add(video._id.toString());
-                    if (video.videoHash) seenHashesSet.add(video.videoHash);
-                } else if (!isDiscovery && freshVideos.length < POPULAR_TARGET) {
-                    freshVideos.push(video);
-                    creatorCounts.set(uploaderId, currentCount + 1);
-                    seenVideoIds.add(video._id.toString());
-                    if (video.videoHash) seenHashesSet.add(video.videoHash);
+                // **NEW: Echo Chamber Check (Vector Diversity)**
+                const isTooSimilar = this.checkBatchDiversity(video, [
+                   ...semanticVideos, ...freshVideos, ...recentVideos, ...discoveryVideos
+                ]);
+
+                if (!isTooSimilar) {
+                    // 1. Try to fill Semantic bucket (Personalization)
+                    if (interestVector && video.vectorEmbedding && video.vectorEmbedding.length > 0 && semanticVideos.length < SEMANTIC_TARGET) {
+                        const sim = RecommendationService.calculateCosineSimilarity(interestVector, video.vectorEmbedding);
+                        if (sim > 0.45) { // 0.45 = Strong semantic match
+                            semanticVideos.push(video);
+                            creatorCounts.set(uploaderId, currentCount + 1);
+                            seenVideoIds.add(videoIdStr);
+                            if (video.videoHash) seenHashesSet.add(video.videoHash);
+                            continue; // Move to next video
+                        }
+                    }
+
+                    // 2. Fill Discovery or Popular buckets
+                    if (isDiscovery && discoveryVideos.length < DISCOVERY_TARGET) {
+                        discoveryVideos.push(video);
+                        creatorCounts.set(uploaderId, currentCount + 1);
+                        seenVideoIds.add(videoIdStr);
+                        if (video.videoHash) seenHashesSet.add(video.videoHash);
+                    } else if (!isDiscovery && freshVideos.length < POPULAR_TARGET) {
+                        freshVideos.push(video);
+                        creatorCounts.set(uploaderId, currentCount + 1);
+                        seenVideoIds.add(videoIdStr);
+                        if (video.videoHash) seenHashesSet.add(video.videoHash);
+                    }
                 }
                 
-                if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET) break;
+                if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET && semanticVideos.length >= SEMANTIC_TARGET) break;
              }
           }
           
-          if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET) break;
+          if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET && semanticVideos.length >= SEMANTIC_TARGET) break;
           
           skip += BATCH_SIZE_QUERY;
           pageCount++;
       }
 
-      // Combine pools
-      let combinedPool = [...recentVideos, ...freshVideos, ...discoveryVideos];
+      // Combine pools (Weighted Order)
+      let combinedPool = [...semanticVideos, ...recentVideos, ...freshVideos, ...discoveryVideos];
 
       // 3. **FINAL DEDUPLICATION CHECK & FALLBACK**
       if (combinedPool.length < this.BATCH_SIZE) {
@@ -669,6 +681,23 @@ class FeedQueueService {
     }
     
     return finalIds;
+  }
+
+  /**
+   * Helper: Ensures no video in the batch is too similar to the candidate (Echo Chamber fix)
+   */
+  checkBatchDiversity(candidate, existingBatch) {
+    if (!candidate.vectorEmbedding || candidate.vectorEmbedding.length === 0) return false;
+    
+    // Check against last 10 added to keep it fast
+    const lastFew = existingBatch.slice(-10);
+    for (const v of lastFew) {
+      if (v.vectorEmbedding && v.vectorEmbedding.length === candidate.vectorEmbedding.length) {
+        const sim = RecommendationService.calculateCosineSimilarity(candidate.vectorEmbedding, v.vectorEmbedding);
+        if (sim > 0.85) return true; // Too similar!
+      }
+    }
+    return false;
   }
 
   /**

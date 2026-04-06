@@ -1121,6 +1121,47 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
 
+  /// **DEBUG: Build a styled debug test button with label and subtitle**
+  Widget _buildDebugButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color.withOpacity(0.15),
+          foregroundColor: color,
+          elevation: 0,
+          side: BorderSide(color: color.withOpacity(0.4)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          alignment: Alignment.centerLeft,
+        ),
+        onPressed: onPressed,
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+                  Text(subtitle, style: TextStyle(fontSize: 10, color: color.withOpacity(0.7))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Handle Add UPI ID button tap
   void _handleAddUpiId() {
     ProfileDialogsWidget.showHowToEarnDialog(
@@ -1257,10 +1298,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       return const ProfileSkeleton();
     }
 
-    // **FIXED: Check authentication status first - if viewing own profile and not signed in, show sign-in view**
-    // If viewing someone else's profile (widget.userId != null), show their profile even if not signed in
+    // **FIXED: Check authentication status first**
     if (widget.userId == null && !authController.isSignedIn) {
-      return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+      final isSessionExpired = authController.error?.contains('expired') == true;
+      return ProfileSignInView(
+        onGoogleSignIn: _handleGoogleSignIn,
+        sessionExpired: isSessionExpired,
+      );
     }
 
     // **REACTIVE UI: Wrap in ValueListenableBuilders for granular state updates**
@@ -1280,14 +1324,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   error.contains('authentication') ||
                   error.contains('Unauthorized');
 
-              // If viewing own profile and auth error, show sign-in
+              // If viewing own profile and auth error, show proper sign-in
               if (widget.userId == null && isAuthError) {
-                return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+                final isSessionExpired = error.contains('expired');
+                return ProfileSignInView(
+                  onGoogleSignIn: _handleGoogleSignIn,
+                  sessionExpired: isSessionExpired,
+                );
               }
               
               // **FIX: Allow viewing other profiles even if not signed in**
               if (widget.userId == null && !authController.isSignedIn) {
-                 return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+                final isSessionExpired = authController.error?.contains('expired') == true;
+                return ProfileSignInView(
+                  onGoogleSignIn: _handleGoogleSignIn,
+                  sessionExpired: isSessionExpired,
+                );
               }
 
               // Otherwise show error with retry
@@ -1413,8 +1465,91 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       );
     }
 
-    // Debug Token Refresh Test (Only in Debug Mode) omitted for brevity in this replace call, 
-    // assuming it's already there or can be simplified. I'll keep it for completeness if possible.
+    // 1. Debug Token Refresh Test (Only in Debug Mode)
+    if (kDebugMode) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.07),
+              border: Border.all(color: Colors.amber.withOpacity(0.4)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.bug_report, color: Colors.amber, size: 14),
+                    SizedBox(width: 6),
+                    Text(
+                      'AUTH DEBUG TOOLS (debug only)',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.amber),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // --- Case 1: Normal Expiry ---
+                _buildDebugButton(
+                  context,
+                  icon: Icons.timer_off_outlined,
+                  label: 'Case 1: Expire Access Token',
+                  subtitle: 'Refresh token intact → should silently recover',
+                  color: Colors.amber[700]!,
+                  onPressed: () async {
+                    await _authService.debugExpireToken();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('🧪 Case 1: Access token expired. Watch logs for silent refresh...'),
+                    ));
+                    _refreshData();
+                  },
+                ),
+                const SizedBox(height: 6),
+
+                // --- Case 2: Full Session Loss ---
+                _buildDebugButton(
+                  context,
+                  icon: Icons.no_encryption_outlined,
+                  label: 'Case 2: Full Session Loss',
+                  subtitle: 'Both tokens gone → should show "Session Expired" screen',
+                  color: Colors.red[700]!,
+                  onPressed: () async {
+                    await _authService.debugFullSessionLoss();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('🧪 Case 2: Both tokens deleted. Watch for sign-in screen...'),
+                    ));
+                    _refreshData();
+                  },
+                ),
+                const SizedBox(height: 6),
+
+                // --- Case 3: Rotation Mismatch ---
+                _buildDebugButton(
+                  context,
+                  icon: Icons.sync_problem_outlined,
+                  label: 'Case 3: Rotation Mismatch',
+                  subtitle: 'Corrupt refresh token → backend rejects, Google fallback tested',
+                  color: Colors.deepOrange[700]!,
+                  onPressed: () async {
+                    await _authService.debugRotationMismatch();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('🧪 Case 3: Refresh token corrupted (stale). Watch for Google Silent Sign-In fallback...'),
+                    ));
+                    _refreshData();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     
     // 2. Profile Header
     slivers.add(
@@ -1506,7 +1641,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         title: stateManager.isSelecting &&
                 stateManager.selectedVideoIds.isNotEmpty
             ? Text(
-                '${stateManager.selectedVideoIds.length} video${stateManager.selectedVideoIds.length == 1 ? '' : 's'} selected',
+                '${stateManager.selectedVideoIds.length}',
                 style: AppTypography.titleMedium.copyWith(
                   fontWeight: FontWeight.w600,
                 ),

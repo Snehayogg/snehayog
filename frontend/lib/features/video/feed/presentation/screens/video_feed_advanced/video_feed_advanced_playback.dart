@@ -19,15 +19,17 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
       if (idx == null || idx < start || idx > end) {
         try {
+          if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+            _controllerPool.remove(videoId);
+            _controllerStates.remove(videoId);
+            return;
+          }
           final value = controller.value;
           if (value.isInitialized && value.isPlaying) {
             controller.pause();
             _controllerStates[videoId] = false;
           }
         } catch (e) {
-          AppLogger.log(
-            '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _reprimeWindowIfNeeded, cleaning up: $e',
-          );
           _controllerPool.remove(videoId);
           _controllerStates.remove(videoId);
         }
@@ -42,15 +44,16 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
       if (videoId == currentVideoId) return;
 
       try {
+        if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+          // Internal cleanup handled by pool usually, but we help
+          return;
+        }
         final value = controller.value;
         if (value.isInitialized && value.isPlaying) {
           controller.pause();
           _controllerStates[videoId] = false;
         }
       } catch (e) {
-        AppLogger.log(
-          '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _pauseAllOtherVideos, cleaning up: $e',
-        );
         _controllerPool.remove(videoId);
         _controllerStates.remove(videoId);
       }
@@ -78,7 +81,12 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
     bool isInitializedSafe = false;
     if (controller != null) {
       try {
-        isInitializedSafe = controller.value.isInitialized;
+        if (!SharedVideoControllerPool().isControllerDisposed(controller)) {
+          isInitializedSafe = controller.value.isInitialized;
+        } else {
+           _controllerPool.remove(videoId);
+           _controllerStates.remove(videoId);
+        }
       } catch (_) {
         _controllerPool.remove(videoId);
         _controllerStates.remove(videoId);
@@ -141,15 +149,17 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
 
         if (controller != null) {
           try {
-            final value = controller.value;
-            if (value.isInitialized && value.isPlaying) {
-              controller.pause();
-              _controllerStates[videoId] = false;
+            if (!SharedVideoControllerPool().isControllerDisposed(controller)) {
+              final value = controller.value;
+              if (value.isInitialized && value.isPlaying) {
+                controller.pause();
+                _controllerStates[videoId] = false;
+              }
+            } else {
+              _controllerPool.remove(videoId);
+              _controllerStates.remove(videoId);
             }
           } catch (e) {
-            AppLogger.log(
-              '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _pauseCurrentVideo, cleaning up: $e',
-            );
             _controllerPool.remove(videoId);
             _controllerStates.remove(videoId);
           }
@@ -163,15 +173,17 @@ extension _VideoFeedPlayback on _VideoFeedAdvancedState {
   void _pauseAllVideosOnTabSwitch() {
     _controllerPool.forEach((videoId, controller) {
       try {
-        final value = controller.value;
-        if (value.isInitialized && value.isPlaying) {
-          controller.pause();
-          _controllerStates[videoId] = false;
+        if (!SharedVideoControllerPool().isControllerDisposed(controller)) {
+          final value = controller.value;
+          if (value.isInitialized && value.isPlaying) {
+            controller.pause();
+            _controllerStates[videoId] = false;
+          }
+        } else {
+          _controllerPool.remove(videoId);
+          _controllerStates.remove(videoId);
         }
       } catch (e) {
-        AppLogger.log(
-          '⚠️ VideoFeedAdvanced: Detected disposed controller for $videoId in _pauseAllVideosOnTabSwitch, cleaning up: $e',
-        );
         _controllerPool.remove(videoId);
         _controllerStates.remove(videoId);
       }

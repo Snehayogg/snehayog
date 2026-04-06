@@ -1,13 +1,14 @@
 import { verifyGoogleToken, generateJWT } from '../utils/verifytoken.js';
 import User from '../models/User.js';
 import RefreshToken from '../models/RefreshToken.js';
+import brevoService from '../services/notificationServices/brevoService.js';
 
 /**
  * Google Sign-In (First Time / Re-authentication)
  * Verifies Google ID Token, creates/finds user, issues device-bound tokens
  */
 export const googleSignIn = async (req, res) => {
-  const { idToken, deviceId, deviceName, platform } = req.body;
+  const { idToken, deviceId, deviceName, platform, appVersion } = req.body;
 
   try {
     if (!idToken) {
@@ -33,10 +34,16 @@ export const googleSignIn = async (req, res) => {
         profilePic: userData.picture,
         videos: [],
         lastActive: new Date(),
-        isAppUninstalled: false
+        isAppUninstalled: false,
+        appVersion: appVersion || 'unknown'
       });
       await user.save();
       console.log('✅ Created new user:', user.email);
+
+      // **AUTOMATION: Send Welcome Email via Brevo**
+      brevoService.sendWelcomeEmail(user.email, user.name).catch(err => {
+        console.error('⚠️ Brevo: Failed to send welcome email to', user.email, err.message);
+      });
     } else {
       // Update profile pic if missing, update lastActive and isAppUninstalled
       user.lastActive = new Date();
@@ -44,6 +51,9 @@ export const googleSignIn = async (req, res) => {
       
       if (!user.profilePic || user.profilePic.trim() === '') {
         user.profilePic = userData.picture;
+      }
+      if (appVersion) {
+        user.appVersion = appVersion;
       }
       await user.save();
       console.log('✅ Found existing user:', user.email);

@@ -18,6 +18,8 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
   late TextEditingController _titleController;
   late TextEditingController _linkController;
   late TextEditingController _tagsController;
+  late List<Map<String, dynamic>> _episodes;
+  String? _seriesId;
   final VideoService _videoService = VideoService();
   bool _isSaving = false;
   String? _error;
@@ -28,6 +30,22 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
     _titleController = TextEditingController(text: widget.video.videoName);
     _linkController = TextEditingController(text: widget.video.link ?? '');
     _tagsController = TextEditingController(text: widget.video.tags?.join(', ') ?? '');
+    
+    // Initialize episodes and ensure the current video is IN the list
+    final episodesFromVideo = widget.video.episodes ?? [];
+    _episodes = List<Map<String, dynamic>>.from(episodesFromVideo);
+    
+    // If the current video isn't in its own episodes list (happens for new series), add it!
+    final bool currentIncluded = _episodes.any((e) => e['id'] == widget.video.id || e['_id'] == widget.video.id);
+    if (!currentIncluded) {
+      _episodes.insert(0, {
+        'id': widget.video.id,
+        'videoName': widget.video.videoName,
+        'thumbnailUrl': widget.video.thumbnailUrl,
+      });
+    }
+    
+    _seriesId = widget.video.seriesId;
   }
 
   @override
@@ -54,36 +72,55 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
         .where((t) => t.isNotEmpty)
         .toList();
 
-    // Check if anything changed
-    final bool titleChanged = newTitle != widget.video.videoName;
-    final bool linkChanged = newLink != (widget.video.link ?? '');
-    final bool tagsChanged = _areTagsDifferent(newTags, widget.video.tags);
-
-    if (!titleChanged && !linkChanged && !tagsChanged) {
-      Navigator.of(context).pop();
-      return;
-    }
-
     setState(() {
       _isSaving = true;
       _error = null;
     });
 
     try {
-      final success = await _videoService.updateVideoMetadata(
+      // 1. Update main video basic metadata (title, link, tags)
+      final updatedMainVideo = await _videoService.updateVideoMetadata(
         widget.video.id, 
         newTitle,
-        link: newLink, // Pass empty string to clear link if needed
+        link: newLink,
         tags: newTags,
       );
-      
-      if (success && mounted) {
-        setState(() => _isSaving = false);
-        Navigator.of(context).pop({
-          'videoName': newTitle,
-          'link': newLink,
-          'tags': newTags,
-        });
+
+      // 2. Handle Series Linking (Bulk Update)
+      if (_episodes.length > 1) {
+        final List<String> episodeIds = _episodes
+            .map((e) => (e['id'] ?? e['_id']).toString())
+            .toList();
+            
+        final seriesResult = await _videoService.updateVideoSeries(
+          widget.video.id, 
+          episodeIds,
+          seriesId: _seriesId,
+        );
+        
+        // Update local state with the returned episodes from the refined bulk update
+        if (mounted) {
+          setState(() => _isSaving = false);
+          Navigator.of(context).pop({
+            'videoName': updatedMainVideo.videoName,
+            'link': updatedMainVideo.link,
+            'tags': updatedMainVideo.tags,
+            'episodes': seriesResult['episodes'], // Full list from backend
+            'seriesId': seriesResult['seriesId'],
+          });
+        }
+      } else {
+        // Not a series anymore or never was
+        if (mounted) {
+          setState(() => _isSaving = false);
+          Navigator.of(context).pop({
+            'videoName': updatedMainVideo.videoName,
+            'link': updatedMainVideo.link,
+            'tags': updatedMainVideo.tags,
+            'episodes': updatedMainVideo.episodes,
+            'seriesId': updatedMainVideo.seriesId,
+          });
+        }
       }
     } catch (e) {
       AppLogger.log('❌ EditVideoDetails: Failed to save changes: $e');
@@ -98,14 +135,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
     }
   }
 
-  bool _areTagsDifferent(List<String> newTags, List<String>? oldTags) {
-    if (oldTags == null) return newTags.isNotEmpty;
-    if (newTags.length != oldTags.length) return true;
-    for (int i = 0; i < newTags.length; i++) {
-      if (newTags[i].toLowerCase() != oldTags[i].toLowerCase()) return true;
-    }
-    return false;
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +175,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
           else
             TextButton(
               onPressed: _saveChanges,
-              child: Text(
+              child: const Text(
                 'SAVE',
                 style: TextStyle(
                   color: AppColors.primary,
@@ -161,7 +191,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSectionHeader('Video Title', Icons.title_rounded),
-            AppSpacing.vSpace12,
+            AppSpacing.vSpace8,
             _buildTextField(
               controller: _titleController,
               hintText: 'Give your video a catchy title',
@@ -169,73 +199,117 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             ),
             if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8.0),
+                padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   _error!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                  style: const TextStyle(color: Colors.red, fontSize: 11),
                 ),
               ),
             
-            AppSpacing.vSpace32,
-            _buildSectionHeader('Link (Visit Now Button)', Icons.link_rounded),
+            AppSpacing.vSpace24,
+            _buildSectionHeader('Link (CTA Button)', Icons.link_rounded),
             AppSpacing.vSpace8,
-            Text(
-              'Add a URL to show a "Visit Now" button on your video.',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: AppTypography.fontSizeXS,
-              ),
-            ),
-            AppSpacing.vSpace12,
             _buildTextField(
               controller: _linkController,
               hintText: 'https://example.com',
               keyboardType: TextInputType.url,
             ),
             
-            AppSpacing.vSpace32,
+            AppSpacing.vSpace24,
             _buildSectionHeader('Tags', Icons.tag_rounded),
             AppSpacing.vSpace8,
-            Text(
-              'Separate tags with commas (e.g. fashion, tech, vlog)',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: AppTypography.fontSizeXS,
-              ),
-            ),
-            AppSpacing.vSpace12,
             _buildTextField(
               controller: _tagsController,
               hintText: 'Add tags...',
               maxLines: null,
             ),
+
+            AppSpacing.vSpace24,
+            _buildSectionHeader('Episodes (Series)', Icons.layers_rounded),
+            AppSpacing.vSpace8,
+            _buildEpisodeManager(),
             
-            AppSpacing.vSpace48,
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                   const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.textSecondary),
-                   AppSpacing.hSpace12,
-                   const Expanded(
-                     child: Text(
-                       'Updated details will be visible to everyone immediately.',
-                       style: TextStyle(
-                         color: AppColors.textSecondary,
-                         fontSize: 12,
-                       ),
-                     ),
-                   ),
-                ],
-              ),
-            ),
+            AppSpacing.vSpace32,
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEpisodeManager() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          if (_episodes.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Text('No episodes linked.', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary)),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _episodes.length,
+              itemBuilder: (context, index) {
+                final ep = _episodes[index];
+                final bool isCurrent = ep['id'] == widget.video.id || ep['_id'] == widget.video.id;
+                
+                return ListTile(
+                  dense: true,
+                  leading: Text('${index + 1}', style: AppTypography.titleSmall.copyWith(color: isCurrent ? AppColors.primary : AppColors.textTertiary)),
+                  title: Text(ep['videoName'] ?? 'Untitled', style: AppTypography.bodySmall.copyWith(color: isCurrent ? AppColors.textPrimary : AppColors.textSecondary, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: isCurrent 
+                    ? Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: Text('CURRENT', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)))
+                    : IconButton(icon: const Icon(Icons.remove_circle_outline_rounded, size: 18, color: Colors.redAccent), onPressed: () => setState(() => _episodes.removeAt(index))),
+                );
+              },
+            ),
+          const Divider(height: 1, color: AppColors.divider),
+          TextButton.icon(
+            onPressed: _showVideoPicker,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add Existing Video'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              minimumSize: const Size(double.infinity, 44),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVideoPicker() async {
+    // Show a bottom sheet to pick videos
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => _VideoPickerSheet(
+        videoType: widget.video.videoType,
+        videoService: _videoService,
+        currentUserId: widget.video.uploader.id,
+        onSelected: (video) {
+          Navigator.pop(context);
+          setState(() {
+            // Check if already in episodes
+            if (!_episodes.any((e) => e['id'] == video.id || e['_id'] == video.id)) {
+               _episodes.add({
+                 'id': video.id,
+                 'videoName': video.videoName,
+                 'thumbnailUrl': video.thumbnailUrl,
+               });
+            }
+          });
+        },
       ),
     );
   }
@@ -289,6 +363,94 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
+      ),
+    );
+  }
+}
+
+class _VideoPickerSheet extends StatefulWidget {
+  final String videoType;
+  final VideoService videoService;
+  final String currentUserId;
+  final Function(VideoModel) onSelected;
+
+  const _VideoPickerSheet({
+    required this.videoType,
+    required this.videoService,
+    required this.currentUserId,
+    required this.onSelected,
+  });
+
+  @override
+  State<_VideoPickerSheet> createState() => _VideoPickerSheetState();
+}
+
+class _VideoPickerSheetState extends State<_VideoPickerSheet> {
+  List<VideoModel>? _videos;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVideos();
+  }
+
+  void _loadVideos() async {
+    try {
+      final allVideos = await widget.videoService.getUserVideos(widget.currentUserId);
+      // Filter by videoType to ensure same-type series
+      final filteredVideos = allVideos
+          .where((v) => v.videoType.toLowerCase() == widget.videoType.toLowerCase())
+          .toList();
+
+      setState(() {
+        _videos = filteredVideos;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.7,
+      padding: EdgeInsets.all(AppSpacing.spacing4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Select a ${widget.videoType.toUpperCase()} video',
+                style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold),
+              ),
+              IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          AppSpacing.vSpace12,
+          Expanded(
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator())
+              : _videos == null || _videos!.isEmpty
+                ? const Center(child: Text('No videos found.'))
+                : ListView.separated(
+                    itemCount: _videos!.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final v = _videos![index];
+                      return ListTile(
+                        onTap: () => widget.onSelected(v),
+                        leading: Container(width: 60, height: 40, decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: AppColors.backgroundSecondary), child: ClipRRect(borderRadius: BorderRadius.circular(4), child: v.thumbnailUrl.isNotEmpty ? Image.network(v.thumbnailUrl, fit: BoxFit.cover) : const Icon(Icons.videocam_rounded))),
+                        title: Text(v.videoName, style: AppTypography.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(v.videoType.toUpperCase(), style: AppTypography.labelSmall),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💰 Snehayog Admin Dashboard - Automated Payouts</title>
+    <title>💰 Vayug Admin Dashboard - Automated Payouts</title>
     <style>
         * {
             margin: 0;
@@ -1003,10 +1003,12 @@
                     (backendRev.bannerViews + backendRev.carouselViews) :
                     Number(creator.totalAdViews || 0);
 
+                const monthlyViews = backendRev ? (backendRev.monthlyViews || 0) : Number(creator.monthlyViews || creator.totalViews || 0);
+                const monthlyUploads = backendRev ? (backendRev.videosUploaded || 0) : Number(creator.monthlyUploads || 0);
+
                 const pendingAmount = Number(creator.pendingEarningsINR || net || 0);
-                const monthlyUploads = creator.monthlyUploads || 0;
  
-                acc.totalViews += backendRev ? (backendRev.totalViews || 0) : Number(creator.totalViews || 0);
+                acc.totalViews += monthlyViews;
                 acc.totalAdViews += totalAdViews;
                 acc.totalCreatorEarnings += net;
                 acc.totalGrossEarnings += gross;
@@ -1125,28 +1127,26 @@
                     lastMonth: 0,
                     currentMonthGrossRevenue: backendRev ? backendRev.gross : 0,
                     currentMonthTotalAdViews: backendRev ? (backendRev.bannerViews + backendRev.carouselViews) : 0,
-                    currentMonthTotalViews: 0
+                    currentMonthTotalViews: backendRev ? (backendRev.monthlyViews || 0) : 0,
+                    videosUploaded: backendRev ? (backendRev.videosUploaded || 0) : 0
                 };
 
                 // Use current month data for these columns
-                const currentMonthTotalViews = monthlyData.currentMonthTotalViews || 0;
-                const currentMonthTotalAdViews = backendRev ?
-                    (backendRev.bannerViews + backendRev.carouselViews) :
+                const currentMonthTotalViews = monthlyData.currentMonthTotalViews;
+                const currentMonthTotalAdViews = backendRev ? 
+                    (backendRev.bannerViews + backendRev.carouselViews) : 
                     (monthlyData.currentMonthTotalAdViews || 0);
 
-                const currentMonthEarnings = backendRev ?
-                    backendRev.creator :
+                const currentMonthEarnings = backendRev ? 
+                    backendRev.creator : 
                     (monthlyData.thisMonth || 0);
 
-                const currentMonthGrossRevenue = backendRev ?
-                    backendRev.gross :
+                const currentMonthGrossRevenue = backendRev ? 
+                    backendRev.gross : 
                     (monthlyData.currentMonthGrossRevenue || 0);
 
-                const currentMonthPlatformRevenue = backendRev ?
-                    backendRev.platform :
-                    (currentMonthGrossRevenue - currentMonthEarnings);
-
                 const previousMonthEarnings = monthlyData.lastMonth || 0;
+                const currentMonthVideos = backendRev ? (backendRev.videosUploaded || 0) : (monthlyData.videosUploaded || 0);
 
                 const markedBadge = formatCurrencyINR(
                     pendingAmount > 0 ? pendingAmount : netEarnings
@@ -1195,6 +1195,9 @@
                         </td>
                         <td>
                             ${formatRelativeTime(creator.lastActive)}
+                            <div style="margin-top: 5px; font-size: 0.8em; font-weight: bold; color: #667eea;">
+                                📱 v${creator.appVersion || 'unknown'}
+                            </div>
                             <div style="margin-top: 5px;">
                                 ${creator.isAppUninstalled 
                                     ? '<span class="status-badge status-rejected" style="font-size: 0.7em;">🔴 Uninstalled</span>' 
@@ -1205,7 +1208,7 @@
                                 </button>
                             </div>
                         </td>
-                        <td>${creator.monthlyUploads || 0}</td>
+                        <td>${currentMonthVideos}</td>
                         <td>${formatNumber(currentMonthTotalViews)}</td>
                         <td>${formatNumber(currentMonthTotalAdViews)}</td>
                         <td>${formatCurrencyINR(currentMonthEarnings)}</td>
@@ -1259,7 +1262,7 @@
                         <thead>
                                 <tr>
                                     <th>Creator</th>
-                                    <th>Last Active</th>
+                                    <th>Last Active & Version</th>
                                     <th>Videos (Current Month)</th>
                                     <th>Total Views (Current Month)</th>
                                     <th>Ad Views (Current Month)</th>
@@ -1506,11 +1509,13 @@
                             creator: backendNet,
                             platform: backendPlatform,
                             // Verify if breakdown is available, otherwise default to 0
-                            bannerRevenue: 0, // Backend aggregated these, didn't send breakdown separately in summary list
+                            bannerRevenue: 0,
                             carouselRevenue: 0,
                             bannerViews: stats.currentMonthBannerViews || 0,
                             carouselViews: stats.currentMonthCarouselViews || 0,
-                            totalViews: stats.currentMonthTotalViews || 0
+                            totalViews: stats.currentMonthTotalViews || 0,
+                            monthlyViews: stats.currentMonthTotalViews || 0,
+                            videosUploaded: stats.videosUploaded || 0
                         };
                         creator.monthlyUploads = stats.videosUploaded || 0;
 

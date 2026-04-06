@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
+import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
 import 'package:vayug/shared/widgets/report_dialog_widget.dart';
@@ -60,7 +61,7 @@ class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
 class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScreen>
     with WidgetsBindingObserver {
   static const _controlTouchSize = 42.0;
-  static const _controlIconSize = 21.0;
+  static const _controlIconSize = 42.0;
 
   // Video Feed State
   final List<VideoModel> _videos = [];
@@ -372,7 +373,11 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       final c = _controllers.remove(index);
       final ch = _chewieControllers.remove(index);
       ch?.dispose();
-      if (c != null) _controllerPool.disposeController(videoToPlay.id);
+      
+      if (c != null) {
+        c.removeListener(_onPositionChanged);
+        _controllerPool.disposeController(videoToPlay.id);
+      }
     }
 
     _disableWakelock();
@@ -443,7 +448,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   void _onPositionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
     
     final controller = _controllers[_currentIndex];
     if (controller == null) return;
@@ -475,9 +481,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     // Save current position before cleaning up
     _savePlaybackPosition(_currentIndex);
     
-    // Local cleanup: Stop playback but don't dispose shared controllers globally
+    // Local cleanup: Stop playback and REMOVE listeners to prevent defunct element crashes
     _controllers.forEach((index, c) {
       try {
+        c.removeListener(_onPositionChanged);
         c.pause();
         c.setVolume(0.0);
       } catch (_) {}
@@ -660,6 +667,91 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         setState(() => _showControls = false);
       }
     });
+  }
+
+  void _showEpisodeList(BuildContext context, VideoModel video) {
+    if (video.episodes == null || video.episodes!.isEmpty) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4, vertical: AppSpacing.spacing2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Episodes', style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold)),
+                    IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              AppSpacing.vSpace8,
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+                  itemCount: video.episodes!.length,
+                  separatorBuilder: (context, index) => AppSpacing.vSpace8,
+                  itemBuilder: (context, index) {
+                    final ep = video.episodes![index];
+                    final isCurrent = ep['id'] == video.id || ep['_id'] == video.id;
+                    
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 100, height: 56, // 16:9 ratio
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          image: ep['thumbnailUrl'] != null 
+                            ? DecorationImage(image: CachedNetworkImageProvider(ep['thumbnailUrl']), fit: BoxFit.cover)
+                            : null,
+                          color: AppColors.backgroundSecondary,
+                        ),
+                        child: isCurrent ? Container(
+                          decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
+                          child: const Icon(Icons.play_circle_fill_rounded, color: AppColors.primary, size: 28),
+                        ) : null,
+                      ),
+                      title: Text(ep['videoName'] ?? 'Episode ${index + 1}', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.bodyMedium.copyWith(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, color: isCurrent ? AppColors.primary : AppColors.textPrimary)),
+                      subtitle: ep['duration'] != null ? Text(_formatDuration(Duration(seconds: (ep['duration'] as num).toInt())), style: AppTypography.bodySmall) : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        if (!isCurrent) {
+                           final epId = ep['id'] ?? ep['_id'];
+                           if (epId != null) {
+                             final targetIndex = _videos.indexWhere((v) => v.id == epId);
+                             if (targetIndex != -1) {
+                               _pageController.animateToPage(
+                                 targetIndex,
+                                 duration: const Duration(milliseconds: 300),
+                                 curve: Curves.easeInOut,
+                               );
+                             } else {
+                               _showSnackBar('Episode is not in current feed.', type: VayuSnackBarType.info);
+                             }
+                           }
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _handleDoubleTapToSeek(TapDownDetails details) {
@@ -850,6 +942,16 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                       _showLanguageSelector(context, _videos[_currentIndex]);
                     },
                   ),
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: Icon(_isControlsLocked ? Icons.lock_rounded : Icons.lock_open_rounded, color: AppColors.textPrimary, size: iconSize),
+                  title: Text(_isControlsLocked ? 'Unlock' : 'Lock', style: AppTypography.bodyMedium.copyWith(fontSize: titleSize)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _isControlsLocked = !_isControlsLocked);
+                  },
+                ),
                 if (_currentUserId != null && _currentIndex < _videos.length)
                   Builder(
                     builder: (context) {
@@ -876,6 +978,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                                 videoName: result['videoName'],
                                 link: result['link'],
                                 tags: result['tags'],
+                                seriesId: result['seriesId'],
+                                episodes: result['episodes'] != null 
+                                  ? List<Map<String, dynamic>>.from(result['episodes']) 
+                                  : null,
                               );
                             });
                           }
@@ -1050,6 +1156,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   String _compactTitle(String t, {required int maxChars}) => t.length <= maxChars ? t : '${t.substring(0, maxChars).trimRight()}...';
 
   Widget _buildOverlayControlButton({required Widget icon, required VoidCallback onPressed, String? tooltip}) => SizedBox(width: _controlTouchSize, height: _controlTouchSize, child: IconButton(iconSize: _controlIconSize, tooltip: tooltip, onPressed: onPressed, icon: icon, padding: EdgeInsets.zero));
+
+  String _sanitizeUrl(String url) {
+    if (url.isEmpty) return url;
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return 'https://$trimmed';
+    }
+    return trimmed;
+  }
 
   Future<void> _loadBannerAd(int index) async {
     if (_bannerAdsByIndex.containsKey(index)) return;
@@ -1240,13 +1355,30 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           mainAxisSize: MainAxisSize.min, 
           children: [
             Container(
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(isLandscape ? 100 : 100)), 
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isLandscape ? Colors.black54 : Colors.transparent, 
+                borderRadius: BorderRadius.circular(100),
+              ), 
               child: Row(
                 mainAxisSize: MainAxisSize.min, 
                 children: [
-                  Icon(_isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: isLandscape ? 32 : 32),
-                  SizedBox(width: isLandscape ? 12 : 12),
-                  Text('${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', style: TextStyle(color: Colors.white, fontSize: isLandscape ? 24 : 24, fontWeight: FontWeight.bold)),
+                  Icon(
+                    _isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, 
+                    color: Colors.white, 
+                    size: isLandscape ? 32 : 24,
+                    shadows: !isLandscape ? const [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))] : null,
+                  ),
+                  SizedBox(width: isLandscape ? 12 : 8),
+                  Text(
+                    '${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', 
+                    style: TextStyle(
+                      color: Colors.white, 
+                      fontSize: isLandscape ? 24 : 16, 
+                      fontWeight: FontWeight.bold,
+                      shadows: !isLandscape ? const [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))] : null,
+                    )
+                  ),
                 ]
               )
             ),
@@ -1320,24 +1452,28 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildVideoInfo(int index) {
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final v = _videos[index];
-    return Padding(padding: EdgeInsets.fromLTRB(isPortrait ? 16 : 16, 0, isPortrait ? 16 : 16, isPortrait ? 4 : 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
+    // Use asymmetrical padding: Left 16 (for alignment with titles), Right 8 (to push icons to edge)
+    return Padding(padding: EdgeInsets.fromLTRB(16, 0, 8, isPortrait ? 4 : 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(padding: const EdgeInsets.only(right: 8), child: Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis)),
       if (v.tags != null && v.tags!.isNotEmpty) ...[
         SizedBox(height: isPortrait ? 8 : 8),
-        Wrap(
-          spacing: isPortrait ? 6 : 6,
-          runSpacing: isPortrait ? 4 : 4,
-          children: v.tags!.map((tag) => Text(
-            '#$tag',
-            style: TextStyle(
-              color: AppColors.primary,
-              fontSize: isPortrait ? 12 : 12,
-              fontWeight: FontWeight.w500,
-            ),
-          )).toList(),
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Wrap(
+            spacing: isPortrait ? 6 : 6,
+            runSpacing: isPortrait ? 4 : 4,
+            children: v.tags!.map((tag) => Text(
+              '#$tag',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: isPortrait ? 12 : 12,
+                fontWeight: FontWeight.w500,
+              ),
+            )).toList(),
+          ),
         ),
       ],
-      SizedBox(height: isPortrait ? 8 : 8),
+      const SizedBox(height: 12),
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1348,6 +1484,27 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (v.link?.isNotEmpty == true) ...[
+                IconButton(
+                  onPressed: () async {
+                    final sanitized = _sanitizeUrl(v.link!);
+                    final url = Uri.parse(sanitized);
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                    } else {
+                      _showSnackBar('Could not open link', type: VayuSnackBarType.error);
+                    }
+                  },
+                  icon: Icon(
+                    Icons.open_in_new_rounded,
+                    color: AppColors.textSecondary,
+                    size: isPortrait ? 20 : 20,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Visit Now',
+                ),
+              ],
               IconButton(
                 onPressed: () => _showShareOptions(v),
                 icon: Icon(
@@ -1355,10 +1512,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   color: AppColors.textSecondary,
                   size: isPortrait ? 20 : 20,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 constraints: const BoxConstraints(),
               ),
-              const SizedBox(width: 12),
               IconButton(
                 onPressed: () { 
                   _handleToggleSave(index); 
@@ -1368,9 +1524,22 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
                   size: isPortrait ? 20 : 20,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 constraints: const BoxConstraints(),
               ),
+              if (v.episodes != null && v.episodes!.isNotEmpty) ...[
+                IconButton(
+                  onPressed: () => _showEpisodeList(context, v),
+                  icon: Icon(
+                    Icons.playlist_play_rounded,
+                    color: AppColors.textSecondary,
+                    size: isPortrait ? 20 : 20,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Episodes',
+                ),
+              ],
             ],
           ),
         ],
@@ -1426,10 +1595,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final horizontalPadding = isFull ? 60.0 : 14.0;
     
     return Stack(children: [
-      // TOP SCRIM (Eased Multi-stop)
-      Positioned(
+      // TOP SCRIM (ONLY IN LANDSCAPE)
+      if (!isPortrait) Positioned(
         top: 0, left: 0, right: 0,
-        height: 60, // Sharply reduced height
+        height: 60,
         child: IgnorePointer(
           child: Container(
             decoration: BoxDecoration(
@@ -1437,7 +1606,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.4), // Softer starting opacity
+                  Colors.black.withOpacity(0.4),
                   Colors.black.withOpacity(0.2),
                   Colors.black.withOpacity(0.05),
                   Colors.transparent,
@@ -1465,12 +1634,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
               const SizedBox(width: 30), // Balance
               IconButton(
                 constraints: const BoxConstraints(),
-                icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 24),
+                icon: Icon(Icons.more_vert_rounded, color: Colors.white, size: isPortrait ? 26 : 30),
                 onPressed: _showMoreOptions,
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.black.withOpacity(0.12), 
                   padding: EdgeInsets.zero,
-                  fixedSize: const Size(30, 30),
+                  fixedSize: Size(isPortrait ? 26 : 30, isPortrait ? 26 : 30),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
@@ -1479,10 +1648,10 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         ),
       ),
       
-      // BOTTOM SCRIM (Eased Multi-stop)
-      Positioned(
+      // BOTTOM SCRIM (ONLY IN LANDSCAPE)
+      if (!isPortrait) Positioned(
         bottom: 0, left: 0, right: 0,
-        height: 80, // Sharply reduced height
+        height: 80,
         child: IgnorePointer(
           child: Container(
             decoration: BoxDecoration(
@@ -1490,7 +1659,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
                 colors: [
-                  Colors.black.withOpacity(0.45), // Softer starting opacity
+                  Colors.black.withOpacity(0.45),
                   Colors.black.withOpacity(0.25),
                   Colors.black.withOpacity(0.08),
                   Colors.transparent,
@@ -1502,28 +1671,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         ),
       ),
 
-      // Lock Button (Middle Left)
-      Positioned(
-        left: isPortrait ? sidePadding : sidePadding, 
-        top: 0, bottom: 0,
-        child: SafeArea(
-          top: false, bottom: false,
-          child: Center(
-            child: IconButton(
-              constraints: const BoxConstraints(),
-              icon: Icon(_isControlsLocked ? Icons.lock_rounded : Icons.lock_open_rounded, color: Colors.white, size: 24),
-              onPressed: () => setState(() => _isControlsLocked = !_isControlsLocked),
-              style: IconButton.styleFrom(
-                backgroundColor: _isControlsLocked ? AppColors.primary : Colors.black.withOpacity(0.12),
-                padding: EdgeInsets.zero,
-                fixedSize: const Size(30, 30),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-          ),
-        ),
-      ),
-      
       // Center Controls (Skip/Play/Skip)
       if (!_isControlsLocked) 
         Center(
@@ -1534,49 +1681,41 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 InteractiveScaleButton(
                   onTap: _previousVideo,
                   child: Container(
-                    width: isPortrait ? 38 : 38, height: isPortrait ? 38 : 38,
+                    width: 38, height: 38,
                     decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Icon(Icons.skip_previous_rounded, color: Colors.white, size: isPortrait ? 26 : 26),
+                    child: Icon(Icons.skip_previous_rounded, color: Colors.white, size: 38),
                   ),
                 ),
-                SizedBox(width: isPortrait ? 42 : 42),
+                const SizedBox(width: 42),
               ],
-              // Limit the hit area of the Play button to its visual size
               SizedBox(
-                width: isPortrait ? 50 : 50,
-                height: isPortrait ? 50 : 50,
+                width: 50, height: 50,
                 child: InteractiveScaleButton(
                   onTap: _togglePlay,
                   child: Container(
                     decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        left: !controller.value.isPlaying ? 4 : 0, // Visual centering for triangle
-                      ),
-                      child: Icon(
-                        controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, 
-                        color: Colors.white, 
-                        size: isPortrait ? 44 : 44,
-                      ),
+                    child: Icon(
+                      controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, 
+                      color: Colors.white, 
+                      size: 50,
                     ),
                   ),
                 ),
               ),
               if (!isPortrait) ...[
-                SizedBox(width: isPortrait ? 42 : 42),
+                const SizedBox(width: 42),
                 InteractiveScaleButton(
                   onTap: _nextVideo,
                   child: Container(
-                    width: isPortrait ? 38 : 38, height: isPortrait ? 38 : 38,
+                    width: 38, height: 38,
                     decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Icon(Icons.skip_next_rounded, color: Colors.white, size: isPortrait ? 26 : 26),
+                    child: Icon(Icons.skip_next_rounded, color: Colors.white, size: 38),
                   ),
                 ),
               ],
             ],
           ),
         ),
-
     ]);
   }
 
@@ -1861,8 +2000,8 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
     final isPortrait = orientation == Orientation.portrait;
     
     // Calculate stable symmetrical padding for horizontal mode
-    // Using 14.0 (for portrait "inside the edge") and 60.0 (fullscreen)
-    final lateralPadding = isFull ? 60.0 : 14.0;
+    // Correct: Using 60.0 ONLY in true landscape orientation. In portrait, even if manually expanded, use 14.0.
+    final lateralPadding = orientation == Orientation.landscape ? 60.0 : 14.0;
         
     final videoHeight = isPortrait && !isFull ? size.width * 9 / 16 : size.height;
 

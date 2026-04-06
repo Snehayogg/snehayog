@@ -19,6 +19,8 @@ import { calculateVideoHash, convertLikedByToGoogleIds } from '../utils/videoUti
 import { serializeVideo, serializeVideos } from '../utils/serializers/videoSerializer.js';
 import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
 import { updateCreatorDailyStats } from '../utils/analyticsUtils.js';
+import RevenueService from '../services/adServices/revenueService.js';
+
 
 let hybridVideoService;
 
@@ -318,11 +320,22 @@ export const uploadVideo = async (req, res) => {
       totalWatchTime: 0,
       duration: detectedDuration || 0,
       likes: 0,
-      comments: 0,
       shares: 0,
       views: 0,
       uploadedAt: new Date()
     });
+
+    // **NEW: Generate initial vector embedding for instant discovery**
+    let initialEmbedding = null;
+    const embeddingText = `${videoName || ''} ${description || ''}`.trim();
+    if (embeddingText) {
+      try {
+        const { default: aiSemanticService } = await import('../services/yugFeedServices/aiSemanticService.js');
+        initialEmbedding = await aiSemanticService.getEmbedding(embeddingText);
+      } catch (e) {
+        console.warn('⚠️ Could not generate initial embedding:', e.message);
+      }
+    }
 
     const video = new Video({
       videoName: videoName,
@@ -342,7 +355,9 @@ export const uploadVideo = async (req, res) => {
       uploadedAt: new Date(),
       seriesId: req.body.seriesId || null,
       episodeNumber: parseInt(req.body.episodeNumber) || 0,
-      finalScore: initialScore
+      finalScore: initialScore,
+      vectorEmbedding: initialEmbedding,
+      embeddingVersion: initialEmbedding ? 'v1_minilm' : undefined
     });
 
     await video.save();
@@ -477,11 +492,20 @@ export const registerUpload = async (req, res) => {
       totalWatchTime: 0,
       duration: duration || 0,
       likes: 0,
-      comments: 0,
       shares: 0,
       views: 0,
       uploadedAt: new Date()
     });
+
+    // **NEW: Initial embedding for instant registration**
+    let initialEmbedding = null;
+    const embeddingText = `${videoName || ''} ${description || ''}`.trim();
+    if (embeddingText) {
+       try {
+         const { default: aiSemanticService } = await import('../services/yugFeedServices/aiSemanticService.js');
+         initialEmbedding = await aiSemanticService.getEmbedding(embeddingText);
+       } catch(e) {}
+    }
 
     const video = new Video({
       videoName: videoName || 'Untitled Video',
@@ -499,7 +523,9 @@ export const registerUpload = async (req, res) => {
       videoHash: videoHash,
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date(),
-      finalScore: initialScore
+      finalScore: initialScore,
+      vectorEmbedding: initialEmbedding,
+      embeddingVersion: initialEmbedding ? 'v1_minilm' : undefined
     });
 
     await video.save();
@@ -745,31 +771,17 @@ export const getUserVideos = async (req, res) => {
       } else {
         try {
             const now = new Date();
-            const startOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-            const endOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1));
-
-            const impressionStats = await AdImpression.aggregate([
-              { $match: { creatorId: user._id, isViewed: true, timestamp: { $gte: startOfMonth, $lt: endOfMonth } } },
-              { $group: { _id: '$adType', count: { $sum: 1 } } }
-            ]);
-
-            const bannerCpm = AD_CONFIG?.BANNER_CPM ?? 10;
-            const carouselCpm = AD_CONFIG?.DEFAULT_CPM ?? 30;
-            const creatorShare = AD_CONFIG?.CREATOR_REVENUE_SHARE ?? 0.8;
-
-            let bannerViews = 0, carouselViews = 0;
-            impressionStats.forEach(stat => {
-              if (stat._id === 'banner') bannerViews = stat.count;
-              else carouselViews += stat.count;
-            });
-
-            currentMonthEarnings = ((bannerViews / 1000) * bannerCpm + (carouselViews / 1000) * carouselCpm) * creatorShare;
+            const summary = await RevenueService.getCreatorRevenueSummary(user._id, now.getUTCMonth(), now.getUTCFullYear());
             
-            // **OPTIMIZATION: Cache earnings for 15 minutes to avoid heavy aggregations**
-            if (redisService.getConnectionStatus()) {
-              await redisService.set(`creator:earnings:${user._id}`, { amount: currentMonthEarnings, updatedAt: new Date() }, 900);
+            if (summary.success) {
+              currentMonthEarnings = summary.thisMonth;
+              
+              // **OPTIMIZATION: Cache earnings for 15 minutes to avoid heavy aggregations**
+              if (redisService.getConnectionStatus()) {
+                await redisService.set(`creator:earnings:${user._id}`, { amount: currentMonthEarnings, updatedAt: new Date() }, 900);
+              }
             }
-        } catch (err) { console.error('⚠️ Error calculating monthly earnings:', err); }
+        } catch (err) { console.error('⚠️ Error calculating monthly earnings (unified):', err); }
       }
     }
 
@@ -884,6 +896,43 @@ export const getGlobalLeaderboard = async (req, res) => {
   }
 };
 
+/**
+ * Helper to populate episodes for a list of videos
+ * Useful for feed and search results to show series navigation
+ */
+const populateEpisodesForVideos = async (videos) => {
+  if (!videos || videos.length === 0) return;
+  
+  const seriesIds = new Set();
+  videos.forEach(v => { if (v.seriesId) seriesIds.add(v.seriesId); });
+
+  if (seriesIds.size > 0) {
+    try {
+      const allEpisodes = await mongoose.model('Video').find({ 
+        seriesId: { $in: Array.from(seriesIds) }, 
+        processingStatus: 'completed'
+      })
+        .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
+        .sort({ episodeNumber: 1 }).lean();
+        
+      const episodesMap = new Map();
+      allEpisodes.forEach(ep => {
+        if (!episodesMap.has(ep.seriesId)) episodesMap.set(ep.seriesId, []);
+        ep._id = ep._id.toString();
+        episodesMap.get(ep.seriesId).push(ep);
+      });
+
+      videos.forEach(v => {
+        if (v.seriesId && episodesMap.has(v.seriesId)) {
+          v.episodes = episodesMap.get(v.seriesId);
+        }
+      });
+    } catch (err) { 
+      console.error('⚠️ Error populating series episodes:', err); 
+    }
+  }
+};
+
 export const getFeed = async (req, res) => {
   try {
     let userId = null;
@@ -941,6 +990,9 @@ export const getFeed = async (req, res) => {
     
     // **NEW: Enforce max 2 consecutive videos per creator across all feed types**
     finalVideos = RecommendationService.enforceMaxConsecutive(finalVideos, 2);
+
+    // Populate episodes
+    await populateEpisodesForVideos(finalVideos);
 
     let rqUserObjectIdStr = req.user?._id;
     if (!rqUserObjectIdStr && userId) {
@@ -1047,6 +1099,247 @@ export const getVideoById = async (req, res) => {
   } catch (error) {
     console.error('❌ Error getting video by ID:', error);
     res.status(500).json({ error: 'Failed to get video', details: error.message });
+  }
+};
+
+/**
+ * **Update Video Metadata**
+ */
+export const updateVideo = async (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const googleId = req.user.googleId;
+    const { videoName, link, tags, seriesId, episodeNumber } = req.body;
+
+    if (!videoName || videoName.trim() === '') {
+      return res.status(400).json({ error: 'Video name is required' });
+    }
+
+    const user = await User.findOne({ googleId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const video = await Video.findById(videoId).populate('uploader', 'name profilePic googleId');
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    // Verify ownership
+    if (video.uploader._id.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Not authorized to update this video' });
+    }
+
+    // Update metadata
+    video.videoName = videoName.trim();
+    
+    // Optional fields
+    if (link !== undefined) {
+      video.link = link.trim();
+    }
+ 
+    if (seriesId !== undefined) {
+      video.seriesId = seriesId;
+    }
+ 
+    if (episodeNumber !== undefined) {
+      video.episodeNumber = parseInt(episodeNumber) || 0;
+    }
+
+    if (tags !== undefined) {
+      if (Array.isArray(tags)) {
+        video.tags = tags.map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      } else if (typeof tags === 'string') {
+        video.tags = tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      }
+    }
+
+    video.updatedAt = new Date();
+    await video.save();
+
+    // Invalidate caches
+    if (redisService.getConnectionStatus()) {
+      const keysToInvalidate = [
+        'videos:feed:*',
+        `videos:user:${googleId}`,
+        VideoCacheKeys.all(),
+        VideoCacheKeys.single(videoId),
+        `video:data:${videoId}` // individual data cache
+      ];
+
+      // If this video is part of a series, invalidate siblings too
+      if (video.seriesId) {
+        try {
+          const siblings = await Video.find({ seriesId: video.seriesId }).select('_id').lean();
+          siblings.forEach(s => {
+            keysToInvalidate.push(VideoCacheKeys.single(s._id.toString()));
+            keysToInvalidate.push(`video:data:${s._id.toString()}`);
+          });
+        } catch (e) {
+          console.error('⚠️ Failed to fetch siblings for cache invalidation:', e.message);
+        }
+      }
+
+      await invalidateCache(keysToInvalidate);
+    }
+
+    // Return the FULL updated video with episodes
+    const videoObj = video.toObject();
+    
+    // Fetch episodes for series sync
+    let episodes = [];
+    if (videoObj.seriesId) {
+      episodes = await Video.find({ 
+        seriesId: videoObj.seriesId, 
+        processingStatus: 'completed' 
+      })
+        .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
+        .sort({ episodeNumber: 1 }).lean();
+      episodes = episodes.map(ep => ({ ...ep, _id: ep._id.toString() }));
+    }
+
+    const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
+    const transformedVideo = {
+      _id: videoObj._id?.toString(),
+      videoName: videoObj.videoName,
+      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
+      thumbnailUrl: videoObj.thumbnailUrl || '',
+      description: videoObj.description || '',
+      likes: parseInt(videoObj.likes) || 0,
+      views: parseInt(videoObj.views) || 0,
+      shares: parseInt(videoObj.shares) || 0,
+      duration: parseInt(videoObj.duration) || 0,
+      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
+      videoType: videoObj.videoType || 'yog',
+      link: videoObj.link || null,
+      uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
+      uploader: {
+        id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
+        _id: videoObj.uploader?._id?.toString() || '',
+        name: videoObj.uploader?.name || 'Unknown',
+        profilePic: videoObj.uploader?.profilePic || '',
+      },
+      seriesId: videoObj.seriesId || null,
+      episodeNumber: videoObj.episodeNumber || 0,
+      episodes: episodes,
+      tags: videoObj.tags || [],
+      isLiked: videoObj.likedBy.some(id => id.toString() === user._id.toString()),
+      likedBy: likedByGoogleIds
+    };
+
+    res.json({ 
+      success: true, 
+      message: 'Video updated successfully',
+      video: transformedVideo
+    });
+  } catch (error) {
+    console.error('❌ Error updating video:', error);
+    res.status(500).json({ error: 'Failed to update video' });
+  }
+};
+
+/**
+ * **Update Video Series**
+ * Specialized endpoint for linking multiple videos into a series.
+ * This is much more efficient than updating episodes one by one.
+ */
+export const updateVideoSeries = async (req, res) => {
+  try {
+    const videoId = req.params.id; // Main identifier
+    const googleId = req.user.googleId;
+    const { episodeIds, seriesId } = req.body;
+
+    if (!Array.isArray(episodeIds) || episodeIds.length === 0) {
+      return res.status(400).json({ error: 'episodeIds array is required' });
+    }
+
+    const user = await User.findOne({ googleId }).select('_id').lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // 1. Fetch all involved videos to verify ownership
+    // Convert to Set to remove duplicates, then back to array
+    const uniqueVideoIds = [...new Set([videoId, ...episodeIds])];
+    const videos = await Video.find({ _id: { $in: uniqueVideoIds } });
+
+    if (videos.length === 0) {
+      return res.status(404).json({ error: 'Videos not found' });
+    }
+
+    // Verify ownership for all found videos
+    for (const v of videos) {
+      if (v.uploader.toString() !== user._id.toString()) {
+        return res.status(403).json({ error: `Not authorized to update video: ${v._id}` });
+      }
+    }
+
+    // 2. Determine target seriesId
+    const targetSeriesId = seriesId || `series_${Date.now()}`;
+
+    // 3. Update all provided videos in bulk
+    const bulkOps = episodeIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: id },
+        update: { 
+          $set: { 
+            seriesId: targetSeriesId, 
+            episodeNumber: index + 1, // 1-indexed for episodes
+            updatedAt: new Date()
+          } 
+        }
+      }
+    }));
+
+    // Ensure the main video is also tagged correctly if not in the episodeIds list
+    if (!episodeIds.includes(videoId)) {
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: videoId },
+          update: { 
+            $set: { 
+              seriesId: targetSeriesId,
+              updatedAt: new Date()
+            } 
+          }
+        }
+      });
+    }
+
+    await Video.bulkWrite(bulkOps);
+
+    // 4. Invalidate Caches for ALL involved videos
+    if (redisService.getConnectionStatus()) {
+      const keysToInvalidate = [
+        'videos:feed:*',
+        `videos:user:${googleId}`,
+        VideoCacheKeys.all(),
+        VideoCacheKeys.single(videoId),
+        `video:data:${videoId}`
+      ];
+
+      uniqueVideoIds.forEach(id => {
+        keysToInvalidate.push(VideoCacheKeys.single(id.toString()));
+        keysToInvalidate.push(`video:data:${id.toString()}`);
+      });
+      
+      await invalidateCache(keysToInvalidate);
+    }
+
+    // 5. Fetch fresh episodes list for response
+    let episodes = await Video.find({ 
+      seriesId: targetSeriesId, 
+      processingStatus: 'completed' 
+    })
+    .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
+    .sort({ episodeNumber: 1 }).lean();
+
+    episodes = episodes.map(ep => ({ ...ep, _id: ep._id.toString() }));
+
+    res.json({
+      success: true,
+      message: 'Series linked and updated successfully',
+      seriesId: targetSeriesId,
+      episodes: episodes
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating video series:', error);
+    res.status(500).json({ error: 'Failed to update video series', message: error.message });
   }
 };
 
@@ -1687,72 +1980,6 @@ export const deleteVideo = async (req, res) => {
   }
 };
 
-/**
- * **Update Video Metadata**
- */
-export const updateVideo = async (req, res) => {
-  try {
-    const videoId = req.params.id;
-    const googleId = req.user.googleId;
-    const { videoName, link, tags } = req.body;
-
-    if (!videoName || videoName.trim() === '') {
-      return res.status(400).json({ error: 'Video name is required' });
-    }
-
-    const user = await User.findOne({ googleId });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const video = await Video.findById(videoId);
-    if (!video) return res.status(404).json({ error: 'Video not found' });
-
-    // Verify ownership
-    if (video.uploader.toString() !== user._id.toString()) {
-      return res.status(403).json({ error: 'Not authorized to update this video' });
-    }
-
-    // Update metadata
-    video.videoName = videoName.trim();
-    
-    // Optional fields
-    if (link !== undefined) {
-      video.link = link.trim();
-    }
-
-    if (tags !== undefined) {
-      if (Array.isArray(tags)) {
-        video.tags = tags.map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
-      } else if (typeof tags === 'string') {
-        video.tags = tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
-      }
-    }
-
-    video.updatedAt = new Date();
-    await video.save();
-
-    // Invalidate caches
-    if (redisService.getConnectionStatus()) {
-      await invalidateCache([
-        'videos:feed:*',
-        `videos:user:${googleId}`,
-        VideoCacheKeys.all(),
-        VideoCacheKeys.single(videoId)
-      ]);
-    }
-
-    res.json({ 
-      success: true, 
-      message: 'Video updated successfully',
-      video: {
-        id: video._id,
-        videoName: video.videoName
-      }
-    });
-  } catch (error) {
-    console.error('❌ Error updating video:', error);
-    res.status(500).json({ error: 'Failed to update video' });
-  }
-};
 
 export const bulkDeleteVideos = async (req, res) => {
   try {

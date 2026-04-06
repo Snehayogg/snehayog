@@ -56,6 +56,7 @@ router.post('/:id/increment-view', videoController.incrementView);
  */
 router.delete('/:id', verifyToken, videoController.deleteVideo);
 router.patch('/:id', verifyToken, videoController.updateVideo); // **NEW: Update video metadata**
+router.post('/:id/series', verifyToken, videoController.updateVideoSeries); // **NEW: Update video series (bulk)**
 router.post('/bulk-delete', verifyToken, videoController.bulkDeleteVideos);
 
 /**

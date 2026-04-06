@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -1555,33 +1556,6 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       VayuSnackBar.showError(context, message);
     } else {
       VayuSnackBar.showSuccess(context, message);
-    }
-  }
-
-  /// **NAVIGATE TO CAROUSEL AD: Switch to carousel ad page (no rebuild)**
-  void _navigateToCarouselAd(int index) {
-    if (index >= _videos.length) return;
-    final videoId = _videos[index].id;
-    if (_carouselAdManager.getTotalCarouselAds() > 0 &&
-        _currentHorizontalPage.containsKey(videoId)) {
-      
-      // **FLUID TRANSITION: Animate the horizontal PageView for a premium feel**
-      final controller = _horizontalControllers[videoId];
-      if (controller != null && controller.hasClients) {
-        controller.animateToPage(
-          1,
-          duration: const Duration(milliseconds: 300), 
-          curve: Curves.easeInOut,
-        );
-      } else {
-        // Fallback: Just update the value (will be used as initialPage)
-        _currentHorizontalPage[videoId]!.value = 1;
-      }
-    } else {
-      // Attempt to reload ads if empty
-      if (_carouselAdManager.getTotalCarouselAds() == 0) {
-        _carouselAdManager.loadCarouselAds();
-      }
     }
   }
 

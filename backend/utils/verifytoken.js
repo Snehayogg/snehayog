@@ -64,7 +64,7 @@ export const verifyGoogleToken = async (idToken) => {
     return payload;
 };
 
-export const generateJWT = (userId, expiresIn = '1h') => {
+export const generateJWT = (userId, expiresIn = '30d') => {
     const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
     const payload = { id: userId };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn });

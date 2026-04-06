@@ -220,6 +220,22 @@ class ProfileMenuWidget extends StatelessWidget {
                       },
                     });
 
+                    // Setup Billing (Shifted from Header when completed)
+                    if (stateManager.isOwner && stateManager.hasUpiId) {
+                      menuItems.add({
+                        'title': 'Setup Billing',
+                        'icon': HugeIcons.strokeRoundedWallet01,
+                        'color': AppColors.primary,
+                        'onTap': () {
+                          Navigator.pop(context);
+                          ProfileDialogsWidget.showHowToEarnDialog(
+                            context,
+                            stateManager: stateManager,
+                          );
+                        },
+                      });
+                    }
+
                     // Delete Videos
                     if (stateManager.isOwner) {
                       menuItems.add({

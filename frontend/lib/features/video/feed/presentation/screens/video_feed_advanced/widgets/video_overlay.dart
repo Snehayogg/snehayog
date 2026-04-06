@@ -12,6 +12,7 @@ class VideoOverlay extends StatefulWidget {
   final VoidCallback onShare;
   final VoidCallback onOpenCarouselAd;
   final VoidCallback onOpenProfile;
+  final VoidCallback? onOpenEpisodes;
   final Widget followButton;
   /// Called when dubbed video is ready and user wants to play it.
   final void Function(String dubbedUrl)? onPlayDubbed;
@@ -26,6 +27,7 @@ class VideoOverlay extends StatefulWidget {
     required this.onShare,
     required this.onOpenCarouselAd,
     required this.onOpenProfile,
+    this.onOpenEpisodes,
     required this.followButton,
     this.onPlayDubbed,
   }) : super(key: key);
@@ -153,6 +155,16 @@ class _VideoOverlayState extends State<VideoOverlay> {
                   onTap: widget.onShare,
                 ),
                 const SizedBox(height: 10),
+
+                // Episodes (Series)
+                if (widget.video.episodes != null && widget.video.episodes!.isNotEmpty) ...[
+                  VerticalActionButton(
+                    icon: Icons.playlist_play_rounded,
+                    onTap: widget.onOpenEpisodes ?? () {},
+                    label: 'Series',
+                  ),
+                  const SizedBox(height: 10),
+                ],
 
 
                 // Swipe / Carousel Ad

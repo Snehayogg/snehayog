@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:video_player/video_player.dart';
@@ -53,18 +54,6 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
       );
 
       if (result != null) {
-        if (result.files.length > 10) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('You can select a maximum of 10 episodes.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-
         List<File> files = result.paths.map((path) => File(path!)).toList();
         
         // Filter out videos shorter than 8 seconds
@@ -73,33 +62,27 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
            try {
             final controller = VideoPlayerController.file(file);
             await controller.initialize();
-            if (controller.value.duration.inSeconds >= 8 && controller.value.duration.inSeconds <= 300) { // Limit adjusted to 300s? Or keep 60s? User asked for 300MB limit, didn't specify duration. Keeping strict check for now but maybe relaxing it if needed. Let's stick to 60s for "Episodes" usually short, but maybe allow longer? Let's keep existing 60s unless requested otherwise, but maybe user meant bigger files. 
-              // Wait, previous code had 60s limit. "Episodes" imply series. 
-              // Let's safe keep at 60s OR remove checks?
-              // The user specifically asked for "Title edit".
-              // I'll keep logic same to be safe.
-              
+            if (controller.value.duration.inSeconds >= 8) {
               String defaultTitle = file.path.split('/').last.split('.').first;
               validEpisodes.add(EpisodeItem(file: file, title: defaultTitle));
             } else {
-               AppLogger.log('Skipping video with invalid duration: ${file.path}');
+              AppLogger.log('Skipping video with invalid duration: ${file.path}');
             }
             await controller.dispose();
           } catch (e) {
             AppLogger.log('Error checking duration: $e');
-            // Optimistic add
-             String defaultTitle = file.path.split('/').last.split('.').first;
-             validEpisodes.add(EpisodeItem(file: file, title: defaultTitle));
+            String defaultTitle = file.path.split('/').last.split('.').first;
+            validEpisodes.add(EpisodeItem(file: file, title: defaultTitle));
           }
         }
 
         if (files.length != validEpisodes.length && mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Some episodes were skipped. Duration must be between 8s and 60s.'),
-                backgroundColor: Colors.orange,
-              ),
-            );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Some episodes were skipped. Duration must be at least 8 seconds.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
         }
 
         setState(() {
@@ -188,29 +171,29 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
         // Use the edited title
         String title = episode.title;
         
-        // Call upload video
-        final result = await runZoned(
-          () => _videoService.uploadVideo(
-            videoFile: episode.file,
-            title: title,
-            description: '',
-            link: '',
-          ),
-          zoneValues: {
-            'upload_metadata': {
-              'videoType': 'yog',
-              'category': 'Others',
-              'tags': <String>[],
-              'seriesId': seriesId,
-              'episodeNumber': i + 1,
-            }
-          },
+        // Call upload video with series metadata
+        final result = await _videoService.uploadVideo(
+          videoFile: episode.file,
+          title: title,
+          description: '',
+          link: '',
+          videoType: 'yog',
+          category: 'Others',
+          tags: <String>[],
+          seriesId: seriesId,
+          episodeNumber: i + 1,
         );
 
-         if (result['id'] != null) {
-            // Success for this video
-            AppLogger.log('Video ${i+1} uploaded: ${result['id']}');
-         }
+        if (result['video'] != null) {
+          // Success for this video - Add to ProfileStateManager optimistically
+          try {
+            final profileManager = ref.read(profileStateManagerProvider);
+            profileManager.addVideoOptimistically(result['video']);
+            AppLogger.log('✅ Episode ${i + 1} added to profile state');
+          } catch (e) {
+            AppLogger.log('⚠️ Error adding episode to profile state: $e');
+          }
+        }
 
       } catch (e) {
         AppLogger.log('Error uploading video $i: $e');
@@ -238,25 +221,22 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
     if (mounted) {
       showDialog(
         context: context,
+        useRootNavigator: false, // **FIX: Ensure dialog is on the Tab Navigator**
         builder: (context) => AlertDialog(
           title: const Text('Uploads Completed'),
           content: const Text('All episodes have been queued for processing. They will be available shortly after processing is complete.'),
           actions: [
             AppButton(
               onPressed: () {
-                Navigator.pop(context); // Close dialog
+                // 1. Get the controller BEFORE popping current context
+                final mainController = ref.read(mainControllerProvider);
                 
-                // Navigate to Account tab (index 4)
-                try {
-                  final mainController = ref.read(mainControllerProvider);
-                  mainController.changeIndex(4);
-                  
-                  // Pop the MakeEpisodeScreen to return to the underlying tab (which is now Account)
-                  Navigator.pop(context);
-                } catch (e) {
-                  AppLogger.log('Error navigating to Account tab: $e');
-                  Navigator.pop(context); // Fallback pop
-                }
+                // 2. Pop both dialog and screen (within the Tab Navigator)
+                Navigator.of(context).pop(); // Close dialog
+                Navigator.of(context).pop(); // Exit MakeEpisodeScreen
+                
+                // 3. Switch to Account tab (Index 3 is Account/Profile)
+                mainController.changeIndex(3);
               },
               label: 'OK',
               variant: AppButtonVariant.primary,
@@ -293,7 +273,7 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Select up to 10 episodes to upload as a sequence.',
+              'Select multiple episodes to upload as a sequence.',
               style: TextStyle(color: Colors.grey[600]),
             ),
             const SizedBox(height: 12),

@@ -47,6 +47,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final ValueNotifier<bool> _isUploading = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isProcessing = ValueNotifier<bool>(false);
   final ValueNotifier<String?> _errorMessage = ValueNotifier<String?>(null);
+  final ValueNotifier<bool> _isAuthError = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _showUploadForm = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isMinimizing = ValueNotifier<bool>(false);
 
@@ -98,6 +99,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       _isUploading.value = false;
       _isProcessing.value = false;
       _errorMessage.value = null;
+      _isAuthError.value = false;
       _showUploadForm.value = false;
       _isMinimizing.value = false;
       _unifiedProgress.value = 0.0;
@@ -423,6 +425,34 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     }
   }
 
+  /// **NEW: Handle re-authentication when session expires during upload**
+  Future<void> _handleReAuthentication() async {
+    try {
+      AppLogger.log('🔐 UploadScreen: Re-authenticating session...');
+      _isUploading.value = true; // Show loading state during re-auth
+      
+      // Attempt to sign in again
+      final userData = await _authService.signInWithGoogle();
+      
+      if (userData != null) {
+        AppLogger.log('✅ UploadScreen: Re-authentication successful! Resuming upload...');
+        _isAuthError.value = false;
+        _errorMessage.value = null;
+        
+        // Resume upload automatically
+        Future.microtask(() => _uploadVideo());
+      } else {
+        AppLogger.log('❌ UploadScreen: Re-authentication failed or cancelled');
+        _isUploading.value = false;
+        _errorMessage.value = 'Re-authentication failed. Please sign in to continue.';
+      }
+    } catch (e) {
+      AppLogger.log('❌ UploadScreen: Error during re-authentication: $e');
+      _isUploading.value = false;
+      _errorMessage.value = 'Failed to sign in. Please try again.';
+    }
+  }
+
   /// **UPLOAD VIDEO METHOD** - Handles video upload with progress tracking
   Future<void> _uploadVideo() async {
     final userData = await _authService.getUserData();
@@ -698,8 +728,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
       // Handle specific error types
       String userFriendlyError;
-      if (e.toString().contains('User not authenticated') ||
+      bool isAuth = false;
+
+      if (e is DioException && e.response?.statusCode == 401) {
+        isAuth = true;
+        userFriendlyError = 'Session expired. Please sign in again to resume upload.';
+      } else if (e.toString().contains('User not authenticated') ||
           e.toString().contains('Authentication token not found')) {
+        isAuth = true;
         userFriendlyError = AppText.get('upload_error_sign_in_again');
       } else if (e.toString().contains('Server is not responding')) {
         userFriendlyError = AppText.get('upload_error_server_not_responding');
@@ -717,6 +753,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
       // **NO setState: Use ValueNotifier**
       _errorMessage.value = userFriendlyError;
+      _isAuthError.value = isAuth;
     } finally {
       if (mounted) {
         // **NO setState: Use ValueNotifier**
@@ -1635,26 +1672,39 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           ),
 
               // Action Buttons
-              ValueListenableBuilder<String>(
-                valueListenable: _currentPhase,
-                builder: (context, phase, _) {
-                  final isComplete =
-                      phase == 'completed' || phase == 'finalizing';
-                  final isError = _errorMessage.value != null;
-                  final hasSelected = _selectedVideo.value != null;
-                  final isUploading = _isUploading.value;
+              ValueListenableBuilder<bool>(
+                valueListenable: _isAuthError,
+                builder: (context, isAuthError, _) {
+                  return ValueListenableBuilder<String>(
+                    valueListenable: _currentPhase,
+                    builder: (context, phase, _) {
+                      final isComplete =
+                          phase == 'completed' || phase == 'finalizing';
+                      final isError = _errorMessage.value != null;
+                      final hasSelected = _selectedVideo.value != null;
+                      final isUploading = _isUploading.value;
 
-                  if (isError) {
-                    return AppButton(
-                      onPressed: () {
-                        _errorMessage.value = null;
-                        _uploadVideo();
-                      },
-                      label: 'Retry Upload',
-                      variant: AppButtonVariant.primary,
-                      isFullWidth: true,
-                    );
-                  }
+                      if (isAuthError) {
+                        return AppButton(
+                          onPressed: _handleReAuthentication,
+                          label: 'Sign In & Resume',
+                          variant: AppButtonVariant.primary,
+                          isFullWidth: true,
+                          icon: const Icon(Icons.login),
+                        );
+                      }
+
+                      if (isError) {
+                        return AppButton(
+                          onPressed: () {
+                            _errorMessage.value = null;
+                            _uploadVideo();
+                          },
+                          label: 'Retry Upload',
+                          variant: AppButtonVariant.primary,
+                          isFullWidth: true,
+                        );
+                      }
 
                   // Show "Start Upload" + "Change Video" if video selected but not uploading
                   if (hasSelected && !isUploading && !isComplete) {
@@ -1727,7 +1777,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     ],
                   );
                 },
-              ),
+              );
+            },
+          ),
             ],
           ),
         );

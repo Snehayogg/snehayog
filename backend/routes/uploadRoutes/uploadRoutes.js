@@ -180,7 +180,7 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
  */
 router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, res) => {
   try {
-    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms } = req.body;
+    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber } = req.body;
     const userId = req.user.id;
 
     if (!key || !videoName) {
@@ -212,7 +212,9 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       originalSize: size || 0,
       views: 0,
       likes: 0,
-      isHLSEncoded: false
+      isHLSEncoded: false,
+      seriesId: seriesId || null,
+      episodeNumber: episodeNumber ? parseInt(episodeNumber) : 0
     });
 
     if (crossPostPlatforms && Array.isArray(crossPostPlatforms)) {

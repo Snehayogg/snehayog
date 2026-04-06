@@ -5,6 +5,7 @@ class VerticalActionButton extends StatelessWidget {
   final VoidCallback onTap;
   final Color color;
   final int? count;
+  final String? label;
 
   const VerticalActionButton({
     Key? key,
@@ -12,6 +13,7 @@ class VerticalActionButton extends StatelessWidget {
     required this.onTap,
     this.color = Colors.white,
     this.count,
+    this.label,
   }) : super(key: key);
 
   String _formatCount(int count) {
@@ -26,6 +28,8 @@ class VerticalActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String? statusText = count != null ? _formatCount(count!) : label;
+    
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -38,10 +42,10 @@ class VerticalActionButton extends StatelessWidget {
             ),
             child: Icon(icon, color: color, size: 18),
           ),
-          if (count != null) ...[
+          if (statusText != null) ...[
             const SizedBox(height: 4),
             Text(
-              _formatCount(count!),
+              statusText,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,

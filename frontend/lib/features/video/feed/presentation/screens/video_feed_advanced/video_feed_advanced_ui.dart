@@ -863,6 +863,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildVideoProgressBar(VideoPlayerController controller) {
+    // **CRASH-PROOF: Check disposal before passing to progress bar**
+    if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+      return const SizedBox.shrink();
+    }
+
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1014,9 +1019,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       '🎬 MODEL Portrait video - Aspect Ratio: $modelAspectRatio',
     );
 
-    // **Standard Feed Behavior (Yug Tab & Pushed Screens)**
-    // Use AspectRatio to respect content size and align to bottom.
-    // This provides a consistent look regardless of how the screen was opened.
+    // **CRASH-PROOF: Final check before VideoPlayer widget hits the tree**
+    if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+      return const SizedBox.shrink();
+    }
+
     return Align(
       alignment: Alignment.bottomCenter,
       child: AspectRatio(
@@ -1038,9 +1045,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // Simplification for release build
     // AppLogger.log('🎬 MODEL Landscape video - Aspect Ratio: $modelAspectRatio');
 
-    // **FIX: Simplified to use standard AspectRatio widget**
-    // This ensures the video always fits the screen width while maintaining aspect ratio
-    // without fragile manual calculations or originalResolution dependency.
+    // **CRASH-PROOF: Final check before VideoPlayer widget hits the tree**
+    if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+      return const SizedBox.shrink();
+    }
+
     return Align(
       alignment:
           Alignment.center, // **FIX: Center horizontal videos vertically**
@@ -1293,17 +1302,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   children: [
                     _buildReportIndicator(index),
                     AppSpacing.vSpace16,
-                    // **NEW: Episode Action Button**
-                    if (video.episodes != null && video.episodes!.isNotEmpty)
-                      Column(
-                        children: [
-                          _buildVerticalActionButton(
-                            icon: Icons.playlist_play_rounded,
-                            onTap: () => _showEpisodeList(context, video),
-                          ),
-                          AppSpacing.vSpace12,
-                        ],
-                      ),
                     _buildLikeButton(video, index),
                     AppSpacing.vSpace12,
                     _buildAudioDubbingButton(video, index),
@@ -1313,46 +1311,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                       onTap: () => _handleShare(video),
                     ),
                     AppSpacing.vSpace12,
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _navigateToCarouselAd(index),
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            width: _secondaryActionHitTargetSize,
-                            height: _secondaryActionHitTargetSize,
-                            child: Center(
-                              child: Container(
-                                width: AppConstants
-                                    .secondaryActionButtonContainerSize,
-                                height: AppConstants
-                                    .secondaryActionButtonContainerSize,
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.backgroundSecondary
-                                      .withValues(alpha: 0.7),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: AppColors.white,
-                                  size: AppConstants.secondaryActionButtonSize,
-                                ),
-                              ),
-                            ),
-                          ),
-                          AppSpacing.vSpace4,
-                          Text(
-                            'Swipe',
-                            style: TextStyle(
-                              color: AppColors.white,
-                              fontSize: AppTypography.fontSizeXS,
-                              fontWeight: AppTypography.weightSemiBold,
-                            ),
-                          ),
-                        ],
+                    if (video.episodes != null && video.episodes!.isNotEmpty)
+                      _buildVerticalActionButton(
+                        icon: Icons.playlist_play_rounded,
+                        onTap: () => _showEpisodeList(context, video),
+                        labelOverride: 'Episode',
+                        isPrimary: true, // **Match Like button size**
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1571,7 +1536,18 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     Color color = AppColors.white,
     int? count,
     String? labelOverride,
+    bool isPrimary = false,
   }) {
+    final containerSize = isPrimary
+        ? AppConstants.primaryActionButtonContainerSize
+        : AppConstants.secondaryActionButtonContainerSize;
+    final iconSize = isPrimary
+        ? AppConstants.primaryActionButtonSize
+        : AppConstants.secondaryActionButtonSize;
+    final hitTargetSize = isPrimary
+        ? _primaryActionHitTargetSize
+        : _secondaryActionHitTargetSize;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -1579,12 +1555,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: _secondaryActionHitTargetSize,
-            height: _secondaryActionHitTargetSize,
+            width: hitTargetSize,
+            height: hitTargetSize,
             child: Center(
               child: Container(
-                width: AppConstants.secondaryActionButtonContainerSize,
-                height: AppConstants.secondaryActionButtonContainerSize,
+                width: containerSize,
+                height: containerSize,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: AppColors.backgroundSecondary.withValues(alpha: 0.7),
@@ -1600,7 +1576,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 child: Icon(
                   icon,
                   color: color,
-                  size: AppConstants.secondaryActionButtonSize,
+                  size: iconSize,
                   shadows: const [
                     Shadow(
                       color: AppColors.overlayDark,
@@ -1861,101 +1837,128 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
-    VayuBottomSheet.show(
+    if (video.episodes == null || video.episodes!.isEmpty) return;
+    
+    showModalBottomSheet(
       context: context,
-      title: 'More Episodes',
-      useDraggable: true,
-      initialChildSize: 0.5,
-      minChildSize: 0.3,
-      maxChildSize: 0.8,
-      padding: EdgeInsets.zero,
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 0.7,
-        ),
-        itemCount: video.episodes!.length,
-        itemBuilder: (context, index) {
-          final episode = video.episodes![index];
-          final String thumbnailUrl =
-              episode['thumbnailUrl'] ?? video.thumbnailUrl;
-          final String sequenceNumber = (index + 1).toString();
-
-          return GestureDetector(
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VideoFeedAdvanced(
-                    initialVideoId: episode['id'] ?? episode['_id'],
-                    videoType: 'yog',
-                  ),
+      backgroundColor: AppColors.backgroundPrimary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4, vertical: AppSpacing.spacing2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Episodes', style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold, color: AppColors.white)),
+                    IconButton(icon: const Icon(Icons.close_rounded, color: AppColors.white), onPressed: () => Navigator.pop(context)),
+                  ],
                 ),
-              );
-              AppLogger.log(
-                  'Selected episode $sequenceNumber: ${episode['id'] ?? episode['_id']}');
-            },
+              ),
+              const Divider(height: 1, color: AppColors.divider),
+              AppSpacing.vSpace8,
+              Flexible(
+                child: _buildShortsEpisodeGrid(video),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShortsEpisodeGrid(VideoModel video) {
+    return GridView.builder(
+      shrinkWrap: true,
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: AppSpacing.spacing3,
+        mainAxisSpacing: AppSpacing.spacing3,
+        childAspectRatio: 9 / 16,
+      ),
+      itemCount: video.episodes!.length,
+      itemBuilder: (context, index) {
+        final ep = video.episodes![index];
+        final isCurrent = ep['id'] == video.id || ep['_id'] == video.id;
+        
+        return GestureDetector(
+          onTap: () {
+            Navigator.pop(context);
+            if (!isCurrent) {
+               final epId = ep['id'] ?? ep['_id'];
+               if (epId != null) {
+                 final targetIndex = _videos.indexWhere((v) => v.id == epId);
+                 if (targetIndex != -1) {
+                   _pageController.animateToPage(
+                     targetIndex,
+                     duration: const Duration(milliseconds: 300),
+                     curve: Curves.easeInOut,
+                   );
+                 } else {
+                   // Optional: If not in feed, we could potentiall fetch and insert it
+                   // or just show a snackbar. Since it's a feed, jump-if-present is safest.
+                   _showSnackBar('Episode is not in current feed. Scrolling to find it...');
+                 }
+               }
+            }
+          },
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: AppColors.backgroundSecondary,
+            ),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: thumbnailUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) =>
-                        Container(color: AppColors.borderPrimary),
-                    errorWidget: (context, url, error) => Container(
-                      color: AppColors.borderPrimary,
-                      child: const Icon(Icons.error),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.backgroundPrimary.withValues(alpha: 0.7),
-                      borderRadius: AppRadius.borderRadiusXS,
-                    ),
-                    child: Text(
-                      sequenceNumber,
-                      style: TextStyle(
-                        color: AppColors.white,
-                        fontWeight: AppTypography.weightBold,
-                        fontSize: AppTypography.fontSizeSM,
+                if (ep['thumbnailUrl'] != null)
+                  CachedNetworkImage(imageUrl: ep['thumbnailUrl'], fit: BoxFit.cover),
+                
+                // Blur Overlay with numbers
+                Positioned.fill(
+                  child: ClipRRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 1, sigmaY: 1),
+                      child: Container(
+                        color: Colors.black.withOpacity(0.3),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 48, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                Center(
+                
+                // Active Border
+                if (isCurrent)
+                  Container(decoration: BoxDecoration(border: Border.all(color: AppColors.primary, width: 2), borderRadius: BorderRadius.circular(12))),
+
+                // Title at bottom
+                Positioned(
+                  bottom: 0, left: 0, right: 0,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
+                    padding: EdgeInsets.all(AppSpacing.spacing2),
                     decoration: BoxDecoration(
-                      color: AppColors.backgroundPrimary.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
+                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent]),
                     ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: AppColors.white,
-                      size: 16,
-                    ),
+                    child: Text(ep['videoName'] ?? 'Ep ${index + 1}', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.bodySmall.copyWith(color: AppColors.white, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -2008,6 +2011,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                         videoName: result['videoName'],
                         link: result['link'],
                         tags: result['tags'],
+                        seriesId: result['seriesId'],
+                        episodes: result['episodes'] != null 
+                          ? List<Map<String, dynamic>>.from(result['episodes']) 
+                          : null,
                       );
                     }
                   });
@@ -2110,3 +2117,4 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     );
   }
 }
+

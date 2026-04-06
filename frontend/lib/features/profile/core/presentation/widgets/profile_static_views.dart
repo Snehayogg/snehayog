@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:hugeicons/hugeicons.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/radius.dart';
 import 'package:vayug/shared/utils/app_text.dart';
@@ -152,10 +151,12 @@ class ProfileSkeleton extends StatelessWidget {
 
 class ProfileSignInView extends StatelessWidget {
   final VoidCallback onGoogleSignIn;
+  final bool sessionExpired;
 
   const ProfileSignInView({
     super.key,
     required this.onGoogleSignIn,
+    this.sessionExpired = false,
   });
 
   @override
@@ -167,28 +168,6 @@ class ProfileSignInView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const HugeIcon(
-                icon: HugeIcons.strokeRoundedUserCircle,
-                size: 100,
-                color: AppColors.textTertiary,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                AppText.get('profile_sign_in_title'),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                AppText.get('profile_sign_in_desc'),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                textAlign: TextAlign.center,
-              ),
               const SizedBox(height: 8),
               ElevatedButton.icon(
                 onPressed: onGoogleSignIn,
@@ -196,10 +175,12 @@ class ProfileSignInView extends StatelessWidget {
                   'https://www.google.com/favicon.ico',
                   height: 24,
                 ),
-                label: Text(AppText.get('profile_sign_in_button')),
+                label: Text(sessionExpired
+                    ? 'Sign In Again'
+                    : AppText.get('profile_sign_in_button')),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.textPrimary,
-                  foregroundColor: AppColors.textInverse,
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(

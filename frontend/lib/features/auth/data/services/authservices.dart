@@ -14,6 +14,7 @@ import 'package:vayug/features/onboarding/data/services/location_onboarding_serv
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/services/platform_id_service.dart';
 import 'package:vayug/shared/services/notification_service.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -226,6 +227,10 @@ class AuthService {
       final platformIdService = PlatformIdService();
       final deviceName = await platformIdService.getDeviceName();
       final platform = platformIdService.getPlatformType();
+      
+      // **NEW: Fetch App Version**
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
 
       // First, authenticate with backend to get JWT
       try {
@@ -239,6 +244,7 @@ class AuthService {
                 'deviceId': deviceId,
                 'deviceName': deviceName,
                 'platform': platform,
+                'appVersion': appVersion,
               }),
             )
             .timeout(const Duration(seconds: 5));
@@ -1164,6 +1170,19 @@ class AuthService {
       AppLogger.log('❌ All automatic refresh methods failed');
       // Mark that user action is required to restore session.
       await prefs.setBool('auth_needs_login', true);
+      
+      // **NEW: Notify the UI immediately so it shows sign-in screen instead of "0" data**
+      // This triggers GoogleSignInController.refreshAuthState() via homescreen callback
+      try {
+        final httpService = httpClientService;
+        if (httpService.onSessionExpired != null) {
+          AppLogger.log('🚨 AuthService: Triggering session expired callback for UI update');
+          httpService.onSessionExpired!();
+        }
+      } catch (e) {
+        AppLogger.log('⚠️ AuthService: Error calling session expired callback: $e');
+      }
+      
       return null;
     } catch (e) {
       AppLogger.log('❌ Error during token refresh sequence: $e');
@@ -1437,5 +1456,57 @@ class AuthService {
       AppLogger.log('⚠️ Error tracking referral: $trackError');
     }
   }
-}
 
+  /// **DEBUG Case 1: Normal expiry — only corrupt access token**
+  /// Refresh token is still valid. Expected: silent refresh succeeds, real data shown.
+  Future<void> debugExpireToken() async {
+    if (!kDebugMode) return;
+    try {
+      AppLogger.log('🧪 DEBUG [Case 1]: Expiring access token only (refresh token intact)...');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', 'expired_access_token_${DateTime.now().millisecondsSinceEpoch}');
+      _cachedProfile = null;
+      _lastProfileFetch = null;
+      AppLogger.log('✅ DEBUG [Case 1]: Access token corrupted. Refresh token still valid.');
+      AppLogger.log('🔍 Expected result: Silent refresh succeeds → real data shown.');
+    } catch (e) {
+      AppLogger.log('❌ DEBUG: Error: $e');
+    }
+  }
+
+  /// **DEBUG Case 2: Full session loss — both access AND refresh token deleted**
+  /// Expected: refreshAccessToken fails, onSessionExpired fires, sign-in prompt shown.
+  Future<void> debugFullSessionLoss() async {
+    if (!kDebugMode) return;
+    try {
+      AppLogger.log('🧪 DEBUG [Case 2]: Simulating full session loss (both tokens deleted)...');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', 'expired_access_token_${DateTime.now().millisecondsSinceEpoch}');
+      await prefs.remove('refresh_token'); // Delete refresh token entirely
+      _cachedProfile = null;
+      _lastProfileFetch = null;
+      AppLogger.log('✅ DEBUG [Case 2]: Both tokens gone.');
+      AppLogger.log('🔍 Expected result: Refresh fails → "Session Expired" screen shown.');
+    } catch (e) {
+      AppLogger.log('❌ DEBUG: Error: $e');
+    }
+  }
+
+  /// **DEBUG Case 3: Rotation mismatch — access token expired + refresh token corrupted (not deleted)**
+  /// Backend will reject with 401/403. Expected: Fallback to Google Silent Sign-In, or sign-in prompt.
+  Future<void> debugRotationMismatch() async {
+    if (!kDebugMode) return;
+    try {
+      AppLogger.log('🧪 DEBUG [Case 3]: Simulating rotation mismatch (corrupt refresh token)...');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('jwt_token', 'expired_access_token_${DateTime.now().millisecondsSinceEpoch}');
+      await prefs.setString('refresh_token', 'stale_rotated_refresh_token_${DateTime.now().millisecondsSinceEpoch}');
+      _cachedProfile = null;
+      _lastProfileFetch = null;
+      AppLogger.log('✅ DEBUG [Case 3]: Access token expired + refresh token corrupted (mismatch).');
+      AppLogger.log('🔍 Expected result: Backend rejects refresh → Google Silent Sign-In attempted → sign-in prompt if that also fails.');
+    } catch (e) {
+      AppLogger.log('❌ DEBUG: Error: $e');
+    }
+  }
+}

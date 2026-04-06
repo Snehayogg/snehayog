@@ -61,6 +61,7 @@
     "redis": "^5.9.0",
     "sharp": "^0.32.6",
     "sherpa-onnx-node": "^1.12.25",
+    "sib-api-v3-sdk": "^8.5.0",
     "wavefile": "^11.0.0"
   },
   "devDependencies": {

@@ -173,6 +173,11 @@ const UserSchema = new mongoose.Schema({
       urn: String,
       name: String
     }
+  },
+  appVersion: {
+    type: String,
+    trim: true,
+    default: 'unknown'
   }
 }, {
   timestamps: true

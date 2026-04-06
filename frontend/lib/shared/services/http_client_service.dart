@@ -5,6 +5,7 @@ import 'package:firebase_performance/firebase_performance.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// Centralized HTTP client service with Dio
 /// Provides automatic connection pooling, interceptors, retry logic, and better performance
@@ -28,6 +29,9 @@ class HttpClientService {
   /// To prevent concurrent refresh calls
   bool _isRefreshing = false;
   Future<String?>? _refreshFuture;
+  
+  /// Cached app version string (e.g., "2.5.8+47")
+  String? _appVersion;
 
   /// Initialize the Dio client with optimized settings
   void initialize() {
@@ -100,6 +104,19 @@ class HttpClientService {
 
             // **NEW: Inject API Version Header**
             options.headers['X-API-Version'] = AppConfig.kApiVersion;
+            
+            // **NEW: Inject Real App Version (Automated)**
+            if (_appVersion == null) {
+              try {
+                final packageInfo = await PackageInfo.fromPlatform();
+                _appVersion = "${packageInfo.version}+${packageInfo.buildNumber}";
+              } catch (e) {
+                _appVersion = "unknown";
+              }
+            }
+            if (_appVersion != "unknown") {
+              options.headers['X-App-Version'] = _appVersion;
+            }
 
             // **NEW: Automatically inject Auth Token if missing**
             if (!options.headers.containsKey('Authorization')) {

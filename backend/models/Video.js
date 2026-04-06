@@ -213,6 +213,17 @@ const videoSchema = new mongoose.Schema({
     description: 'Timestamp when finalScore was last calculated'
   },
   
+  // **NEW: Vector Embedding for AI Recommendation**
+  vectorEmbedding: {
+    type: [Number], // Array of floats (384-dim for MiniLM)
+    description: 'AI-generated vector for semantic search and relevance'
+  },
+  embeddingVersion: {
+    type: String,
+    default: 'v1_minilm',
+    description: 'Tracks which model generated the vector to handle re-embeddings'
+  },
+  
   moderationResult: {
     isFlagged: {
       type: Boolean,
