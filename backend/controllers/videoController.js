@@ -736,6 +736,14 @@ export const getUserVideos = async (req, res) => {
       processingStatus: { $nin: ['failed', 'error'] }
     };
 
+    // **NEW: Filter by videoType or mediaType if provided**
+    if (req.query.videoType) {
+      query.videoType = req.query.videoType.toLowerCase();
+    }
+    if (req.query.mediaType) {
+      query.mediaType = req.query.mediaType.toLowerCase();
+    }
+
     const requestingGoogleId = req.user?.googleId || req.user?.id;
     const isOwner = requestingGoogleId === googleId;
 
@@ -1271,7 +1279,23 @@ export const updateVideoSeries = async (req, res) => {
     // 2. Determine target seriesId
     const targetSeriesId = seriesId || `series_${Date.now()}`;
 
-    // 3. Update all provided videos in bulk
+    // 3. Unlink videos that were in the series but are no longer in the episodeIds list
+    await Video.updateMany(
+      { 
+        seriesId: targetSeriesId, 
+        uploader: user._id,
+        _id: { $nin: uniqueVideoIds } 
+      },
+      { 
+        $set: { 
+          seriesId: null, 
+          episodeNumber: 0,
+          updatedAt: new Date()
+        } 
+      }
+    );
+
+    // 4. Update all provided videos in bulk
     const bulkOps = episodeIds.map((id, index) => ({
       updateOne: {
         filter: { _id: id },
@@ -1300,9 +1324,11 @@ export const updateVideoSeries = async (req, res) => {
       });
     }
 
-    await Video.bulkWrite(bulkOps);
+    if (bulkOps.length > 0) {
+      await Video.bulkWrite(bulkOps);
+    }
 
-    // 4. Invalidate Caches for ALL involved videos
+    // 5. Invalidate Caches for ALL involved videos
     if (redisService.getConnectionStatus()) {
       const keysToInvalidate = [
         'videos:feed:*',

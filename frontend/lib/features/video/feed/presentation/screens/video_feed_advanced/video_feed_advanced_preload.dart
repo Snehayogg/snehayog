@@ -271,14 +271,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
       // **INSTANT LOADING: Try to get controller from shared pool**
       final instantController = sharedPool.getControllerForInstantPlay(video.id);
-      if (instantController != null) {
+      if (instantController != null && !sharedPool.isControllerDisposed(instantController)) {
         controller = instantController;
         isReused = true;
         _controllerPool[videoId] = controller;
         _lastAccessedLocal[videoId] = DateTime.now();
       } else if (sharedPool.isVideoLoaded(video.id)) {
         final fallbackController = sharedPool.getController(video.id);
-        if (fallbackController != null) {
+        if (fallbackController != null && !sharedPool.isControllerDisposed(fallbackController)) {
           controller = fallbackController;
           isReused = true;
           _controllerPool[videoId] = controller;

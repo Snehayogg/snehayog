@@ -119,7 +119,8 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
       initialVideos: widget.initialVideos,
       initialVideoId: widget.initialVideoId,
       videoType: videoType,
-      isMainYugTab: widget.isMainYugTab, // **NEW: Respect the flag from parent**
+      isMainYugTab: widget.isMainYugTab,
+      parentTabIndex: 0, // **NEW: Mark as Yug tab (index 0)**
     );
   }
 }

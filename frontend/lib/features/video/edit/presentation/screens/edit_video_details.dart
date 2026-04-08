@@ -110,15 +110,30 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
           });
         }
       } else {
-        // Not a series anymore or never was
+        // Not a series anymore OR never was. 
+        // If it was a series before (widget.video.seriesId != null), we must explicitly unlink it.
+        VideoModel finalVideo = updatedMainVideo;
+        
+        if (widget.video.seriesId != null && widget.video.seriesId!.isNotEmpty) {
+          AppLogger.log('🔄 EditVideoDetails: Unlinking video from series...');
+          finalVideo = await _videoService.updateVideoMetadata(
+            widget.video.id, 
+            newTitle,
+            link: newLink,
+            tags: newTags,
+            seriesId: '', // Explicitly clear
+            episodeNumber: 0, // Explicitly clear
+          );
+        }
+
         if (mounted) {
           setState(() => _isSaving = false);
           Navigator.of(context).pop({
-            'videoName': updatedMainVideo.videoName,
-            'link': updatedMainVideo.link,
-            'tags': updatedMainVideo.tags,
-            'episodes': updatedMainVideo.episodes,
-            'seriesId': updatedMainVideo.seriesId,
+            'videoName': finalVideo.videoName,
+            'link': finalVideo.link,
+            'tags': finalVideo.tags,
+            'episodes': finalVideo.episodes,
+            'seriesId': finalVideo.seriesId,
           });
         }
       }
@@ -397,14 +412,15 @@ class _VideoPickerSheetState extends State<_VideoPickerSheet> {
 
   void _loadVideos() async {
     try {
-      final allVideos = await widget.videoService.getUserVideos(widget.currentUserId);
-      // Filter by videoType to ensure same-type series
-      final filteredVideos = allVideos
-          .where((v) => v.videoType.toLowerCase() == widget.videoType.toLowerCase())
-          .toList();
-
+      final allVideos = await widget.videoService.getUserVideos(
+        widget.currentUserId,
+        videoType: widget.videoType, // Server-side filtering
+        limit: 50, // Fetch a larger batch for the picker
+        forceRefresh: true, // Always get latest for picker
+      );
+      
       setState(() {
-        _videos = filteredVideos;
+        _videos = allVideos;
         _isLoading = false;
       });
     } catch (e) {

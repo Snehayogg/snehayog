@@ -198,7 +198,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       if (mounted) {
         _mainController = ref.read(mainControllerProvider);
         _mainController?.setBottomNavVisibility(false);
-        _mainController?.registerVideoPauseCallback(_pauseCurrentVideo);
+        
+        // **NEW: Register with MainController as a video observer**
+        _mainController?.registerVideoObserver(
+          onPause: _pauseCurrentVideo,
+          onResume: _resumeCurrentVideo,
+        );
+
+        // **NEW: Force pause other videos (like Yug/Profile) when opening the player**
+        _mainController?.forcePauseVideos();
       }
     });
   }
@@ -265,8 +273,20 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         try {
           if (controller.value.isPlaying) {
              controller.pause();
+             AppLogger.log('⏸️ VayuPlayer: Paused current video via MainController');
           }
         } catch (_) {}
+      }
+    }
+  }
+
+  void _resumeCurrentVideo() {
+    if (mounted && !_lifecyclePaused) {
+      final controller = _controllers[_currentIndex];
+      if (controller != null && controller.value.isInitialized && !controller.value.isPlaying) {
+        controller.play();
+        _enableWakelock();
+        AppLogger.log('▶️ VayuPlayer: Resumed current video via MainController');
       }
     }
   }
@@ -475,8 +495,16 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _disableWakelock();
     WidgetsBinding.instance.removeObserver(this);
     
-    // Safely unregister using captured controller reference
-    _mainController?.unregisterCallbacks();
+    // **NEW: Unregister as MainController video observer**
+    _mainController?.unregisterVideoObserver(
+      onPause: _pauseCurrentVideo,
+      onResume: _resumeCurrentVideo,
+    );
+
+    // Safely unregister legacy callbacks
+    try {
+      _mainController?.unregisterCallbacks();
+    } catch (_) {}
     
     // Save current position before cleaning up
     _savePlaybackPosition(_currentIndex);

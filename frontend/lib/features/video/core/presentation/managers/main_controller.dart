@@ -7,7 +7,6 @@ import 'package:vayug/core/providers/video_providers.dart';
 import 'dart:async';
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class MainController extends ChangeNotifier {
   int _currentIndex = 0;
@@ -16,11 +15,10 @@ class MainController extends ChangeNotifier {
   bool _isMediaPickerActive = false;
   DateTime? _lastPickerReturnAt;
 
-  static const String _lastTabIndexKey = 'last_tab_index';
-  static const String _lastTabTimestampKey = 'last_tab_timestamp';
-  static const String _lastSubRouteKey = 'last_sub_route_tab_';
-  static const String _lastSubRouteArgsKey = 'last_sub_route_args_tab_';
-  static const String _lastVideoIndexKey = 'last_video_index_tab_';
+  // Persistence keys (Legacy - Persistence disabled per user request)
+  // static const String _lastSubRouteKey = 'last_sub_route_tab_';
+  // static const String _lastSubRouteArgsKey = 'last_sub_route_args_tab_';
+  // static const String _lastVideoIndexKey = 'last_video_index_tab_';
 
   // **NAVIGATION VISIBILITY: Single state for bottom nav**
   bool _isBottomNavVisible = true;
@@ -32,20 +30,52 @@ class MainController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add a callback function to pause videos
+  // **OBSERVER PATTERN: Support multiple video feeds in the stack**
+  final List<VoidCallback> _pauseObservers = [];
+  final List<VoidCallback> _resumeObservers = [];
+
+  /// **NEW: Register a video feed observer**
+  void registerVideoObserver({
+    required VoidCallback onPause,
+    required VoidCallback onResume,
+  }) {
+    if (!_pauseObservers.contains(onPause)) {
+      _pauseObservers.add(onPause);
+    }
+    if (!_resumeObservers.contains(onResume)) {
+      _resumeObservers.add(onResume);
+    }
+    AppLogger.log('🎬 MainController: Registered video observer (Total: ${_pauseObservers.length})');
+  }
+
+  /// **NEW: Unregister a video feed observer**
+  void unregisterVideoObserver({
+    required VoidCallback onPause,
+    required VoidCallback onResume,
+  }) {
+    _pauseObservers.remove(onPause);
+    _resumeObservers.remove(onResume);
+    AppLogger.log('🎬 MainController: Unregistered video observer (Remaining: ${_pauseObservers.length})');
+  }
+
+  // Deprecated single callbacks - keeping for compatibility during migration
   VoidCallback? _pauseVideosCallback;
   VoidCallback? _resumeVideosCallback;
 
-  /// **NEW: Register video pause callback from VideoFeedAdvanced**
+  /// **LEGACY: Register video pause callback (migrating to registerVideoObserver)**
   void registerVideoPauseCallback(VoidCallback callback) {
     _pauseVideosCallback = callback;
-
+    if (!_pauseObservers.contains(callback)) {
+      _pauseObservers.add(callback);
+    }
   }
 
-  /// **NEW: Register video resume callback from VideoFeedAdvanced**
+  /// **LEGACY: Register video resume callback (migrating to registerVideoObserver)**
   void registerVideoResumeCallback(VoidCallback callback) {
     _resumeVideosCallback = callback;
-
+    if (!_resumeObservers.contains(callback)) {
+      _resumeObservers.add(callback);
+    }
   }
 
   int get currentIndex => _currentIndex;
@@ -57,17 +87,13 @@ class MainController extends ChangeNotifier {
   void changeIndex(int index) {
     if (_currentIndex == index) return; // No change needed
 
-
-
     _handleIndexChangeFallback(index);
 
-    // **CRITICAL FIX: Add delay before updating index to ensure proper state transition**
     Future.delayed(const Duration(milliseconds: 100), () {
       // Update the current index
       _currentIndex = index;
 
-      // **NEW: Save tab index when it changes**
-      _saveCurrentTabIndex();
+      // Persistently saving tab state is now disabled per user request
       notifyListeners();
     });
   }
@@ -76,15 +102,24 @@ class MainController extends ChangeNotifier {
   void _handleIndexChangeFallback(int index) {
     // If we're leaving the video tab (index 0), pause videos immediately
     if (_currentIndex == 0) {
-
-
-      // IMMEDIATE video pause
+      // IMMEDIATE video pause for ALL observers
+      for (final callback in _pauseObservers) {
+        try {
+          callback();
+        } catch (e) {
+          AppLogger.log('⚠️ MainController: Error in pause observer: $e');
+        }
+      }
       _pauseVideosCallback?.call();
-
 
       // SINGLE safety delay to ensure videos are paused after state transition
       Future.delayed(const Duration(milliseconds: 150), () {
         if (_currentIndex != 0) {
+          for (final callback in _pauseObservers) {
+            try {
+              callback();
+            } catch (_) {}
+          }
           _pauseVideosCallback?.call();
         }
       });
@@ -92,7 +127,12 @@ class MainController extends ChangeNotifier {
 
     // If we're entering the video tab, resume videos
     if (index == 0 && isAppInForeground) {
-
+      // Notify all observers to resume
+      for (final callback in _resumeObservers) {
+        try {
+          callback();
+        } catch (_) {}
+      }
       _resumeVideosCallback?.call();
     }
   }
@@ -114,17 +154,12 @@ class MainController extends ChangeNotifier {
   /// Cooldown check after picker returns to avoid autoplay leak
   bool get recentlyReturnedFromPicker {
     if (_lastPickerReturnAt == null) return false;
-    return DateTime.now().difference(_lastPickerReturnAt!).inMilliseconds <
-        1200;
+    return DateTime.now().difference(_lastPickerReturnAt!).inMilliseconds < 1200;
   }
 
   void setAppInForeground(bool inForeground) {
     if (_isAppInForeground != inForeground) {
       _isAppInForeground = inForeground;
-
-
-      // **SIMPLIFIED: App foreground state update (VideoManager removed)**
-
       notifyListeners();
     }
   }
@@ -145,25 +180,27 @@ class MainController extends ChangeNotifier {
     return 0; // VideoManager was removed
   }
 
-  /// Register callback to pause videos
+  /// Register callback to pause videos (Legacy)
   void registerPauseVideosCallback(VoidCallback callback) {
-    _pauseVideosCallback = callback;
+    registerVideoPauseCallback(callback);
   }
 
-  /// Register callback to resume videos
+  /// Register callback to resume videos (Legacy)
   void registerResumeVideosCallback(VoidCallback callback) {
-    _resumeVideosCallback = callback;
+    registerVideoResumeCallback(callback);
   }
 
   /// Unregister callbacks
   void unregisterCallbacks() {
     _pauseVideosCallback = null;
     _resumeVideosCallback = null;
+    // Note: This doesn't clear the List observers to prevent accidental clearing
+    // of background observers when a foreground one disposes.
   }
 
   /// Force pause all videos (called from external sources)
   void forcePauseVideos() {
-    // **IMPROVED: Pause controllers instead of disposing for better UX**
+    AppLogger.log('🔇 MainController: forcePauseVideos() triggered for ${_pauseObservers.length} observers');
     try {
       final sharedPool = SharedVideoControllerPool();
       sharedPool.pauseAllControllers();
@@ -174,15 +211,25 @@ class MainController extends ChangeNotifier {
       // Ignore errors during pause
     }
 
-    // **SIMPLIFIED: Use callback since VideoManager was removed**
+    // Notify ALL registered observers
+    for (final callback in _pauseObservers) {
+      try {
+        callback();
+      } catch (e) {
+        AppLogger.log('⚠️ MainController: Error calling pause observer: $e');
+      }
+    }
+    
     _pauseVideosCallback?.call();
   }
 
   /// Resume videos (called when app comes back to foreground)
   void resumeVideos() {
-
-
-    // **SIMPLIFIED: Use callback since VideoManager was removed**
+    for (final callback in _resumeObservers) {
+      try {
+        callback();
+      } catch (_) {}
+    }
     _resumeVideosCallback?.call();
   }
 
@@ -194,12 +241,9 @@ class MainController extends ChangeNotifier {
   bool handleBackPress() {
     // If we're not on the home tab (index 0), navigate back to home tab
     if (_currentIndex != 0) {
-
       changeIndex(0);
       return false; // Don't exit the app
     }
-
-    // If we're on home tab (index 0), app should exit
 
     return true; // Exit the app
   }
@@ -209,9 +253,6 @@ class MainController extends ChangeNotifier {
 
   /// Emergency stop all videos (for critical situations)
   void emergencyStopVideos() {
-
-
-    // **SIMPLIFIED: Use callback since VideoManager was removed**
     _pauseVideosCallback?.call();
 
     // Multiple safety calls to ensure videos are stopped
@@ -226,7 +267,6 @@ class MainController extends ChangeNotifier {
 
   /// **NEW: Handle app backgrounding with immediate pause**
   void handleAppBackgrounded() {
-
     _isAppInForeground = false;
     forcePauseVideos();
     notifyListeners();
@@ -234,7 +274,6 @@ class MainController extends ChangeNotifier {
 
   /// **NEW: Handle app foregrounding with delayed resume**
   void handleAppForegrounded() {
-
     _isAppInForeground = true;
     notifyListeners();
 
@@ -263,17 +302,13 @@ class MainController extends ChangeNotifier {
   /// **FIXED: Centralized logout method to clear all state**
   Future<void> performLogout({bool resetIndex = true}) async {
     try {
-
-
       // **FIXED: Reset main controller state**
       if (resetIndex) {
         _currentIndex = 0;
-        await _saveCurrentTabIndex();
       }
       _isAppInForeground = true;
       _pauseVideosCallback = null;
       _resumeVideosCallback = null;
-
 
       notifyListeners();
     } catch (e) {
@@ -281,147 +316,44 @@ class MainController extends ChangeNotifier {
     }
   }
 
-  /// **NEW: Save current tab index to SharedPreferences**
-  Future<void> _saveCurrentTabIndex() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_lastTabIndexKey, _currentIndex);
-      await prefs.setInt(
-          _lastTabTimestampKey, DateTime.now().millisecondsSinceEpoch);
-
-    } catch (e) {
-      AppLogger.log('Error saving tab index: $e');
-    }
-  }
-
-  /// **NEW: Restore last tab index from SharedPreferences**
-  /// Returns the restored index, or 0 if no saved state or state is too old
+  /// **RESTORED: Always return home tab (0) on app start**
   Future<int> restoreLastTabIndex() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedIndex = prefs.getInt(_lastTabIndexKey);
-      final savedTimestamp = prefs.getInt(_lastTabTimestampKey);
-
-      // If no saved state, return default (0)
-      if (savedIndex == null || savedTimestamp == null) {
-        return 0;
-      }
-
-      // Check if saved state is too old (more than 7 days)
-      final savedTime = DateTime.fromMillisecondsSinceEpoch(savedTimestamp);
-      final daysSinceSaved = DateTime.now().difference(savedTime).inDays;
-
-      if (daysSinceSaved > 7) {
-        // Clear old state
-        await prefs.remove(_lastTabIndexKey);
-        await prefs.remove(_lastTabTimestampKey);
-        return 0;
-      }
-
-      // Validate index is within bounds
-      if (savedIndex >= 0 && savedIndex < _routes.length) {
-        _currentIndex = savedIndex;
-        notifyListeners();
-        return savedIndex;
-      } else {
-        return 0;
-      }
-    } catch (e) {
-      AppLogger.log('Error restoring tab index: $e');
-      return 0;
-    }
+    _currentIndex = 0;
+    return 0;
   }
 
-  /// **NEW: Update and persist the current video index for a specific tab**
+  /// **NAVIGATION PERSISTENCE: Disabled per user request**
   Future<void> updateCurrentVideoIndex(int videoIndex, {int? tabIndex}) async {
-    final targetTab = tabIndex ?? _currentIndex;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('$_lastVideoIndexKey$targetTab', videoIndex);
-    } catch (e) {
-      AppLogger.log('Error saving video index: $e');
-    }
+    // Disabled
   }
 
-  /// **NEW: Get the last viewed video index for a tab**
   Future<int> getLastViewedVideoIndex(int tabIndex) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getInt('$_lastVideoIndexKey$tabIndex') ?? 0;
-    } catch (e) {
-      return 0;
-    }
+    return 0; // Always start videos at the beginning
   }
 
-  /// **NEW: Persist a sub-route and its arguments for a tab**
   Future<void> persistSubRoute(int tabIndex, String routeName, {Map<String, String>? args}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('$_lastSubRouteKey$tabIndex', routeName);
-      if (args != null) {
-        // Simple serialization (key1=val1;key2=val2)
-        final serializedArgs = args.entries.map((e) => '${e.key}=${e.value}').join(';');
-        await prefs.setString('$_lastSubRouteArgsKey$tabIndex', serializedArgs);
-      } else {
-        await prefs.remove('$_lastSubRouteArgsKey$tabIndex');
-      }
-    } catch (e) {
-      AppLogger.log('Error persisting sub-route: $e');
-    }
+    // Disabled
   }
 
-  /// **NEW: Clear persisted sub-route for a tab (when popping to root)**
   Future<void> clearSubRoute(int tabIndex) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('$_lastSubRouteKey$tabIndex');
-      await prefs.remove('$_lastSubRouteArgsKey$tabIndex');
-    } catch (e) {
-      AppLogger.log('Error clearing sub-route: $e');
-    }
+    // Disabled
   }
 
-  /// **NEW: Get persisted sub-route info for a tab**
   Future<Map<String, dynamic>?> getPersistedSubRoute(int tabIndex) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final routeName = prefs.getString('$_lastSubRouteKey$tabIndex');
-      if (routeName == null) return null;
-
-      final argsRaw = prefs.getString('$_lastSubRouteArgsKey$tabIndex');
-      Map<String, String>? args;
-      if (argsRaw != null && argsRaw.isNotEmpty) {
-        args = {};
-        for (final pair in argsRaw.split(';')) {
-          final parts = pair.split('=');
-          if (parts.length == 2) {
-            args[parts[0]] = parts[1];
-          }
-        }
-      }
-
-      return {
-        'routeName': routeName,
-        'args': args,
-      };
-    } catch (e) {
-      return null;
-    }
+    return null; // Never restore sub-routes
   }
 
   /// **NEW: Save tab index when app goes to background**
   Future<void> saveStateForBackground() async {
-
-    await _saveCurrentTabIndex();
+    // Disabled
   }
 
   /// **NEW: Public method to save current tab index (can be called from anywhere)**
   Future<void> saveCurrentTabIndex() async {
-    await _saveCurrentTabIndex();
+    // Disabled
   }
 
   /// **NEW: Optimized state refresh and pre-fetch after account switch**
-  /// Call this after a successful login to coordinate parallel data loading.
   Future<void> refreshAppStateAfterSwitch(WidgetRef ref) async {
     try {
       AppLogger.log('🚀 MainController: Starting parallel state refresh and pre-fetch...');
@@ -430,13 +362,9 @@ class MainController extends ChangeNotifier {
       await LogoutService.refreshAllState(ref);
 
       // 2. Parallel pre-fetch for immediate UI readiness
-      // We don't await individual loads to keep them truly parallel
       unawaited(Future.wait<void>([
-        // Pre-fetch own profile data
         ref.read(profileStateManagerProvider)
             .loadUserData(null, forceRefresh: true, silent: true),
-        
-        // Pre-fetch initial video feed
         ref.read(videoProvider).refreshVideos(),
       ]).then((_) {
         AppLogger.log('✅ MainController: Parallel pre-fetch completed');
@@ -449,6 +377,4 @@ class MainController extends ChangeNotifier {
       AppLogger.log('❌ MainController: Error during state refresh: $e');
     }
   }
-
 }
-

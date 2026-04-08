@@ -21,8 +21,6 @@ import 'package:vayug/features/onboarding/presentation/managers/app_initializati
 import 'package:in_app_update/in_app_update.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vayug/shared/managers/activity_recovery_manager.dart';
-import 'package:vayug/shared/models/app_activity.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:vayug/features/profile/core/presentation/screens/edit_profile_screen.dart';
 import 'package:vayug/features/profile/core/presentation/screens/settings_screen.dart';
@@ -85,9 +83,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
         AppLogger.log('❌ MainScreen: Error refreshing Vayu videos: $e');
       }
 
-      // Navigate to video tab ONLY if user is still on upload tab (index 3)
+      // Navigate to video tab ONLY if user is still on upload tab (index 2)
       final mainController = ref.read(mainControllerProvider);
-      if (mainController.currentIndex == 3) {
+      if (mainController.currentIndex == 2) {
         AppLogger.log('🔄 MainScreen: Still on upload tab, navigating to video tab');
         mainController.changeIndex(0);
       }
@@ -298,42 +296,17 @@ class _MainScreenState extends ConsumerState<MainScreen>
     });
   }
 
-  /// **NEW: Restore last tab index and sub-routes from saved state**
+  /// **NEW: Start with a clean session for the home tab**
   Future<void> _restoreLastTabIndex() async {
     try {
       final mainController = ref.read(mainControllerProvider);
       
-      // 1. Check for high-priority activity recovery first (e.g. active upload)
-      final activity = await ActivityRecoveryManager().getSavedActivity();
-      if (activity != null) {
-        if (activity.type == ActivityType.videoUpload) {
-          AppLogger.log('🚀 MainScreen: Recoverable upload activity found, switching to upload tab');
-          mainController.changeIndex(2);
-          return;
-        } else if (activity.type == ActivityType.adCreation) {
-          AppLogger.log('🚀 MainScreen: Recoverable ad creation activity found, switching to account tab');
-          mainController.changeIndex(3); 
-          return;
-        }
-      }
-
-      // 2. Otherwise restore the last active tab
-      final restoredIndex = await mainController.restoreLastTabIndex();
-      AppLogger.log('🚀 MainScreen: Restored tab index to $restoredIndex');
-
-      // 3. ONLY restore sub-route for the ACTIVE tab immediately
-      // This is a CRITICAL optimization for app resume latency.
-      final savedRoute = await mainController.getPersistedSubRoute(restoredIndex);
-      if (savedRoute != null) {
-        final routeName = savedRoute['routeName'] as String;
-        final args = savedRoute['args'] as Map<String, String>?;
-        _restoreSubRoute(restoredIndex, routeName, args);
-      }
-      _restoredTabs.add(restoredIndex);
-      AppLogger.log('🚀 MainScreen: Restored sub-route for active tab $restoredIndex (other tabs deferred)');
-
+      // Always restore to home tab (0) for a fresh start as requested
+      await mainController.restoreLastTabIndex();
+      
+      AppLogger.log('🚀 MainScreen: Fresh start initiated (persistence disabled)');
     } catch (e) {
-      AppLogger.log('❌ MainScreen: Error restoring tab index: $e');
+      AppLogger.log('❌ MainScreen: Error resetting tab index: $e');
     }
   }
 

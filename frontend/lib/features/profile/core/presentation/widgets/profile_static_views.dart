@@ -3,6 +3,7 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/radius.dart';
 import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/shared/utils/responsive_helper.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class ProfileSkeleton extends StatelessWidget {
   const ProfileSkeleton({super.key});
@@ -169,23 +170,20 @@ class ProfileSignInView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: onGoogleSignIn,
-                icon: Image.network(
-                  'https://www.google.com/favicon.ico',
-                  height: 24,
-                ),
-                label: Text(sessionExpired
-                    ? 'Sign In Again'
-                    : AppText.get('profile_sign_in_button')),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.radiusMedium),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 300),
+                child: AppButton(
+                  onPressed: onGoogleSignIn,
+                  icon: Image.network(
+                    'https://www.google.com/favicon.ico',
+                    height: 20,
                   ),
+                  label: sessionExpired
+                      ? 'Sign In Again'
+                      : AppText.get('profile_sign_in_button'),
+                  isFullWidth: true,
+                  variant: AppButtonVariant.primary,
+                  size: AppButtonSize.large,
                 ),
               ),
             ],

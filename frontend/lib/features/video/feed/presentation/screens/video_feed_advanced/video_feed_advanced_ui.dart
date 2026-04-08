@@ -384,18 +384,35 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     int index,
   ) {
     final String videoId = video.id;
-    // **CRASH-PROOF: A controller can be disposed even if we still hold a reference**
-    // (e.g. duplicate video IDs appearing later in feed, or external cleanup).
-    // Never touch controller.value unless we are sure it's safe.
-    final sharedPool = SharedVideoControllerPool();
     bool controllerUsable = false;
+    // **RE-INITIALIZATION TRIGGER: If controller is disposed, restart it immediately**
+    bool isDisposed = false;
     try {
-      if (controller != null && !sharedPool.isControllerDisposed(controller)) {
-        controllerUsable = controller.value.isInitialized;
+      if (controller == null) {
+        isDisposed = true;
+      } else {
+        isDisposed = SharedVideoControllerPool().isControllerDisposed(controller);
       }
     } catch (_) {
+      isDisposed = true;
+    }
+
+    if (isDisposed) {
       controllerUsable = false;
       controller = null;
+      // Trigger re-initialization in next frame to avoid state mutation during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          AppLogger.log('🔄 UI: Detected disposed controller for video $index. Re-initializing...');
+          _preloadVideo(index);
+        }
+      });
+    } else {
+      try {
+        controllerUsable = controller!.value.isInitialized;
+      } catch (_) {
+        controllerUsable = false;
+      }
     }
 
     // **NEW: Check for error state**
@@ -1358,8 +1375,15 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         // Get or create the force-show notifier for this video
         final forceShowNotifier = _forceShowOverlayVN[video.id] ??= ValueNotifier<bool>(false);
 
-        // **CRASH-PROOF: Don't listen to disposed controllers**
+        // **CRASH-PROOF: Don't listen to disposed controllers. If disposed, trigger a re-fetch.**
         if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+          // Trigger a re-fetch for the next frame
+          Future.microtask(() {
+            if (mounted) {
+              _getController(index);
+              safeSetState(() {});
+            }
+          });
           return overlayContent;
         }
 
@@ -1368,6 +1392,19 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ValueListenableBuilder<bool>(
               valueListenable: forceShowNotifier,
               builder: (context, forceShow, _) {
+                // **CRASH-PROOF: Defensive check inside the inner builder**
+                // Even if it was alive 1ms ago, check again before building the next layer.
+                if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+                  // Trigger re-fetch and return fallback
+                  Future.microtask(() {
+                    if (mounted) {
+                      _getController(index);
+                      safeSetState(() {});
+                    }
+                  });
+                  return overlayContent;
+                }
+
                 return ValueListenableBuilder<VideoPlayerValue>(
                   valueListenable: controller,
                   builder: (context, value, child) {
@@ -1375,7 +1412,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     try {
                       isPlaying = value.isPlaying;
                     } catch (_) {
-                      // Fallback if value becomes invalid during build
+                      // **SAFETY VALVE**: If value access fails here, it means it was disposed mid-build.
+                      // We silently return the content and trigger a recovery link.
                       return child!;
                     }
                     // Show overlay if force-showing (double-tap like) OR if paused
@@ -1928,7 +1966,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 1, sigmaY: 1),
                       child: Container(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         alignment: Alignment.center,
                         child: Text(
                           '${index + 1}',
@@ -1949,7 +1987,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   child: Container(
                     padding: EdgeInsets.all(AppSpacing.spacing2),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.8), Colors.transparent]),
+                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent]),
                     ),
                     child: Text(ep['videoName'] ?? 'Ep ${index + 1}', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.bodySmall.copyWith(color: AppColors.white, fontWeight: FontWeight.w600)),
                   ),

@@ -173,7 +173,7 @@ class AppConfig {
   // **NEW: Budget & Impression Management**
   static const Map<String, dynamic> budgetConfig = {
     'min_daily_budget': 100.0, // ₹100 minimum
-    'max_daily_budget': 10000.0, // ₹10,000 maximum
+    'max_daily_budget': 10000.0,
     'budget_multiplier': 1.0, // For campaign duration
     'impression_buffer': 0.1, // 10% buffer for over-delivery
   };

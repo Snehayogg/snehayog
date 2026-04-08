@@ -8,7 +8,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   set _isLoading(bool value) => _isLoadingVN.value = value;
 
   String? _currentUserId;
-  String? _currentUserObjectId;
+  // Remove unused _currentUserObjectId
   int _previousIndex = 0;
   final ValueNotifier<int> _currentIndexVN = ValueNotifier<int>(0);
   int get _currentIndex => _currentIndexVN.value;

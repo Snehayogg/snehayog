@@ -84,7 +84,7 @@ class VideoFeedAdvanced extends ConsumerStatefulWidget {
   final String? initialVideoId;
   final String? videoType;
   final bool isMainYugTab; // **NEW: Flag to identify the primary Yug feed**
-  // Removed forceAutoplay; we'll infer autoplay from initialVideos presence
+  final int? parentTabIndex; // **NEW: Tab index where this feed resides (0 for Yug, 1 for Vayu, etc.)**
 
   const VideoFeedAdvanced({
     Key? key,
@@ -93,6 +93,7 @@ class VideoFeedAdvanced extends ConsumerStatefulWidget {
     this.initialVideoId,
     this.videoType,
     this.isMainYugTab = false, // **NEW: Flag to identify the primary Yug feed**
+    this.parentTabIndex,
   }) : super(key: key);
 
   @override
@@ -159,6 +160,75 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _checkDeviceCapabilities();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // **PERFORMANCE: Cache MainController to avoid repeated ref.read() calls**
+    _mainController = ref.watch(mainControllerProvider);
+
+    // **NEW: Register observers with MainController**
+    _mainController?.registerVideoObserver(
+      onPause: _pauseCurrentVideo,
+      onResume: _resumeCurrentVideo,
+    );
+    AppLogger.log('🎬 VideoFeedAdvanced: Registered playback observer with MainController');
+  }
+
+  void _resumeCurrentVideo() {
+    if (mounted && _shouldAutoplayForContext('MainController_Resume')) {
+      _tryAutoplayCurrent();
+    }
+  }
+
+  void _pauseCurrentVideo() {
+    if (_currentIndex < _videos.length) {
+      final video = _videos[_currentIndex];
+      final controller = _controllerPool[video.id];
+      if (controller != null && controller.value.isInitialized) {
+        try {
+          if (controller.value.isPlaying) {
+            controller.pause();
+            _controllerStates[video.id] = false;
+            _ensureWakelockForVisibility();
+            AppLogger.log('⏸️ VideoFeedAdvanced: Paused current video at index $_currentIndex');
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ VideoFeedAdvanced: Error pausing current video: $e');
+        }
+      }
+    }
+  }
+
+  void _pauseAllVideosOnTabSwitch() {
+    AppLogger.log('🔇 VideoFeedAdvanced: Pausing all videos for tab switch');
+    _pauseCurrentVideo();
+    
+    // Also pause all controllers in the pool just in case
+    for (final controller in _controllerPool.values) {
+      try {
+        if (controller.value.isInitialized && controller.value.isPlaying) {
+          controller.pause();
+        }
+      } catch (_) {}
+    }
+    
+    _isScreenVisible = false;
+    _ensureWakelockForVisibility();
+  }
+
+  void _pauseAllOtherVideos(String activeId) {
+    for (final entry in _controllerPool.entries) {
+      if (entry.key != activeId) {
+        try {
+          if (entry.value.value.isPlaying) {
+            entry.value.pause();
+            _controllerStates[entry.key] = false;
+          }
+        } catch (_) {}
+      }
+    }
+  }
   /// **Helper to allow extensions to call setState safely**
   void safeSetState(VoidCallback fn) {
     if (mounted) {
@@ -263,111 +333,6 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     AppLogger.log(
       '📱 VideoFeedAdvanced: Lifecycle state $state triggered background handling; current video buffering initiated.',
     );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    // **PERFORMANCE: Cache MainController to avoid repeated ref.read() calls**
-    _mainController = ref.watch(mainControllerProvider);
-
-    // **NEW: Register pause callback with MainController**
-    _mainController?.registerVideoPauseCallback(_pauseCurrentVideo);
-
-    // **PERFORMANCE: Cache MediaQuery data to avoid repeated lookups**
-    final mediaQuery = MediaQuery.of(context);
-    _screenWidth = mediaQuery.size.width;
-
-    // **FIXED: Listen to auth state changes from GoogleSignInController**
-    final authController = ref.watch(googleSignInProvider);
-
-    // **FIX: Only clear ID if definitely signed out AND not loading**
-    // This prevents clearing the ID during the brief initialization phase
-    if (!authController.isSignedIn &&
-        !authController.isLoading &&
-        _currentUserId != null) {
-      // User signed out - clear current user ID
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _currentUserId = null;
-          });
-          // **FIX: Update all like notifiers when user signs out**
-          for (final video in _videos) {
-            if (_isLikedVN.containsKey(video.id)) {
-              _isLikedVN[video.id]!.value = false;
-            }
-          }
-          AppLogger.log(
-              '✅ VideoFeedAdvanced: User ID cleared (verified signed out)');
-        }
-      });
-    }
-
-    if (authController.isSignedIn && authController.userData != null) {
-      final userId = authController.userData!['googleId'] ??
-          authController.userData!['id'];
-      final userObjectId =
-          authController.userData!['_id'] ?? authController.userData!['id'];
-
-      if (userId != null &&
-          (_currentUserId != userId || _currentUserObjectId != userObjectId)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _currentUserId = userId;
-              _currentUserObjectId = userObjectId?.toString();
-            });
-
-            AppLogger.log(
-                '👤 VideoFeedAdvanced: Current User IDs synchronized:');
-            AppLogger.log('   - Google ID: $_currentUserId');
-            AppLogger.log('   - Object ID: $_currentUserObjectId');
-
-            // **FIX: Update all like notifiers based on isLiked status**
-            for (final video in _videos) {
-              if (_isLikedVN.containsKey(video.id)) {
-                _isLikedVN[video.id]!.value = video.isLiked;
-              }
-            }
-          }
-        });
-      }
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      // **CRITICAL FIX: Use the unified guard for autoplay instead of manual checks**
-      if (!_shouldAutoplayForContext('didChangeDependencies')) {
-        // If not allowed to autoplay, ensure we are actually paused
-        if (_hasActivePlayback()) {
-          AppLogger.log('⏸️ VideoFeedAdvanced: Autoplay not allowed, ensuring pause');
-          _pauseCurrentVideo();
-        }
-        return;
-      }
-
-      // If we reach here, autoplay is allowed by the source of truth
-      AppLogger.log('🚀 VideoFeedAdvanced: Autoplay allowed in didChangeDependencies');
-
-      // **FIX: Ensure video is preloaded before trying autoplay**
-      if (_videos.isNotEmpty && _currentIndex < _videos.length) {
-        final currentVideoId = _videos[_currentIndex].id;
-        // If controller not initialized, preload first
-        if (!_controllerPool.containsKey(currentVideoId) ||
-            _controllerPool[currentVideoId]?.value.isInitialized != true) {
-          _preloadVideo(_currentIndex).then((_) {
-            if (mounted) {
-              _tryAutoplayCurrent();
-            }
-          });
-        } else {
-          _tryAutoplayCurrent();
-        }
-      }
-    });
   }
 
   void _tryAutoplayCurrent() {
@@ -673,10 +638,15 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
 
-    // **PRIORITY 2: Tab Active Check (for Main Yug Feed)**
-    final bool isVideoTabActive = (_mainController?.currentIndex ?? 0) == 0;
-    
-    if (widget.isMainYugTab && !isVideoTabActive) {
+    // **CRITICAL FIX: Tab-Active Guard**
+    // If we have a parent tab index, only play if that tab is currently selected
+    if (widget.parentTabIndex != null) {
+      final currentTabIndex = _mainController?.currentIndex ?? 0;
+      if (currentTabIndex != widget.parentTabIndex) {
+        AppLogger.log('🚫 AUTOPLAY[$reason]: Parent tab not active (feedTab=${widget.parentTabIndex}, currentTab=$currentTabIndex)');
+        return false;
+      }
+    } else if (widget.isMainYugTab && (_mainController?.currentIndex != 0)) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: Main Yug tab not active (currentIndex=${_mainController?.currentIndex})');
       return false;
     }
@@ -699,7 +669,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
 
-    if (!isVideoTabActive) {
+    if ((_mainController?.currentIndex != 0) && widget.parentTabIndex == null && !(_openedFromProfile || _openedFromDeepLink)) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: Yug tab not active (currentIndex=${_mainController?.currentIndex})');
       return false;
     }
@@ -800,59 +770,43 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
     final video = _videos[index];
     final sharedPool = SharedVideoControllerPool();
+    VideoPlayerController? controller = _controllerPool[video.id];
 
-    // **PRIMARY: Check shared pool first (guaranteed instant playback)**
-    VideoPlayerController? controller;
-
-    try {
-      controller = sharedPool.getControllerForInstantPlay(video.id);
-
-      if (controller != null && controller.value.isInitialized) {
-        // **CACHE HIT: Reuse from shared pool**
-        AppLogger.log(
-          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
-        );
-
-        // Add to local pool for UI tracking only
-        _controllerPool[video.id] = controller;
-        _controllerStates[video.id] = false;
-        _preloadedVideos.add(video.id);
-        _lastAccessedLocal[video.id] = DateTime.now();
-
-
-
-        return controller;
-      }
-    } catch (e) {
-      AppLogger.log(
-          '⚠️ VideoFeedAdvanced: Disposed controller detected in shared pool for ${video.id}');
-      sharedPool.removeController(video.id);
-      controller = null;
-    }
-
-    // **FALLBACK: Check local pool**
-    if (_controllerPool.containsKey(video.id)) {
-      try {
-        controller = _controllerPool[video.id];
-        if (controller != null && controller.value.isInitialized) {
-          _lastAccessedLocal[video.id] = DateTime.now();
-
-          return controller;
-        }
-      } catch (e) {
-        AppLogger.log(
-            '⚠️ VideoFeedAdvanced: Disposed controller detected in local pool at index $index');
+    // **SAFETY CHECK 1: Local Pool validation**
+    if (controller != null) {
+      if (sharedPool.isControllerDisposed(controller)) {
+        AppLogger.log('⚠️ VideoFeedAdvanced: Local controller for ${video.id} DISPOSED. Clearing.');
         _controllerPool.remove(video.id);
-        _controllerStates
-            .remove(video.id); // Also remove from _controllerStates
+        _controllerStates.remove(video.id);
+        _preloadedVideos.remove(video.id);
         controller = null;
+      } else {
+        return controller; // Active and healthy
       }
     }
 
-    // **PRELOAD: If not in any pool, preload it**
-    // **FIX: Removed explicit preload to prevent 'fire hose' during fast scroll.**
-    // _preloadVideo(index) is now handled exclusively by _handlePageChange (debounced).
-    return null;
+    // **SAFETY CHECK 2: Shared Pool validation**
+    try {
+      // Proactively check shared pool
+      final instantController = sharedPool.getControllerForInstantPlay(video.id);
+      if (instantController != null) {
+        if (!sharedPool.isControllerDisposed(instantController)) {
+          AppLogger.log('⚡ INSTANT: Adopting from shared pool for ${video.id}');
+          _controllerPool[video.id] = instantController;
+          _controllerStates[video.id] = false;
+          _preloadedVideos.add(video.id);
+          _lastAccessedLocal[video.id] = DateTime.now();
+          return instantController;
+        } else {
+          // If the pool gave us a disposed one (unlikely now, but safety first), clear it
+          sharedPool.removeController(video.id);
+        }
+      }
+    } catch (_) {
+      sharedPool.removeController(video.id);
+    }
+
+    return null; // Must be preloaded/re-initialized
   }
 
   /// **HANDLE PAGE CHANGES** - Unified with debouncing and persistence
@@ -1799,14 +1753,20 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
   @override
   void dispose() {
-    // **CRITICAL: Unregister callbacks from MainController**
+    // **NEW: Unregister video observer from MainController**
+    _mainController?.unregisterVideoObserver(
+      onPause: _pauseCurrentVideo,
+      onResume: _resumeCurrentVideo,
+    );
+
+    // **CRITICAL: Unregister legacy callbacks from MainController**
     try {
       _mainController?.unregisterCallbacks();
       AppLogger.log(
-        '📱 VideoFeedAdvanced: Unregistered callbacks from MainController',
+        '📱 VideoFeedAdvanced: Unregistered legacy callbacks from MainController',
       );
     } catch (e) {
-      AppLogger.log('⚠️ VideoFeedAdvanced: Error unregistering callbacks: $e');
+      AppLogger.log('⚠️ VideoFeedAdvanced: Error unregistering legacy callbacks: $e');
     }
 
     // **ROUTE-POP FIX: Unregister route-pop callback (only registered for main Yug feed)**

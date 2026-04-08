@@ -13,7 +13,6 @@ import 'package:vayug/features/video/core/presentation/screens/video_screen.dart
 import 'package:vayug/shared/managers/hot_ui_state_manager.dart';
 import 'package:vayug/core/design/theme.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
-import 'package:vayug/features/profile/core/data/services/background_profile_preloader.dart';
 import 'package:vayug/features/onboarding/data/services/location_onboarding_service.dart';
 import 'package:vayug/features/onboarding/data/services/welcome_onboarding_service.dart';
 import 'package:vayug/features/onboarding/data/services/gallery_permission_service.dart';
@@ -130,15 +129,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         ErrorLoggingService.logAppLifecycle('Resumed');
         mainController.setAppInForeground(true);
         hotUIManager.handleAppLifecycleChange(state);
-        // **NEW: Restore tab index when app resumes (if different from current)**
-        mainController.restoreLastTabIndex().then((restoredIndex) {
-          // restoreLastTabIndex already sets _currentIndex and notifies
-          // Just ensure UI reflects the change if needed
-          if (restoredIndex != mainController.currentIndex) {
-            // This shouldn't happen as restoreLastTabIndex sets it, but safety check
-            mainController.changeIndex(restoredIndex);
-          }
-        });
         break;
       case AppLifecycleState.inactive:
         ErrorLoggingService.logAppLifecycle('Inactive');
@@ -266,28 +256,7 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authController = ref.read(googleSignInProvider);
       authController.checkAuthStatus();
-
-      // **BACKGROUND PRELOADING: Preload profile data after authentication check**
-      _startBackgroundPreloadingIfAuthenticated();
     });
-  }
-
-  /// **Start background preloading if user is authenticated**
-  Future<void> _startBackgroundPreloadingIfAuthenticated() async {
-    try {
-      final authService = AuthService();
-      final userData = await authService.getUserData();
-
-      if (userData != null) {
-
-        final preloader = BackgroundProfilePreloader();
-        unawaited(preloader.forcePreload()); // Non-blocking
-      } else {
-
-      }
-    } catch (e) {
-
-    }
   }
 
   @override

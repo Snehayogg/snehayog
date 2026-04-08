@@ -233,7 +233,7 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
                 
                 // 2. Pop both dialog and screen (within the Tab Navigator)
                 Navigator.of(context).pop(); // Close dialog
-                Navigator.of(context).pop(); // Exit MakeEpisodeScreen
+                Navigator.of(context).pop(true); // Exit MakeEpisodeScreen with SUCCESS signal
                 
                 // 3. Switch to Account tab (Index 3 is Account/Profile)
                 mainController.changeIndex(3);

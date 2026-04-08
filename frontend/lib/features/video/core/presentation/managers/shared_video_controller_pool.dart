@@ -138,6 +138,12 @@ class SharedVideoControllerPool {
     final controller = _controllerPool[videoId];
     if (controller == null) return null;
 
+    // **CRITICAL: check disposal first**
+    if (isControllerDisposed(controller)) {
+      _evictController(videoId, controller, reason: 'proactive cleanup: controller disposed');
+      return null;
+    }
+
     final value = _safeControllerValue(videoId, controller);
     if (value == null) return null;
 
@@ -180,6 +186,11 @@ class SharedVideoControllerPool {
   VideoPlayerController? getControllerForInstantPlay(String videoId) {
     final controller = getController(videoId);
     if (controller != null) {
+      if (isControllerDisposed(controller)) {
+        _evictController(videoId, controller, reason: 'disposed in instant check');
+        return null;
+      }
+
       final value = _safeControllerValue(videoId, controller);
       if (value == null || !value.isInitialized) {
         trackCacheMiss();

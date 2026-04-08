@@ -1,20 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/managers/smart_cache_manager.dart';
 
-import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/services/app_remote_config_service.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:vayug/shared/services/notification_service.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/shared/services/hls_warmup_service.dart';
-import 'dart:async'; // For unawaited
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async'; // For unawaited;
 /// **AppInitializationManager**
 /// 
 /// Centralizes and sequences app startup logic to prevent "thundering herd"
@@ -64,29 +61,21 @@ class AppInitializationManager {
 
     try {
       AppLogger.log('🚀 InitManager: Stage 1 (Config) Started');
-      initializationProgress.value = 0.05;
-      initializationStatus.value = 'Connecting to services...';
+      initializationProgress.value = 0.1;
+      initializationStatus.value = 'Starting...';
       
       // 1. Firebase (Critical for Network Interceptors)
       try {
         await Firebase.initializeApp();
-        initializationProgress.value = 0.15;
+        initializationProgress.value = 0.5;
         AppLogger.log('✅ InitManager: Firebase initialized');
       } catch (e) {
         AppLogger.log('⚠️ InitManager: Firebase Init Error: $e');
       }
 
-      // 2. Determine Backend URL
-      initializationStatus.value = 'Configuring backend...';
-      final workingUrl = await AppConfig.checkAndUpdateServerUrl();
-      initializationProgress.value = 0.30;
-      AppLogger.log('✅ InitManager: Backend URL confirmed: $workingUrl');
-
-      // 2. Initialize Smart Cache (Memory Only, NO HIVE)
-      initializationStatus.value = 'Preparing cache...';
-      await SmartCacheManager().initialize();
-      initializationProgress.value = 0.45;
-
+      // **OPTIMIZATION: Server URL check and SmartCache are now deferred**
+      // Use last known working URL from AppConfig (no-ping)
+      
       _isStage1Complete = true;
     } catch (e) {
       AppLogger.log('❌ InitManager: Stage 1 Failed: $e');
@@ -99,54 +88,32 @@ class AppInitializationManager {
   /// Goal: Ensure VideoFeed has content READY when it mounts.
   Future<void> initializeStage2(BuildContext context) async {
     if (_isStage2Complete) {
-      AppLogger.log('ℹ️ InitManager: Stage 2 already complete, skipping. Called from:');
-      AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
       return;
     }
 
     try {
-      AppLogger.log('🚀 InitManager: Stage 2 (Vital Content) Started');
+      AppLogger.log('🚀 InitManager: Stage 2 (Insta-Switch) Started');
+      
+      // Reset progress immediately to trigger transition
       initializationProgress.value = 0.0;
-      AppLogger.log('📍 Trace: Stage 2 called from:');
-      AppLogger.log(StackTrace.current.toString().split('\n').take(5).join('\n'));
       
-      final stopwatch = Stopwatch()..start();
-      
-      // Reset completer for this run
-      if (_backgroundFetchCompleter.isCompleted) {
-        _backgroundFetchCompleter = Completer<List<VideoModel>?>();
-      }
-
-      // **PARALLELISM: Start Stage 1 and Stage 2 tasks in parallel**
-      // We only strictly await the essential local checks to unlock UI.
+      // **PARALLELISM: Start Stage 1 and background tasks**
       final stage1Future = initializeStage1();
-
       final videoService = VideoService();
 
-      // Task B: Fast local auth gate — validates token state without a network call.
-      try {
-        AppLogger.log('🔐 InitManager: Fast local auth gate...');
-        initializationStatus.value = 'Authenticating...';
-        await _fastAuthGate();
-        AppLogger.log('✅ InitManager: Fast auth gate complete');
-      } catch (e) {
-        AppLogger.log('⚠️ InitManager: Auth gate error (non-critical): $e');
-      }
-
-      // Ensure Stage 1 (Config) is triggered/checked before continuing
+      // Ensure Stage 1 (Firebase) completes quickly
       await stage1Future;
 
-      // Task A: Video fetching - Start in background immediately
-      // We no longer block the 1.0 progress on this network call.
+      // Task A: Video fetching - Start in background immediately (unawaited)
       unawaited(_fetchAndPreloadFirstVideos(videoService));
 
-      stopwatch.stop();
-      AppLogger.log('✅ InitManager: Stage 2 Logic Unlocked in ${stopwatch.elapsedMilliseconds}ms');
-      
-      // **INSTANT BOOT: Report ready for UI transition now**
+      // **INSTANT BOOT: Stage 2 completes immediately after Stage 1**
+      // We no longer block on _fastAuthGate (Google Silent Auth) or Server Pings
       initializationProgress.value = 1.0;
       initializationStatus.value = 'Ready!';
       _isStage2Complete = true;
+      
+      AppLogger.log('✅ InitManager: Stage 2 Logic Unlocked (Optimistic Boot)');
     } catch (e) {
       AppLogger.log('❌ InitManager: Stage 2 Failed: $e');
       initializationProgress.value = 1.0;
@@ -196,7 +163,6 @@ class AppInitializationManager {
        }
        
        // **NEW: Check for Version Error (Force Update)**
-       // Using string representation since DioException might be wrapped
        final errorStr = e.toString();
        if (errorStr.contains('Unsupported API Version') || 
            errorStr.contains('410') || 
@@ -205,8 +171,6 @@ class AppInitializationManager {
           isUpdateRequired.value = true;
           initializationStatus.value = 'Update Required';
        }
-       
-       initializationProgress.value = 1.0; // Fail gracefully
     }
   }
 
@@ -222,62 +186,8 @@ class AppInitializationManager {
   }
 
 
-  /// **FAST AUTH GATE: Checks token state locally, refreshes only if expired.**
-  /// - Valid token: returns instantly (<50ms)
-  /// - Expired token: tries one refresh call (~500ms), clears on failure
-  /// - No token: returns instantly (AuthWrapper will route to login)
-  Future<void> _fastAuthGate() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('jwt_token');
-      final authService = AuthService();
+  /// **REMOVED: _fastAuthGate is now deferred to mid-session token refresh/interceptors**
 
-      // 1. No token → let AuthWrapper handle routing to login
-      if (token == null || token.isEmpty) {
-        AppLogger.log('🔐 InitManager: No token found, proceeding to AuthWrapper');
-        return;
-      }
-
-      // 2. Token is locally valid → Check identity consistency
-      if (authService.isTokenValid(token)) {
-        AppLogger.log('🔍 InitManager: Token valid locally, verifying identity consistency...');
-        
-        // **NEW: Strict Identity Check**
-        // Ensure the active Google account still matches this token
-        final isConsistent = await authService.verifyIdentityConsistency()
-            .timeout(const Duration(seconds: 3), onTimeout: () => true); // Default to true on timeout to avoid blocking
-
-        if (isConsistent) {
-          AppLogger.log('✅ InitManager: Identity verified, fast-tracking to home');
-          
-          // **OPTIMIZATION: Fetch profile in background to warm up cache**
-          unawaited(authService.getUserData());
-          return;
-        } else {
-          // Non-destructive: do not clear active session at startup.
-          // Let explicit logout/account-switch flows manage identity transitions.
-          AppLogger.log('⚠️ InitManager: Identity mismatch detected, preserving existing session');
-          return;
-        }
-      }
-
-      // 3. Token is expired → attempt a fast refresh (single network call)
-      AppLogger.log('🔄 InitManager: Token expired, attempting fast refresh...');
-      final refreshed = await authService.refreshAccessToken()
-          .timeout(const Duration(seconds: 3), onTimeout: () => null);
-
-      if (refreshed != null) {
-        AppLogger.log('✅ InitManager: Token refreshed successfully, proceeding');
-        // Warm up profile cache
-        unawaited(authService.getUserData());
-      } else {
-        // Non-destructive on startup: keep token and allow retry later.
-        AppLogger.log('⚠️ InitManager: Refresh failed during startup, preserving token for retry');
-      }
-    } catch (e) {
-      AppLogger.log('⚠️ InitManager: _fastAuthGate error: $e — proceeding anyway');
-    }
-  }
 
   // --- STAGE 3: DEFERRED SERVICES (After Home Mount) ---
   /// Called by MainScreen after 3-5 seconds.
@@ -286,18 +196,18 @@ class AppInitializationManager {
     if (_isStage3Complete) return;
 
     try {
-       // yield to UI thread first
-       // **DEBUG OPTIMIZATION: Extra delay in debug mode to let UI settle**
-       if (kDebugMode) {
-         await Future.delayed(const Duration(seconds: 3));
-         AppLogger.log('⏭️ InitManager: Debug mode — extra Stage 3 delay applied');
-       } else {
-         await Future.delayed(Duration.zero);
-       }
-       
-       AppLogger.log('🚀 InitManager: Stage 3 (Deferred) Started');
+       AppLogger.log('🚀 InitManager: Stage 3 (Deferred Services) Started');
 
-       // 1. Notifications (Firebase already initialized in Stage 1)
+       // 1. Initialize Smart Cache (Memory Only)
+       // Now in Stage 3 to avoid blocking cold start
+       try {
+         await SmartCacheManager().initialize();
+         AppLogger.log('✅ InitManager: SmartCache initialized');
+       } catch (e) {
+         AppLogger.log('⚠️ InitManager: SmartCache Init Error: $e');
+       }
+
+       // 2. Notifications (Firebase already initialized in Stage 1)
        try {
          final notificationService = NotificationService();
          await notificationService.initialize();
@@ -306,26 +216,10 @@ class AppInitializationManager {
          AppLogger.log('Notification Init Error: $e');
        }
 
-       // 2. Remote Config
+       // 3. Remote Config
        try {
          await AppRemoteConfigService.instance.initialize();
        } catch(_) {}
-
-       // 3. AdMob (Heavy!) — DISABLED per user request (Direct Banner Ad)
-       // if (!kDebugMode) {
-       //   try {
-       //      await MobileAds.instance.initialize();
-       //      // Configure request settings
-       //       final requestConfiguration = RequestConfiguration(
-       //        testDeviceIds: [],
-       //      );
-       //      await MobileAds.instance.updateRequestConfiguration(requestConfiguration);
-       //      AppLogger.log('✅ InitManager: AdMob initialized');
-       //   } catch (_) {}
-       // } else {
-       //   AppLogger.log('⏭️ InitManager: Skipping AdMob in debug mode');
-       // }
-       AppLogger.log('🚫 InitManager: AdMob initialization DISABLED (Using Custom Ads only)');
 
        _isStage3Complete = true;
        AppLogger.log('✅ InitManager: Stage 3 Complete');

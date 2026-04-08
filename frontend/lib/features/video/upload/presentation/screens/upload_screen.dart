@@ -384,16 +384,19 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     }
   }
 
-  void _handleMakeEpisode() {
+  void _handleMakeEpisode() async {
     if (_selectedVideo.value == null) {
-      Navigator.push(
+      final result = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const MakeEpisodeScreen(),
         ),
       );
+      if (result == true) {
+        _resetScreenState();
+      }
     } else {
-      Navigator.push(
+      final result = await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => MakeEpisodeScreen(
@@ -401,6 +404,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           ),
         ),
       );
+      if (result == true) {
+        _resetScreenState();
+      }
     }
   }
 

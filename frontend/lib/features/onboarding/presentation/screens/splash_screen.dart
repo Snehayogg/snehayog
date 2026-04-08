@@ -25,9 +25,14 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _progressController;
   bool _isNavigating = false;
 
+  // **NEW: Ensure minimum brand visibility duration**
+  late final DateTime _startTime;
+  static const int _minDisplayMs = 300;
+
   @override
   void initState() {
     super.initState();
+    _startTime = DateTime.now();
 
     // Fade controller for the Vayu text
     _fadeController = AnimationController(
@@ -49,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeController.forward();
 
     // 2. Start slow predictive crawl from 0 for immediate but professional feedback
-    _progressController.animateTo(0.3, duration: const Duration(seconds: 4));
+    _progressController.animateTo(0.3, duration: const Duration(milliseconds: 200));
 
     // 3. Listen to real logic progress
     AppInitializationManager.instance.initializationProgress
@@ -91,7 +96,7 @@ class _SplashScreenState extends State<SplashScreen>
     }
   }
 
-  void _checkAndNavigate() {
+  void _checkAndNavigate() async {
     if (!mounted || _isNavigating) return;
 
     final initManager = AppInitializationManager.instance;
@@ -100,6 +105,13 @@ class _SplashScreenState extends State<SplashScreen>
     // Decoupled from progress bar animation for maximum speed
     if (initManager.isStage2Complete) {
       _isNavigating = true;
+
+      // **NEW: Ensure we meet the minimum display time requirements**
+      final elapsed = DateTime.now().difference(_startTime).inMilliseconds;
+      if (elapsed < _minDisplayMs) {
+        await Future.delayed(Duration(milliseconds: _minDisplayMs - elapsed));
+      }
+
       _navigateToHome();
     }
   }

@@ -484,7 +484,11 @@ class VideoService {
 
   /// **Get user videos**
   Future<List<VideoModel>> getUserVideos(String userId,
-      {bool forceRefresh = false, int page = 1, int limit = 9}) async {
+      {bool forceRefresh = false,
+      int page = 1,
+      int limit = 9,
+      String? videoType,
+      String? mediaType}) async {
     try {
       // **FIXED: Validate userId before making request**
       if (userId.isEmpty) {
@@ -494,6 +498,13 @@ class VideoService {
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       String url =
           '$resolvedBaseUrl/api/videos/user/$userId?page=$page&limit=$limit';
+
+      if (videoType != null && videoType.isNotEmpty) {
+        url += '&videoType=$videoType';
+      }
+      if (mediaType != null && mediaType.isNotEmpty) {
+        url += '&mediaType=$mediaType';
+      }
 
       // **NEW: Append refresh=true if forceRefresh is requested**
       if (forceRefresh) {

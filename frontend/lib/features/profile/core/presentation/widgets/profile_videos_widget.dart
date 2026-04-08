@@ -529,9 +529,9 @@ class ProfileVideosWidget extends StatelessWidget {
                           ),
                         );
                         
-                         if (result != null) {
-                           manager.refreshData();
-                        }
+                          if (result != null) {
+                            manager.refreshData();
+                         }
                       },
                       child: Container(
                         padding: const EdgeInsets.all(4),

@@ -60,7 +60,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
   static void refreshVideos(GlobalKey<ConsumerState<ProfileScreen>> key) {
     final state = key.currentState;
     if (state != null) {
-      (state as _ProfileScreenState)._stateManager.refreshVideosOnly();
+      (state as _ProfileScreenState)._profileStateManager.refreshVideosOnly();
     }
   }
 }
@@ -70,12 +70,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   static final Uri _whatsAppGroupUri =
       Uri.parse('https://chat.whatsapp.com/H7eU5xnwm3r2dfpvi7hCJC');
 
-  late ProfileStateManager _stateManager;
-  ProfileStateManager? _localStateManager; // **NEW: Handle local instance for creators**
-  bool _isLocalManager = false; // **NEW: Track manager type**
+  late ProfileStateManager _profileStateManager;
+  ProfileStateManager? _localStateManager; 
+  bool _isLocalManager = false; 
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _isSigningIn = false; // **NEW: Track local sign-in progress**
+  bool _isSigningIn = false; 
   final AdService _adService = AdService();
   final AuthService _authService = AuthService();
 
@@ -99,22 +99,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       false); // Default to false - show notice until confirmed
   final ValueNotifier<bool> _isCheckingUpiId = ValueNotifier<bool>(false);
 
-  // **NEW: Track if videos have been loaded/checked for this profile session**
-  // This prevents reloading when creator has no videos
-  bool _videosLoadAttempted = false;
-  String? _lastLoadedUserId; // Track which user's videos we've loaded
-
-  // **NEW: Track profile load attempts to prevent constant reloading**
-  int _profileLoadAttemptCount = 0;
-  bool _profileNoDataFound = false;
   bool _isDeleteLoadingDialogVisible = false;
 
   @override
   bool get wantKeepAlive => true;
 
-
   @override
-
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
@@ -130,22 +120,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     if (widget.userId != null && widget.userId != myId?.toString()) {
       AppLogger.log('🚀 ProfileScreen: Initializing LOCAL ProfileStateManager for creator: ${widget.userId}');
       _localStateManager = ProfileStateManager();
-      _stateManager = _localStateManager!;
+      _profileStateManager = _localStateManager!;
       _isLocalManager = true;
     } else {
       AppLogger.log(
           '🚀 ProfileScreen: Using GLOBAL ProfileStateManager for own profile');
-      _stateManager = ref.read(profileStateManagerProvider);
+      _profileStateManager = ref.read(profileStateManagerProvider);
       _isLocalManager = false;
     }
     
-    _stateManager.setContext(context);
+    _profileStateManager.setContext(context);
 
     // Ensure context is set early for providers that may be used during loads
     // It will be set again in didChangeDependencies
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _stateManager.setContext(context);
+        _profileStateManager.setContext(context);
       }
     });
 
@@ -156,6 +146,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     _loadReferralStats();
     _fetchVerifiedReferralStats();
 
+    // **RESTORED: Check UPI ID status on init**
+    _checkUpiIdStatus();
+
     // NO SETSTATE NEEDED: The UI components that need the active tab index 
     // use a ValueListenableBuilder for granular updates.
     _activeProfileTabIndex.addListener(() {});
@@ -163,251 +156,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   void _handleTabChange() {
     if (!_tabController.indexIsChanging) {
+      // **FIX: Pause any playing videos before switching tabs to prevent audio leak**
+      _pauseAllVideoControllers();
+      
       _activeProfileTabIndex.value = _tabController.index;
       // Trigger pagination logic if needed when switching tabs
-      if (_tabController.index == 0 && _stateManager.userVideos.isEmpty) {
+      if (_tabController.index == 0 && _profileStateManager.userVideos.isEmpty) {
          _loadVideos().catchError((e) => AppLogger.log('⚠️ Error loading videos on tab: $e'));
       }
     }
   }
 
-  /// **PUBLIC METHOD: Called when Profile tab is selected**
-  /// **OPTIMIZED: Only load if data is missing - don't reload on every tab switch**
-  /// **FIXED: Don't reload if creator has no videos - only load once per session**
   void onProfileTabSelected() {
-    // **FIX: Only proceed if this is still the current route**
-    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
-    AppLogger.log(
-        '🔄 ProfileScreen: Profile tab selected, checking if data needs loading');
-
-    // Get current user ID from AuthService as source of truth
-    final authService = ref.read(authServiceProvider);
-    final myId = authService.currentUserId;
-    
-    final currentUserId = widget.userId ?? myId;
-
-    // **FIXED: Reset load attempt flags if user changed**
-    if (currentUserId != null && currentUserId != _lastLoadedUserId) {
-      _videosLoadAttempted = false;
-      _profileLoadAttemptCount = 0; // Reset for new user
-      _profileNoDataFound = false; // Reset for new user
-      _lastLoadedUserId = currentUserId;
-      AppLogger.log(
-          '🔄 ProfileScreen: User changed, resetting load attempt flags');
-    }
-
-    // **FIXED: Also force reload if userData exists but belongs to a different user (stale account data)**
-    final managerUserId = (_stateManager.userData?['googleId'] ?? _stateManager.userData?['id'])?.toString();
-    final isStaleData = managerUserId != null && managerUserId != currentUserId;
-
-    // **OPTIMIZED: Only load if data is completely missing, stale, partial, or we haven't exhausted retries**
-    if (_stateManager.userData == null || isStaleData || _stateManager.isDataPartial) {
-      if (isStaleData) {
-        AppLogger.log(
-            '⚠️ ProfileScreen: Detected stale user data in manager, clearing and reloading...');
-        _stateManager.clearData();
-      }
-      
-      if (_stateManager.isDataPartial && !isStaleData) {
-        AppLogger.log('🔄 ProfileScreen: Detected partial/fallback data, attempting full refresh...');
-      }
-
-      if (_profileNoDataFound && !_stateManager.isDataPartial) {
-        AppLogger.log('ℹ️ ProfileScreen: Already checked - no data found for this user (not reloading)');
-        return;
-      }
-      
-      if (_profileLoadAttemptCount >= 3 && !_stateManager.isDataPartial) {
-        AppLogger.log('⚠️ ProfileScreen: Max load attempts (3) reached - not retrying automatically');
-        return;
-      }
-
-      AppLogger.log(
-          '📡 ProfileScreen: loading data (isPartial: ${_stateManager.isDataPartial}, attempt ${_profileLoadAttemptCount + 1}/3)...');
-      _loadData(forceRefresh: _stateManager.isDataPartial); 
-    } else if (_stateManager.needsVideoRefresh) {
-      // **NEW: Handle producer/upload requested refresh**
-      AppLogger.log(
-          '🚀 ProfileScreen: Manager requested video refresh (needsVideoRefresh=true)');
+    // **OPTIMIZED: Only load if data is completely missing or stale (> 5 minutes)**
+    if (_profileStateManager.userData == null || _profileStateManager.isDataPartial) {
+      AppLogger.log('📡 ProfileScreen: Initializing data fetch (isDataPartial: ${_profileStateManager.isDataPartial})');
+      _loadData(); 
+    } else if (_profileStateManager.needsVideoRefresh) {
+      AppLogger.log('🚀 ProfileScreen: Refreshing videos as requested by state manager');
       _loadVideos(forceRefresh: true, silent: true).catchError((e) {
-        AppLogger.log('⚠️ ProfileScreen: Error in manager-requested refresh: $e');
-      });
-    } else if (!_videosLoadAttempted &&
-        _stateManager.userVideos.isEmpty &&
-        !_stateManager.isVideosLoading) {
-      // **FIXED: Only load videos if we haven't attempted before**
-      // This prevents reloading when creator has no videos
-      AppLogger.log(
-          '🔄 ProfileScreen: User data exists but videos not loaded yet, loading videos once...');
-      _videosLoadAttempted = true; // Mark as attempted
-      _loadVideos().catchError((e) {
-        AppLogger.log('⚠️ ProfileScreen: Error loading videos: $e');
-        _videosLoadAttempted = false; // Reset on error so we can retry
+        AppLogger.log('⚠️ ProfileScreen: Error in video refresh: $e');
       });
     } else {
-      AppLogger.log(
-          '✅ ProfileScreen: Data already loaded - no reload needed');
+      AppLogger.log('✅ ProfileScreen: Data is fresh, skipping redundant refresh');
     }
   }
-
-
 
   // --- Profile Slivers & Body Builders ---
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     try {
-      AppLogger.log(
-          '🔄 ProfileScreen: Starting data loading (forceRefresh: $forceRefresh)');
+      AppLogger.log('🔄 ProfileScreen: Starting data loading (forceRefresh: $forceRefresh)');
 
-      // **CRITICAL: If forceRefresh=true, SKIP ALL cache checks and go directly to server**
-      if (forceRefresh) {
-        AppLogger.log(
-            '🔄 ProfileScreen: FORCE REFRESH - bypassing ALL cache, fetching fresh data from server');
-        _stateManager.clearData();
-      } else {
-        // Step 1: Try cache first
-        final cachedData = await _loadCachedProfileData();
-        if (cachedData != null) {
-          AppLogger.log(
-              '⚡ ProfileScreen: Using cached data (INSTANT - no server fetch)');
-
-          _stateManager.setUserData(cachedData);
-          if (!mounted) return;
-          _isLoading.value = false; // Show profile header instantly
-          _loadVideosFromCache(); // Load videos in background
-
-
-          if (widget.userId == null) {
-            Future.microtask(() async {
-              await _checkUpiIdStatus();
-            });
-          }
-
-          _profileLoadAttemptCount = 0; 
-          
-          Future.microtask(() async {
-            try {
-              AppLogger.log('🔄 ProfileScreen: Background refresh started');
-              await _stateManager.loadUserData(
-                widget.userId,
-                forceRefresh: true,
-                silent: true,
-              );
-              if (mounted) {
-                await _loadVideos(forceRefresh: true, silent: true);
-                if (widget.userId == null) {
-                  await _refreshEarningsData(forceRefresh: true);
-                  await _checkUpiIdStatus();
-                }
-              }
-              AppLogger.log('✅ ProfileScreen: Background refresh completed');
-            } catch (e) {
-              AppLogger.log('⚠️ ProfileScreen: Background refresh failed: $e');
-            }
-          });
-
-          return; 
-        }
-      }
-
-      // Step 2: No cache or force refresh - load from server
       _isLoading.value = true;
       _error.value = null;
 
-      if (!forceRefresh) {
-        _profileLoadAttemptCount++;
-      }
-
-      AppLogger.log(
-          '📡 ProfileScreen: Fetching from server (Attempt $_profileLoadAttemptCount/3)');
-
-      await _loadDataWithRetry(forceRefresh: forceRefresh);
+      await _profileStateManager.loadUserData(widget.userId, forceRefresh: forceRefresh);
       
-      if (_stateManager.userData == null) {
-        _profileNoDataFound = true;
-        AppLogger.log('ℹ️ ProfileScreen: Successfully fetched but no data returned');
-      } else {
-        _profileNoDataFound = false;
-        _profileLoadAttemptCount = 0; 
+      if (!mounted) return;
+      _isLoading.value = false;
+      
+      if (_profileStateManager.userData != null) {
+        if (_profileStateManager.userVideos.isEmpty && !_profileStateManager.isVideosLoading) {
+           _loadVideos(forceRefresh: forceRefresh, silent: true).catchError((_) {});
+        }
+        _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading data: $e');
       if (!mounted) return;
       _error.value = _getUserFriendlyError(e);
       _isLoading.value = false;
-    }
-  }
-
-  /// **NEW: Load data with retry mechanism**
-  Future<void> _loadDataWithRetry(
-      {bool forceRefresh = false, int maxRetries = 3}) async {
-    int retryCount = 0;
-
-    while (retryCount <= maxRetries) {
-      try {
-        AppLogger.log(
-            '📡 ProfileScreen: Loading data (attempt ${retryCount + 1}/${maxRetries + 1}) for ${widget.userId != null ? "creator" : "own"} profile (forceRefresh: $forceRefresh)');
-
-        final timeoutDuration = widget.userId != null
-            ? const Duration(seconds: 10)
-            : const Duration(seconds: 15);
-
-        // **SEQUENTIAL LOADING: Profile first, then Videos**
-        // This ensures error handling is cleaner and ID resolution is stable
-        AppLogger.log('🚀 ProfileScreen: Sequential loading for ${widget.userId ?? "own profile"}');
-        
-        await _stateManager
-            .loadUserData(widget.userId, forceRefresh: forceRefresh)
-            .timeout(
-          timeoutDuration,
-          onTimeout: () {
-            throw Exception('Request timed out while loading profile data.');
-          },
-        );
-        
-        // Once profile data is loaded (or resolved from cache), load videos
-        if (_stateManager.userData != null) {
-           await _loadVideos(forceRefresh: forceRefresh, silent: true).timeout(
-             timeoutDuration,
-             onTimeout: () {
-               AppLogger.log('⚠️ ProfileScreen: Video load timed out (continuing)');
-             },
-           );
-        }
-
-        if (_stateManager.userData != null) {
-          if (!forceRefresh) {
-            await _cacheProfileData(_stateManager.userData!);
-          }
-
-          if (!mounted) return;
-          _isLoading.value = false;
-          _refreshEarningsData(forceRefresh: forceRefresh).catchError((e) {});
-
-          if (forceRefresh) {
-            await _cacheProfileData(_stateManager.userData!);
-          }
-
-          AppLogger.log('✅ ProfileScreen: Profile data loaded successfully');
-          return;
-        }
-        
-        throw Exception('Server returned empty profile data or invalid user ID');
-      } catch (e) {
-        retryCount++;
-
-        if (retryCount > maxRetries) {
-          if (!mounted) return;
-          _error.value = _getUserFriendlyError(e);
-          _isLoading.value = false;
-          AppLogger.log('❌ ProfileScreen: Max retries reached, showing error');
-        } else {
-          final delaySeconds = retryCount; 
-          AppLogger.log(
-              '🔄 ProfileScreen: Retrying in $delaySeconds second(s)...');
-          await Future.delayed(Duration(seconds: delaySeconds));
-        }
-      }
     }
   }
 
@@ -433,32 +232,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     }
   }
 
-  /// **ENHANCED: Load videos from cache - use cache if exists, only fetch from server if no cache**
-  Future<void> _loadVideosFromCache() async {
-    // **SIMPLIFIED: Always load videos via ProfileStateManager logic**
-    // Local SharedPreferences video cache is no longer used.
-    AppLogger.log(
-        'ℹ️ ProfileScreen: _loadVideosFromCache -> delegating to _loadVideos()');
-    await _loadVideos();
-  }
-
-  /// **OPTIMIZED: Load videos from server (can run in background)**
+  /// **NEW: Load videos from server (can run in background)**
   /// **CRITICAL: When forceRefresh=true, COMPLETELY bypass cache and fetch fresh data from server**
   Future<void> _loadVideos(
       {bool forceRefresh = false, bool silent = false}) async {
     try {
       // **FIX: Better handling of null userData with retry**
-      if (_stateManager.userData == null) {
+      if (_profileStateManager.userData == null) {
         AppLogger.log('⚠️ ProfileScreen: User data not ready, waiting...');
         // Wait with exponential backoff
         for (int i = 0; i < 5; i++) {
           await Future.delayed(Duration(milliseconds: 200 * (i + 1)));
-          if (_stateManager.userData != null) {
+          if (_profileStateManager.userData != null) {
             break;
           }
         }
 
-        if (_stateManager.userData == null) {
+        if (_profileStateManager.userData == null) {
           AppLogger.log(
               '⚠️ ProfileScreen: User data still not ready after waiting, skipping video load');
           // **FIX: Show error instead of silently failing**
@@ -471,9 +261,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
       // **FIXED: Prioritize googleId, then id (which contains googleId from backend), then fallback**
       // When viewing another creator, ensure we use the correct googleId for the video endpoint
-      final currentUserId = _stateManager.userData!['googleId'] ??
-          _stateManager.userData!['id'] ?? // Backend returns id: user.googleId
-          _stateManager.userData!['_id'];
+      final currentUserId = _profileStateManager.userData!['googleId'] ??
+          _profileStateManager.userData!['id'] ?? // Backend returns id: user.googleId
+          _profileStateManager.userData!['_id'];
 
       // **FIX: If viewing another creator and widget.userId is provided, use it as fallback**
       // This ensures we use the correct ID format when userData might not have googleId set correctly
@@ -482,141 +272,65 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       if (userIdForVideos != null) {
         AppLogger.log(
             '🔄 ProfileScreen: Loading videos for $userIdForVideos (force: $forceRefresh, silent: $silent)');
-        await _stateManager
+        await _profileStateManager
             .loadUserVideos(userIdForVideos,
                 forceRefresh: forceRefresh, silent: silent)
             .timeout(const Duration(seconds: 30));
 
-        // **FIXED: Mark videos as loaded/attempted after successful load**
-        // This prevents reloading when creator has no videos
-        _videosLoadAttempted = true;
-        if (userIdForVideos != null) {
-          _lastLoadedUserId = userIdForVideos;
-        }
-
         AppLogger.log(
-            '✅ ProfileScreen: Loaded ${_stateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
+            '✅ ProfileScreen: Loaded ${_profileStateManager.userVideos.length} videos${forceRefresh ? " (fresh from server, not cache)" : ""}');
             
         // **NEW: AGGRESSIVE BACKGROUND LOAD - Load all remaining videos**
         // This ensures the user sees a complete grid quickly without manually scrolling/waiting.
-        if (_stateManager.hasMoreVideos && !_stateManager.isFetchingMore) {
+        if (_profileStateManager.hasMoreVideos && !_profileStateManager.isFetchingMore) {
            AppLogger.log('🚀 ProfileScreen: Triggering AGGRESSIVE background load for ALL remaining videos...');
-           _stateManager.loadAllVideosInBackground(userIdForVideos).catchError((e) {
+           _profileStateManager.loadAllVideosInBackground(userIdForVideos).catchError((e) {
              AppLogger.log('⚠️ ProfileScreen: Background load all failed: $e');
            });
         }
       }
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error loading videos: $e');
-      // **FIXED: Reset load attempt flag on error so we can retry**
-      _videosLoadAttempted = false;
       // **FIX: Re-throw error so it can be caught and shown to user**
       rethrow;
     }
   }
 
-  /// **ENHANCED: Manual refresh - clear cache and fetch fresh data from server**
-  /// **CRITICAL: When user manually refreshes, ALWAYS show latest data from server, NEVER use cache**
   Future<void> _refreshData() async {
-    AppLogger.log(
-        '🔄 ProfileScreen: Manual refresh - clearing ALL caches and fetching fresh data from server (NO CACHE WILL BE USED)');
-
-    // **FIXED: Reset load attempt flags on manual refresh**
-    // This allows videos to be reloaded even if they were empty before
-    _videosLoadAttempted = false;
-    _profileLoadAttemptCount = 0;
-    _profileNoDataFound = false;
-    AppLogger.log(
-        '🔄 ProfileScreen: Manual refresh - resetting load attempt flags');
+    AppLogger.log('🔄 ProfileScreen: Manual refresh starting...');
+    _error.value = null;
 
     try {
-      // **CRITICAL: Clear ALL caches first - profile cache, video cache, and SmartCache**
-      // This ensures no cached data can leak through during manual refresh
-      await _clearProfileCache();
-
-      // **NEW: Clear SmartCache for videos before refresh**
+      // Clear SmartCache first
       try {
         final smartCache = SmartCacheManager();
         await smartCache.initialize();
         if (smartCache.isInitialized) {
-          // Clear video cache for current user
-          final currentUserId = widget.userId ??
-              _stateManager.userData?['googleId'] ??
-              _stateManager.userData?['id'];
-
+          final currentUserId = widget.userId ?? _profileStateManager.userData?['googleId'];
           if (currentUserId != null) {
-            final videoCacheKey = 'video_profile_$currentUserId';
-            await smartCache.clearCacheByPattern(videoCacheKey);
-            AppLogger.log(
-                '🧹 ProfileScreen: Cleared SmartCache video cache: $videoCacheKey');
-          }
-
-          // Also clear profile cache from SmartCache
-          if (currentUserId != null) {
-            final profileCacheKey = 'user_profile_$currentUserId';
-            await smartCache.clearCacheByPattern(profileCacheKey);
-            AppLogger.log(
-                '🧹 ProfileScreen: Cleared SmartCache profile cache: $profileCacheKey');
+            await smartCache.clearCacheByPattern('video_profile_$currentUserId');
+            await smartCache.clearCacheByPattern('user_profile_$currentUserId');
           }
         }
-      } catch (e) {
-        AppLogger.log(
-            '⚠️ ProfileScreen: Error clearing SmartCache during refresh: $e');
-        // Continue with refresh even if SmartCache clearing fails
-      }
+      } catch (_) {}
 
-      // **REMOVED: Do NOT set _isLoading.value = true here - RefreshIndicator shows its own spinner**
-      // _isLoading.value = true;
-      _error.value = null;
-
-      // **CRITICAL: Force refresh user data - this COMPLETELY bypasses cache**
-      // forceRefresh: true ensures _loadData() skips ALL cache checks
       await _loadData(forceRefresh: true);
 
-      // **CRITICAL: Explicitly reload videos with forceRefresh AFTER user data is loaded**
-      // This ensures videos are also fetched fresh from server, not from cache
-      if (_stateManager.userData != null) {
-        final currentUserId = _stateManager.userData!['googleId'] ??
-            _stateManager.userData!['_id'] ??
-            _stateManager.userData!['id'];
-
-        if (currentUserId != null) {
-          AppLogger.log(
-              '🔄 ProfileScreen: Force refreshing videos for user: $currentUserId (bypassing ALL caches - fetching from server)');
-
-          // **CRITICAL: Force refresh videos - this bypasses cache and fetches fresh data**
-          await _loadVideos(forceRefresh: true);
-
-          if (!mounted) return;
-          AppLogger.log(
-              '✅ ProfileScreen: Refreshed ${_stateManager.userVideos.length} videos from server (fresh data, not cache)');
-        }
-      }
-
-      // **FAST: Refresh earnings after manual refresh**
-      _refreshEarningsData(forceRefresh: true).catchError((e) {
-        // Silent fail
-      });
-
-      // **NEW: Refresh referral stats on manual refresh**
+      _refreshEarningsData(forceRefresh: true).catchError((_) {});
       await _loadReferralStats();
       await _fetchVerifiedReferralStats();
 
-      // _isLoading.value = false; // Not needed if not set to true
-      AppLogger.log(
-          '✅ ProfileScreen: Manual refresh completed - ALL data fetched fresh from server (NO CACHE USED)');
+      AppLogger.log('✅ ProfileScreen: Manual refresh completed');
     } catch (e) {
       AppLogger.log('❌ ProfileScreen: Error during refresh: $e');
-      if (!mounted) return;
-      _error.value = '${AppText.get('error_refresh')}: ${e.toString()}';
-      // _isLoading.value = false;
+      if (mounted) _error.value = AppText.get('error_refresh');
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _stateManager.setContext(context);
+    _profileStateManager.setContext(context);
 
     // **DISABLED: Preload profile videos to prevent video playback conflicts**
     // _preloadProfileVideos();
@@ -667,19 +381,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       await LogoutService.performCompleteLogout(ref);
       
       // Ensure local state is cleared immediately so login prompt appears
-      _stateManager.clearData();
+      _profileStateManager.clearData();
 
       // **FIX: Only remove session tokens, NOT payment data**
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('jwt_token');
       await prefs.remove('fallback_user');
-
-      // **DO NOT REMOVE payment data - it should persist across sessions**
-      // await prefs.remove('has_payment_setup'); // REMOVED - keep this flag
-      // await prefs.remove('payment_profile_cache'); // REMOVED - keep payment data
-
-      // **ENHANCED: Clear profile cache on logout**
-      await _clearProfileCache();
 
       if (mounted) {
         VayuSnackBar.showSuccess(context, AppText.get('profile_logout_success'));
@@ -743,7 +450,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       // Build a referral link with user code if available
       String base = 'https://snehayog.site';
       String referralCode = '';
-      final userData = _stateManager.getUserData();
+      final userData = _profileStateManager.getUserData();
       final token = userData?['token'];
       if (token != null) {
         try {
@@ -798,7 +505,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   Future<void> _fetchVerifiedReferralStats() async {
     try {
-      final userData = _stateManager.getUserData();
+      final userData = _profileStateManager.getUserData();
       final token = userData?['token'];
       if (token == null) return;
       final uri = Uri.parse('${NetworkHelper.apiBaseUrl}/referrals/stats');
@@ -822,7 +529,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => EditProfileScreen(stateManager: _stateManager),
+        builder: (context) => EditProfileScreen(stateManager: _profileStateManager),
       ),
     );
 
@@ -834,16 +541,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Future<void> _handleSaveProfile() async {
     try {
       ProfileScreenLogger.logProfileEditSave();
-      final newName = _stateManager.nameController.text.trim();
+      final newName = _profileStateManager.nameController.text.trim();
       if (newName.isEmpty) {
         throw 'Name cannot be empty';
       }
 
-      await _stateManager.saveProfile();
+      await _profileStateManager.saveProfile();
 
       // **ENHANCED: Update cache immediately with new data (no server fetch needed)**
-      if (_stateManager.userData != null) {
-        await _cacheProfileData(_stateManager.userData!);
+      if (_profileStateManager.userData != null) {
+        await _cacheProfileData(_profileStateManager.userData!);
         AppLogger.log(
             '✅ ProfileScreen: Updated profile cache immediately after name update');
       }
@@ -862,12 +569,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   Future<void> _handleCancelEdit() async {
     ProfileScreenLogger.logProfileEditCancel();
-    _stateManager.cancelEditing();
+    _profileStateManager.cancelEditing();
   }
 
   Future<void> _handleDeleteSelectedVideos() async {
     try {
-      final initialCount = _stateManager.selectedVideoIds.length;
+      final initialCount = _profileStateManager.selectedVideoIds.length;
       ProfileScreenLogger.logVideoDeletion(count: initialCount);
       final shouldDelete = await _showDeleteConfirmationDialog();
       if (!shouldDelete) return;
@@ -876,7 +583,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       _showLoadingDialog();
 
       try {
-        await _stateManager.deleteSelectedVideos();
+        await _profileStateManager.deleteSelectedVideos();
 
         if (mounted) {
           VayuSnackBar.showSuccess(
@@ -896,7 +603,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       if (mounted) {
         VayuSnackBar.showError(
           context, 
-          _stateManager.error ?? AppText.get('error_delete_videos'),
+          _profileStateManager.error ?? AppText.get('error_delete_videos'),
           duration: const Duration(seconds: 4),
           action: SnackBarAction(
             label: AppText.get('btn_retry', fallback: 'Retry'),
@@ -994,7 +701,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     Text(
                       AppText.get('profile_delete_videos_desc').replaceAll(
                           '{count}',
-                          '${_stateManager.selectedVideoIds.length}'),
+                          '${_profileStateManager.selectedVideoIds.length}'),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: AppColors.textSecondary,
                             height: 1.4,
@@ -1079,11 +786,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           VayuSnackBar.showInfo(context, AppText.get('profile_photo_uploading'), duration: const Duration(seconds: 1));
         }
 
-        await _stateManager.updateProfilePhoto(image.path);
+        await _profileStateManager.updateProfilePhoto(image.path);
 
         // **ENHANCED: Update cache immediately with new data (no server fetch needed)**
-        if (_stateManager.userData != null) {
-          await _cacheProfileData(_stateManager.userData!);
+        if (_profileStateManager.userData != null) {
+          await _cacheProfileData(_profileStateManager.userData!);
           AppLogger.log(
               '✅ ProfileScreen: Updated profile cache immediately after photo update');
         }
@@ -1166,7 +873,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   void _handleAddUpiId() {
     ProfileDialogsWidget.showHowToEarnDialog(
       context,
-      stateManager: _stateManager,
+      stateManager: _profileStateManager,
     );
   }
 
@@ -1183,7 +890,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
     // If we are using a local manager (for viewing another creator),
     // we use that. Otherwise we use the global watched state.
-    final activeManager = _isLocalManager ? _stateManager : globalProfileState;
+    final activeManager = _isLocalManager ? _profileStateManager : globalProfileState;
 
     return ListenableBuilder(
       listenable: activeManager,
@@ -1846,7 +1553,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       final prefs = await SharedPreferences.getInstance();
 
       // **FIX: Get user ID for user-specific check**
-      final userData = _stateManager.userData;
+      final userData = _profileStateManager.userData;
       final userId = userData?['googleId'] ?? userData?['id'];
 
       // **FIX: Check user-specific flag first**
@@ -1870,8 +1577,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       }
 
       // **NEW: If no flag, try to load payment setup data from backend**
-      if (_stateManager.userData != null &&
-          _stateManager.userData!['_id'] != null) {
+      if (_profileStateManager.userData != null &&
+          _profileStateManager.userData!['_id'] != null) {
         ProfileScreenLogger.logDebugInfo(
             'No payment setup flag found, checking backend data...');
         final hasBackendSetup = await _checkBackendPaymentSetup();
@@ -1902,7 +1609,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     try {
       ProfileScreenLogger.logDebugInfo(
           'Starting backend payment setup check...');
-      final userData = _stateManager.getUserData();
+      final userData = _profileStateManager.getUserData();
       final token = userData?['token'];
 
       if (token == null) {
@@ -2049,7 +1756,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     } catch (e) {
       AppLogger.log('⚠️ ProfileScreen: Error checking UPI ID status: $e');
       // On error, check local state as fallback
-      final hasUpiLocal = _stateManager.hasUpiId;
+      final hasUpiLocal = _profileStateManager.hasUpiId;
       _hasUpiId.value = hasUpiLocal;
       AppLogger.log(
           '⚠️ ProfileScreen: Using local state fallback: ${hasUpiLocal ? "HAS UPI" : "NO UPI"}');
@@ -2058,56 +1765,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     }
   }
 
-  // **NEW: Enhanced caching methods for profile data**
-
-  /// **OPTIMIZED: Load cached profile data from SmartCacheManager**
-  /// **ENHANCED: Uses unified SmartCacheManager (same as ProfileStateManager)**
-  /// Shows cached data instantly when user navigates back to same profile
-  Future<Map<String, dynamic>?> _loadCachedProfileData() async {
-    try {
-      // **OPTIMIZED: For creator profiles, skip auth call and use widget.userId directly**
-      // This eliminates the biggest latency source for creator profile loading
-      String? targetUserId = widget.userId;
-      if (targetUserId == null) {
-        // Only call auth service for own profile
-        final loggedInUser = await _authService.getUserData();
-        targetUserId = loggedInUser?['googleId'] ?? loggedInUser?['id'];
-      }
-
-      if (targetUserId == null) {
-        ProfileScreenLogger.logDebugInfo(
-            'ℹ️ No user ID found for cache lookup');
-        return null;
-      }
-
-
-
-      // **NEW: Check SmartCacheManager (Memory Cache) if Hive is empty**
-      // This is crucial because ProfilePreloader caches to SmartCacheManager
-      final smartCache = SmartCacheManager();
-      await smartCache.initialize();
-      if (smartCache.isInitialized) {
-        final cacheKey = 'user_profile_$targetUserId';
-        final smartCachedProfile = await smartCache.peek<Map<String, dynamic>>(
-          cacheKey,
-          cacheType: 'user_profile',
-          allowStale: true,
-        );
-
-        if (smartCachedProfile != null) {
-          ProfileScreenLogger.logDebugInfo(
-              '⚡ Loading profile from SmartCache (INSTANT - preloaded or previously visited)');
-          return smartCachedProfile;
-        }
-      }
-
-      ProfileScreenLogger.logDebugInfo(
-          'ℹ️ No profile cache found for $targetUserId - will fetch from server');
-    } catch (e) {
-      ProfileScreenLogger.logWarning('Error loading cached profile data: $e');
-    }
-    return null;
-  }
 
   /// **OPTIMIZED: Cache profile data to SmartCacheManager**
   /// **ENHANCED: Uses unified SmartCacheManager (same as ProfileStateManager)**
@@ -2145,8 +1802,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = widget.userId ??
-          _stateManager.userData?['googleId'] ??
-          _stateManager.userData?['id'];
+          _profileStateManager.userData?['googleId'] ??
+          _profileStateManager.userData?['id'];
 
       if (userId == null) {
         return;
@@ -2169,8 +1826,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = widget.userId ??
-          _stateManager.userData?['googleId'] ??
-          _stateManager.userData?['id'];
+          _profileStateManager.userData?['googleId'] ??
+          _profileStateManager.userData?['id'];
 
       if (userId == null) {
         return null;
@@ -2238,8 +1895,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       final now = DateTime.now();
       final prefs = await SharedPreferences.getInstance();
       final userId = widget.userId ??
-          _stateManager.userData?['googleId'] ??
-          _stateManager.userData?['id'];
+          _profileStateManager.userData?['googleId'] ??
+          _profileStateManager.userData?['id'];
 
       // **MONTH RESET: Check if cache is from different month - always force refresh**
       if (userId != null) {
@@ -2319,8 +1976,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
       // Clear Earnings Cache (Still in SharedPreferences)
       final userId = widget.userId ??
-          _stateManager.userData?['googleId'] ??
-          _stateManager.userData?['id'];
+          _profileStateManager.userData?['googleId'] ??
+          _profileStateManager.userData?['id'];
           
       if (userId != null) {
         await prefs.remove('earnings_cache_$userId');
