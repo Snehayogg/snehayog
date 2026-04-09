@@ -230,7 +230,7 @@ export const uploadVideo = async (req, res) => {
       return res.status(401).json({ error: 'Google ID not found in token' });
     }
 
-    const { videoName, description, videoType, link } = req.body;
+    const { videoName, description, videoType, link, category, tags } = req.body;
 
     // 1. Validate file
     if (!req.file || !req.file.path) {
@@ -353,6 +353,8 @@ export const uploadVideo = async (req, res) => {
       videoHash: videoHash,
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date(),
+      category: category || 'others',
+      tags: Array.isArray(tags) ? tags : [],
       seriesId: req.body.seriesId || null,
       episodeNumber: parseInt(req.body.episodeNumber) || 0,
       finalScore: initialScore,
@@ -446,7 +448,9 @@ export const registerUpload = async (req, res) => {
       duration,
       width,
       height,
-      mimeType
+      mimeType,
+      category,
+      tags
     } = req.body;
 
     const googleId = req.user.googleId;
@@ -523,6 +527,8 @@ export const registerUpload = async (req, res) => {
       videoHash: videoHash,
       likes: 0, views: 0, shares: 0, likedBy: [], comments: [],
       uploadedAt: new Date(),
+      category: category || 'others',
+      tags: Array.isArray(tags) ? tags : [],
       finalScore: initialScore,
       vectorEmbedding: initialEmbedding,
       embeddingVersion: initialEmbedding ? 'v1_minilm' : undefined

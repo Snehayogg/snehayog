@@ -200,8 +200,8 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       uploader: user._id,
       videoName: videoName,
       description: description || '',
-      category: category || '',
-      tags: tags || [],
+      category: category || 'others',
+      tags: Array.isArray(tags) ? tags : [],
       videoType: videoType || 'yog',
       link: link || '',
       videoUrl: cloudflareR2Service.getPublicUrl(key),
@@ -257,7 +257,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       return res.status(400).json({ error: 'No video file uploaded' });
     }
 
-    const { videoName, description, link, crossPostPlatforms } = req.body;
+    const { videoName, description, link, crossPostPlatforms, category, tags } = req.body;
     const userId = req.user.id;
     const videoPath = req.file.path;
 
@@ -359,8 +359,9 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       processingProgress: 0,
       link: link || '', // **FIX: Include link field from request body**
       videoHash: videoHash, // **NEW: Save hash for duplicate detection**
-      seriesId: req.body.seriesId || null, // **NEW: Save series ID for connected episodes**
-      episodeNumber: req.body.episodeNumber ? parseInt(req.body.episodeNumber) : 0 // **NEW: Save episode number**
+      episodeNumber: req.body.episodeNumber ? parseInt(req.body.episodeNumber) : 0, // **NEW: Save episode number**
+      category: category || 'others',
+      tags: Array.isArray(tags) ? tags : []
     });
 
     if (crossPostPlatforms && Array.isArray(crossPostPlatforms)) {
