@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayug/features/video/core/presentation/managers/main_controller.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
@@ -700,15 +701,17 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   );
                 } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => VideoScreen(
-                        initialVideos: filteredVideos,
-                        initialVideoId: episodeId,
+                    final mainController = provider.Provider.of<MainController>(context, listen: false);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => VideoScreen(
+                          initialVideos: filteredVideos,
+                          initialVideoId: episodeId,
+                          parentTabIndex: mainController.currentIndex,
+                        ),
                       ),
-                    ),
-                  );
+                    );
                 }
               },
               child: Stack(

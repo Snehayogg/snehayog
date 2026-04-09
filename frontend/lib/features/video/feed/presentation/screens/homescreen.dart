@@ -579,6 +579,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                   key: _videoScreenKey,
                   initialVideos: AppInitializationManager.instance.initialVideos,
                   isMainYugTab: true, // **NEW: Mark as main feed for tab-active enforcement**
+                  parentTabIndex: 0,
                 )),
                 _buildTabNavigator(1, VayuScreen(key: _vayuScreenKey)),
                 _buildTabNavigator(2, UploadScreen(
