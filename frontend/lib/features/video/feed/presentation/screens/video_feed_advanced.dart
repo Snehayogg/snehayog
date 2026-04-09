@@ -1639,13 +1639,12 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
   @override
   void dispose() {
-    // **NEW: Unregister video observer from MainController**
+    // **1. UNREGISTER FROM EXTERNAL CALLBACKS & OBSERVERS**
     _mainController?.unregisterVideoObserver(
       onPause: _pauseCurrentVideo,
       onResume: _resumeCurrentVideo,
     );
 
-    // **CRITICAL: Unregister legacy callbacks from MainController**
     try {
       _mainController?.unregisterCallbacks();
       AppLogger.log(
@@ -1655,13 +1654,13 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       AppLogger.log('⚠️ VideoFeedAdvanced: Error unregistering legacy callbacks: $e');
     }
 
-    // **ROUTE-POP FIX: Unregister route-pop callback (only registered for main Yug feed)**
     if (!_openedFromProfile) {
       _videoControllerManager.unregisterOnRoutePopped();
     }
 
-    // **CLEANUP: Cancel all subscriptions and timers**
-    _pageController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+
+    // **2. CANCEL ALL SUBSCRIPTIONS & TIMERS IMMEDIATELY**
     _pageChangeDebounceTimer?.cancel();
     _pageChangeTimer?.cancel();
     _preloadTimer?.cancel();
@@ -1669,34 +1668,36 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _adRefreshSubscription?.cancel();
     _connectivitySubscription?.cancel();
     _poolDisposalSubscription?.cancel();
+    _longPressAdAutoHideTimer?.cancel();
+    
     _dubbingSubscriptions.values.forEach((s) => s.cancel());
     _preloadDebounceTimers.values.forEach((timer) => timer.cancel());
     _bufferingTimers.values.forEach((timer) => timer.cancel());
+    _forceShowOverlayTimers.values.forEach((timer) => timer.cancel());
 
-    // **NEW: Clean up views service**
+    // **3. STOP & DISPOSE TRACKERS & MANAGERS**
     _viewTracker.dispose();
-    AppLogger.log('🎯 VideoFeedAdvanced: Disposed ViewsService');
-
-    // **NEW: Clean up background profile preloader**
     _profilePreloader.dispose();
-    AppLogger.log('🚀 VideoFeedAdvanced: Disposed BackgroundProfilePreloader');
+    _videoControllerManager.dispose();
+    AppLogger.log('🎯 VideoFeedAdvanced: Disposed Trackers and Managers');
 
+    // **4. SAVE/STOP VIDEO CONTROLLERS**
     final sharedPool = SharedVideoControllerPool();
     final bool openedFromProfile = _openedFromProfile;
     int savedControllers = 0;
 
-    // **FIX: Create a copy of the pool to avoid modification during iteration**
+    // Create a copy of the pool to avoid modification during iteration
     final controllersToDispose =
         Map<String, VideoPlayerController>.from(_controllerPool);
 
     controllersToDispose.forEach((videoId, controller) {
       try {
-        // **FIX: Remove listeners to avoid memory leaks**
+        // Remove listeners to avoid memory leaks
         controller.removeListener(_bufferingListeners[videoId] ?? () {});
         controller.removeListener(_videoEndListeners[videoId] ?? () {});
 
         if (openedFromProfile) {
-          // **PROFILE FLOW: Fully dispose controllers to free decoder resources**
+          // PROFILE FLOW: Fully dispose controllers to free decoder resources
           try {
             if (controller.value.isInitialized) {
               if (controller.value.isPlaying) {
@@ -1710,37 +1711,20 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
             );
           }
 
-          // **FIX: Remove from shared pool first, then dispose**
           try {
             sharedPool.removeController(videoId);
             controller.dispose();
-            AppLogger.log(
-              '🗑️ VideoFeedAdvanced: Disposed controller for video $videoId (profile flow)',
-            );
           } catch (e) {
-            AppLogger.log(
-              '⚠️ VideoFeedAdvanced: Error disposing controller: $e',
-            );
+            AppLogger.log('⚠️ VideoFeedAdvanced: Error disposing controller: $e');
           }
         } else {
-          // **TAB FLOW: Preserve controller in shared pool for quick resume**
-          // Check if it was playing (requires finding the index for _wasPlayingBeforeNavigation)
-          // Actually, we can use videoId for _wasPlayingBeforeNavigation too if we wanted,
-          // but for now let's just save it.
-
+          // TAB FLOW: Preserve controller in shared pool for quick resume
           if (controller.value.isInitialized && controller.value.isPlaying) {
             controller.pause();
             _controllerStates[videoId] = false;
-            AppLogger.log(
-              '⏸️ VideoFeedAdvanced: Paused video $videoId before saving to shared pool',
-            );
           }
-
           sharedPool.addController(videoId, controller, skipDisposeOld: true);
           savedControllers++;
-          AppLogger.log(
-            '💾 VideoFeedAdvanced: Saved controller for video $videoId (ID) to shared pool',
-          );
         }
       } catch (e) {
         AppLogger.log('⚠️ Error saving controller for video $videoId: $e');
@@ -1750,22 +1734,14 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       }
     });
 
-    AppLogger.log(
-      '💾 VideoFeedAdvanced: Saved $savedControllers controllers to shared pool',
-    );
-
-    // **MEMORY MANAGEMENT: Aggressively clean up when opened from ProfileScreen**
-    // FIX: Removed aggressive cleanup (sharedPool.clearAll()) to prevent disposed controller error
+    AppLogger.log('💾 VideoFeedAdvanced: Saved $savedControllers controllers to shared pool');
 
     // Manage memory for standard flow
     if (savedControllers > 2) {
-      AppLogger.log(
-        '🧹 VideoFeedAdvanced: Triggering memory management (keeping only 2 controllers)',
-      );
       sharedPool.disposeControllersForMemoryManagement();
     }
 
-    // Clear local pools but controllers remain in shared pool for reuse
+    // **5. CLEAR LOCAL MAPS**
     _controllerPool.clear();
     _controllerStates.clear();
     _isBuffering.clear();
@@ -1776,8 +1752,8 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _initializingVideos.clear();
     _preloadRetryCount.clear();
     _preloadedVideos.clear();
-    // Dispose ValueNotifiers
 
+    // **6. DISPOSE VALUENOTIFIERS & UI CONTROLLERS**
     for (final notifier in _showHeartAnimation.values) {
       notifier.dispose();
     }
@@ -1788,33 +1764,30 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     }
     _currentHorizontalPage.clear();
 
-    // **NEW: Dispose VideoControllerManager**
-    _videoControllerManager.dispose();
-    AppLogger.log('🗑️ VideoFeedAdvanced: Disposed VideoControllerManager');
+    for (final notifier in _isBufferingVN.values) {
+      notifier.dispose();
+    }
+    _isBufferingVN.clear();
 
-    // Dispose page controller
+    for (final notifier in _userPausedVN.values) {
+      notifier.dispose();
+    }
+    _userPausedVN.clear();
+
+    for (final notifier in _forceShowOverlayVN.values) {
+      notifier.dispose();
+    }
+    _forceShowOverlayVN.clear();
+
+    _showLongPressAdOverlayVN.dispose();
+
+    // DISPOSE PAGE CONTROLLERS LAST
     _pageController.dispose();
 
-    // Dispose horizontal page controllers
     for (final controller in _horizontalControllers.values) {
       controller.dispose();
     }
     _horizontalControllers.clear();
-
-    // Cancel timers
-    _preloadTimer?.cancel();
-    _pageChangeTimer?.cancel();
-    _preloadDebounceTimer?.cancel();
-    _longPressAdAutoHideTimer?.cancel();
-    _showLongPressAdOverlayVN.dispose();
-
-    // **NEW: Cancel ad refresh subscription and pool disposal watchdog**
-    _adRefreshSubscription?.cancel();
-    _poolDisposalSubscription?.cancel();
-    _connectivitySubscription?.cancel();
-
-    // Remove observer
-    WidgetsBinding.instance.removeObserver(this);
 
     _disableWakelock();
     super.dispose();

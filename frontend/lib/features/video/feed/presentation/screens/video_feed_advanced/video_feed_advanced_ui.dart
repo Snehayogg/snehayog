@@ -436,12 +436,30 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       child: RepaintBoundary(
         child: Stack(
           children: [
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: AspectRatio(
-                aspectRatio: video.aspectRatio,
-                child: _buildVideoThumbnail(video),
-              ),
+            // **THUMBNAIL LAYER: Hides once video starts playing**
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: (controller != null && controllerUsable) 
+                ? controller 
+                : ValueNotifier(VideoPlayerValue.uninitialized()),
+              builder: (context, value, child) {
+                // Hide thumbnail if video is initialized AND has started playing or rendering
+                final bool hideThumbnail = value.isInitialized && 
+                    (value.isPlaying || value.position > Duration.zero);
+                
+                return AnimatedOpacity(
+                  opacity: hideThumbnail ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Align(
+                    alignment: video.aspectRatio < 1.0 
+                        ? Alignment.bottomCenter 
+                        : Alignment.center,
+                    child: AspectRatio(
+                      aspectRatio: video.aspectRatio,
+                      child: _buildVideoThumbnail(video),
+                    ),
+                  ),
+                );
+              },
             ),
 
             // **FEEDBACK: Show spinner while loading, identical to Vayu player**
