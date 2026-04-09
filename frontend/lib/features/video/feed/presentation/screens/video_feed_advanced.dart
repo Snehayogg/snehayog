@@ -28,6 +28,7 @@ import 'package:vayug/features/video/core/data/services/video_view_tracker.dart'
 import 'package:vayug/features/ads/data/services/ad_refresh_notifier.dart';
 import 'package:vayug/features/profile/core/data/services/background_profile_preloader.dart';
 import 'package:vayug/features/profile/core/data/services/profile_preloader.dart';
+import 'package:vayug/features/video/feed/presentation/screens/video_feed_advanced/widgets/video_aspect_surface.dart';
 
 import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayug/features/ads/presentation/widgets/carousel_ad_widget.dart';
@@ -109,7 +110,6 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
   Timer?
       _pageChangeDebounceTimer; // **NEW: Timer for debouncing page rapid scrolls**
   final ShareService _shareService = ShareService();
-
 
   @override
   bool get wantKeepAlive => true;
@@ -581,6 +581,34 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     }
   }
 
+  /// **NEW: Handle automatic recovery when a child detects a disposed controller**
+  void _handleControllerInvalid(int index) {
+    if (!mounted || index < 0 || index >= _videos.length) return;
+
+    final video = _videos[index];
+    final videoId = video.id;
+
+    AppLogger.log(
+        '🩹 SELF-HEAL: Detected disposed controller for $videoId at index $index. Re-initializing...');
+
+    // 1. Synchronous Immediate Cleanup: Ensure next build sees \'null\'
+    _controllerPool.remove(videoId);
+    _controllerStates.remove(videoId);
+    _preloadedVideos.remove(videoId);
+
+    // 2. Refresh the UI to show loading state immediately
+    safeSetState(() {});
+
+    // 3. Trigger async recovery
+    _preloadVideo(index).then((_) {
+      if (mounted) {
+        AppLogger.log('✅ SELF-HEAL: Controller restored for $videoId');
+        safeSetState(() {});
+      }
+    });
+  }
+
+
   void _enableWakelock() {
     if (_wakelockEnabled) return;
     WakelockPlus.enable();
@@ -626,51 +654,54 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       widget.initialVideoId != null && widget.initialVideos == null;
 
   bool _shouldAutoplayForContext(String reason) {
-    if (!_allowAutoplay(reason)) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: blocked by _allowAutoplay (lifecyclePaused or system state)');
+    // **LAYER 1: Visibility Gate (Logic)**
+    
+    // 1. Tab-Active Guard: If tab is hidden, NEVER play audio
+    if (widget.parentTabIndex != null) {
+      final currentTabIndex = _mainController?.currentIndex ?? 0;
+      if (currentTabIndex != widget.parentTabIndex) {
+        AppLogger.log('🚫 AUTOPLAY[$reason]: Parent tab hidden (feedTab=${widget.parentTabIndex}, currentTab=$currentTabIndex)');
+        return false;
+      }
+    } else if (widget.isMainYugTab && (_mainController?.currentIndex != 0)) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: Main Yug tab hidden (currentIndex=${_mainController?.currentIndex})');
       return false;
     }
 
-    // **PRIORITY 1: Auth Loading Guard**
+    // 2. Lifecycle Guard: Foreground only
+    if (!_allowAutoplay(reason)) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: blocked by app lifecycle');
+      return false;
+    }
+
+    // 3. Navigation Route Guard: Top-most screen only
+    final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!isCurrentRoute) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: route obscured (isCurrent=false)');
+      return false;
+    }
+    
+    // 4. Component Visibility Guard
+    if (!_isScreenVisible) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: component hidden (_isScreenVisible=false)');
+      return false;
+    }
+
+    // 5. Auth Loading Guard
     final authController = ref.read(googleSignInProvider);
     if (authController.isLoading) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: Auth is loading');
       return false;
     }
 
-    // **CRITICAL FIX: Tab-Active Guard**
-    // If we have a parent tab index, only play if that tab is currently selected
-    if (widget.parentTabIndex != null) {
-      final currentTabIndex = _mainController?.currentIndex ?? 0;
-      if (currentTabIndex != widget.parentTabIndex) {
-        AppLogger.log('🚫 AUTOPLAY[$reason]: Parent tab not active (feedTab=${widget.parentTabIndex}, currentTab=$currentTabIndex)');
-        return false;
-      }
-    } else if (widget.isMainYugTab && (_mainController?.currentIndex != 0)) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: Main Yug tab not active (currentIndex=${_mainController?.currentIndex})');
-      return false;
-    }
-
-    // **PRIORITY 3: Navigation Context**
-    final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-    if (!isCurrentRoute) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: route obscured (isCurrent=false)');
-      return false;
-    }
-
-    // **ENHANCED: Allow autoplay for profile videos and deep links**
+    // **LAYER 2: Priority/Bypass Logic**
     if (_openedFromProfile || _openedFromDeepLink) {
-      return true;
+      return true; // These already passed the visibility gate above
     }
 
-    // **PRIORITY 4: Physical Visibility**
-    if (!_isScreenVisible) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: screen not visible (_isScreenVisible=false)');
-      return false;
-    }
-
-    if ((_mainController?.currentIndex != 0) && widget.parentTabIndex == null && !(_openedFromProfile || _openedFromDeepLink)) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: Yug tab not active (currentIndex=${_mainController?.currentIndex})');
+    // Additional safeguard for main feed tabs
+    if ((_mainController?.currentIndex != 0) && widget.parentTabIndex == null) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: Yug feed not active');
       return false;
     }
     return true;
@@ -768,45 +799,42 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
   VideoPlayerController? _getController(int index) {
     if (index >= _videos.length) return null;
 
-    final video = _videos[index];
+    final videoId = _videos[index].id;
     final sharedPool = SharedVideoControllerPool();
-    VideoPlayerController? controller = _controllerPool[video.id];
-
-    // **SAFETY CHECK 1: Local Pool validation**
+    
+    // **PRIORITY 1: Check existing local reference with ATOMIC VALIDATION**
+    VideoPlayerController? controller = _controllerPool[videoId];
     if (controller != null) {
-      if (sharedPool.isControllerDisposed(controller)) {
-        AppLogger.log('⚠️ VideoFeedAdvanced: Local controller for ${video.id} DISPOSED. Clearing.');
-        _controllerPool.remove(video.id);
-        _controllerStates.remove(video.id);
-        _preloadedVideos.remove(video.id);
+      if (!sharedPool.isControllerValid(controller)) {
+        AppLogger.log('⚠️ VideoFeed: Local controller for $videoId is STALE. Evicting.');
+        _controllerPool.remove(videoId);
+        _controllerStates.remove(videoId);
+        _preloadedVideos.remove(videoId);
+        _lastAccessedLocal.remove(videoId);
         controller = null;
       } else {
-        return controller; // Active and healthy
+        _lastAccessedLocal[videoId] = DateTime.now();
+        return controller;
       }
     }
 
-    // **SAFETY CHECK 2: Shared Pool validation**
-    try {
-      // Proactively check shared pool
-      final instantController = sharedPool.getControllerForInstantPlay(video.id);
-      if (instantController != null) {
-        if (!sharedPool.isControllerDisposed(instantController)) {
-          AppLogger.log('⚡ INSTANT: Adopting from shared pool for ${video.id}');
-          _controllerPool[video.id] = instantController;
-          _controllerStates[video.id] = false;
-          _preloadedVideos.add(video.id);
-          _lastAccessedLocal[video.id] = DateTime.now();
-          return instantController;
-        } else {
-          // If the pool gave us a disposed one (unlikely now, but safety first), clear it
-          sharedPool.removeController(video.id);
-        }
-      }
-    } catch (_) {
-      sharedPool.removeController(video.id);
+    // **PRIORITY 2: Try to get/adopt from Shared Pool (Global)**
+    controller = sharedPool.getControllerForInstantPlay(videoId);
+    if (!sharedPool.isControllerValid(controller)) {
+      controller = sharedPool.getController(videoId);
     }
 
-    return null; // Must be preloaded/re-initialized
+    // **PRIORITY 3: If valid, adopt into local state**
+    if (sharedPool.isControllerValid(controller)) {
+      AppLogger.log('⚡ VideoFeed: Adopting controller for $videoId from global pool');
+      _controllerPool[videoId] = controller!;
+      _controllerStates[videoId] = false;
+      _preloadedVideos.add(videoId);
+      _lastAccessedLocal[videoId] = DateTime.now();
+      return controller;
+    }
+
+    return null;
   }
 
   /// **HANDLE PAGE CHANGES** - Unified with debouncing and persistence
@@ -827,12 +855,17 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     });
 
     // 4. Handle preloading and resource protection (debounced)
+    // We wait 300ms for the page to "snap" before triggering heavy autoplay logic
     _pageChangeDebounceTimer?.cancel();
     _pageChangeDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted && index == _currentIndex) {
         _handlePageChange(index);
       }
     });
+
+    // 5. IMMEDIATE PRELOAD: Start loading the target video as soon as swipe starts
+    // This reduces the 'black screen' time when the debounce finishes.
+    _preloadVideo(index);
 
     // 5. Scroll Velocity Detection
     final currentTime = DateTime.now();
@@ -882,190 +915,43 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
   /// **PAGE CHANGE HANDLER**
   void _handlePageChange(int index) {
-    if (!mounted) return;
+    if (!mounted || index != _currentIndex) return;
 
+    AppLogger.log('📱 Page changed to index $index. Triggering SNAP autoplay...');
 
-    // **LRU: Track access time for previous index**
-    // Use _previousIndex which was captured in the setter before update
-    if (_previousIndex < _videos.length) {
-      final prevVideo = _videos[_previousIndex];
-      _lastAccessedLocal[prevVideo.id] = DateTime.now();
-      
-      // **NEW: Stop view tracking for previous video**
-      _viewTracker.stopViewTracking(prevVideo.id);
-      
-      // **NEW: Clear userPaused flag so returning to this video autoplays**
+    // 1. Trigger autoplay for the now-centered video
+    _tryAutoplayCurrent();
 
-      _userPaused[prevVideo.id] = false;
-      _userPausedVN[prevVideo.id]?.value = false;
-    }
+    // 2. Refresh the pre-warm window based on new position
+    _preloadNearbyVideos();
 
-    // **OPTIMIZATION: Single Pass Pause - **FIX: Guard against OOB index**
-    if (index >= 0 && index < _videos.length) {
-      _pauseAllOtherVideos(_videos[index].id);
-    }
-    
-    // **IMMEDIATE SYNC: Update internal state (already done in _onPageChanged, but ensuring consistency)**
-    _autoAdvancedForIndex.remove(index);
-
-    // **FIXED: Reset user paused state for the NEW video so it can autoplay**
-    if (index < _videos.length) {
-      final video = _videos[index];
-      _userPaused[video.id] = false;
-      _userPausedVN[video.id]?.value = false;
-    }
-
-    // restoration logic removed
-
-
-
-    // **MEMORY MANAGEMENT: Periodic cleanup on page change**
-    if (index % 10 == 0 &&
-        _videos.length > VideoFeedStateFieldsMixin._videosCleanupThreshold) {
-      _cleanupOldVideosFromList();
-    }
-
-    _reprimeWindowIfNeeded();
-
-    // **CENTRALIZED PRELOADING STRATEGY (Strict Cleanup)**
-    // Uses strict directional logic:
-    // - Down: Keep [n, n+1], Kill [n-1...]
-    // - Up: Keep [n-1, n], Kill [n+1...]
-    if (mounted) {
-      _preloadNearbyVideos();
-    }
-
-    // Safety: ensure newly active video's audio is unmuted
-    final activeController = _controllerPool[_videos[index].id];
-    if (activeController != null && activeController.value.isInitialized) {
-      try {
-        activeController.setVolume(1.0);
-      } catch (_) {}
-    }
-    // No force-unmute; priming excludes current index.
-
-    // **UNIFIED STRATEGY: Use shared pool as primary source (Instant playback)**
-    final sharedPool = SharedVideoControllerPool();
-    VideoPlayerController? controllerToUse;
-
-    if (index < _videos.length) {
-      final video = _videos[index];
-
-      // **INSTANT LOADING: Try to get controller with instant playback guarantee**
-      controllerToUse = sharedPool.getControllerForInstantPlay(video.id);
-
-      if (controllerToUse != null && controllerToUse.value.isInitialized) {
-        AppLogger.log(
-          '⚡ INSTANT: Reusing controller from shared pool for video ${video.id}',
-        );
-
-        // Add to local pool for tracking only
-        _controllerPool[video.id] = controllerToUse;
-        _controllerStates[video.id] = false;
-        _preloadedVideos.add(video.id);
-        _lastAccessedLocal[video.id] = DateTime.now();
-
-
-
-        // **MEMORY MANAGEMENT: Cleanup distant controllers**
-        sharedPool.cleanupDistantControllers(index, keepRange: 3);
-      } else if (sharedPool.isVideoLoaded(video.id)) {
-        // Fallback: Get any available controller
-        controllerToUse = sharedPool.getController(video.id);
-        if (controllerToUse != null && controllerToUse.value.isInitialized) {
-          _controllerPool[video.id] = controllerToUse;
-          _controllerStates[video.id] = false;
-          _preloadedVideos.add(video.id);
-          _lastAccessedLocal[video.id] = DateTime.now();
-
-        }
-      }
-    }
-
-    // **FALLBACK: Check local pool only if shared pool doesn't have it**
-    if (controllerToUse == null &&
-        _controllerPool.containsKey(_videos[index].id)) {
-      controllerToUse = _controllerPool[_videos[index].id];
-      if (controllerToUse != null && !controllerToUse.value.isInitialized) {
-        // **AUTO-CLEANUP: Remove invalid controllers**
-        AppLogger.log('⚠️ Controller exists but not initialized, disposing...');
-        try {
-          controllerToUse.dispose();
-        } catch (e) {
-          AppLogger.log('Error disposing controller: $e');
-        }
-        _controllerPool.remove(_videos[index].id);
-        _controllerStates.remove(_videos[index].id);
-        _preloadedVideos.remove(_videos[index].id);
-        _lastAccessedLocal.remove(_videos[index].id);
-        controllerToUse = null;
-      } else if (controllerToUse != null &&
-          controllerToUse.value.isInitialized) {
-        _lastAccessedLocal[_videos[index].id] = DateTime.now();
-
-      }
-    }
-
-    // **FIXED: Play current video if we have a valid controller**
-    if (controllerToUse != null && controllerToUse.value.isInitialized) {
-      // **CRITICAL FIX: Set firstFrameReady BEFORE the autoplay context check.**
-      // If an obscuring route makes isCurrent=false, we used to return early WITHOUT
-      // setting _firstFrameReady, leaving the video widget permanently unmounted
-      // (stuck on loading spinner) even though audio was playing.
-
-
-      // Controller is ready; ensure context allows autoplay
-      if (!_shouldAutoplayForContext('handlePageChange immediate')) {
-        return;
-      }
-
-      // (Check removed to force autoplay on scroll)
-
-      // **CRITICAL: Pause ALL other videos before playing current video**
-      _pauseAllOtherVideos(_videos[index].id);
-
-      // **FIX: Reset position to start when switching to this video**
-      // This ensures previous session or background play doesn't affect new view
-      controllerToUse.seekTo(Duration.zero);
-
-      controllerToUse.setVolume(1.0);
-      controllerToUse.play();
-      _controllerStates[_videos[index].id] = true;
-      _userPaused[_videos[index].id] = false;
-      _applyLoopingBehavior(controllerToUse);
-      _attachEndListenerIfNeeded(controllerToUse, index);
-      _attachBufferingListenerIfNeeded(controllerToUse, index);
-      _pendingAutoplayAfterLogin = false;
-
-      // **NEW: Start view tracking for current video**
-      if (index < _videos.length) {
-        final currentVideo = _videos[index];
-        _viewTracker.startViewTracking(
-          currentVideo.id,
-          videoUploaderId: currentVideo.uploader.id,
-        );
-      }
-
-
-      // Preload nearby videos for smooth scrolling
-      _preloadNearbyVideosDebounced();
-      return; // Exit early - video is ready!
-    }
-
-    // **FIX: If still no controller, preload and mark as loading immediately**
-    if (!_controllerPool.containsKey(_videos[index].id)) {
-      AppLogger.log(
-        '🔄 Video not preloaded, preloading and will autoplay when ready',
-      );
-      _preloadVideo(index).then((_) {
-        if (mounted && _currentIndex == index) {
-          forcePlayCurrent();
-        }
-      });
-    }
-
-    _preloadNearbyVideosDebounced();
+    // 3. Mark as seen
+    _markCurrentVideoAsSeen();
   }
+
+
+  /// **NEW: Atomic safety helper for getting a valid controller**
+  VideoPlayerController? _getValidController(int index) {
+    if (index < 0 || index >= _videos.length) return null;
+    final videoId = _videos[index].id;
+    final controller = _controllerPool[videoId];
+
+    if (controller == null) return null;
+
+    // **CRITICAL SAFETY CHECK: Global -> Local Sync**
+    final sharedPool = SharedVideoControllerPool();
+    if (!sharedPool.isControllerValid(controller)) {
+      AppLogger.log('⚠️ VideoFeed: Detected stale local reference for video $videoId. Evicting local entry.');
+      _controllerPool.remove(videoId);
+      _controllerStates.remove(videoId);
+      _preloadedVideos.remove(videoId);
+      _lastAccessedLocal.remove(videoId);
+      return null;
+    }
+
+    return controller;
+  }
+
 
   /// **DEBOUNCED PRELOAD: Avoid too many preloads during fast scrolling**
   void _preloadNearbyVideosDebounced() {
@@ -1773,6 +1659,19 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     if (!_openedFromProfile) {
       _videoControllerManager.unregisterOnRoutePopped();
     }
+
+    // **CLEANUP: Cancel all subscriptions and timers**
+    _pageController.dispose();
+    _pageChangeDebounceTimer?.cancel();
+    _pageChangeTimer?.cancel();
+    _preloadTimer?.cancel();
+    _preloadDebounceTimer?.cancel();
+    _adRefreshSubscription?.cancel();
+    _connectivitySubscription?.cancel();
+    _poolDisposalSubscription?.cancel();
+    _dubbingSubscriptions.values.forEach((s) => s.cancel());
+    _preloadDebounceTimers.values.forEach((timer) => timer.cancel());
+    _bufferingTimers.values.forEach((timer) => timer.cancel());
 
     // **NEW: Clean up views service**
     _viewTracker.dispose();

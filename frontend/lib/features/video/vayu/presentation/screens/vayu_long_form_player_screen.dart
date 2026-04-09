@@ -46,11 +46,13 @@ import 'package:url_launcher/url_launcher.dart';
 class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   final VideoModel video;
   final List<VideoModel> relatedVideos;
+  final int? parentTabIndex; // **NEW: Tab context for autoplay logic**
 
   const VayuLongFormPlayerScreen({
     Key? key,
     required this.video,
     this.relatedVideos = const [],
+    this.parentTabIndex,
   }) : super(key: key);
 
   @override
@@ -282,6 +284,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _resumeCurrentVideo() {
     if (mounted && !_lifecyclePaused) {
+      // **TAB-AWARE RESUME GUARD**
+      if (widget.parentTabIndex != null) {
+        final currentTabIndex = _mainController?.currentIndex ?? 0;
+        if (currentTabIndex != widget.parentTabIndex) {
+          AppLogger.log('🚫 VayuPlayer: Tab hidden (belongsTo=${widget.parentTabIndex}, active=$currentTabIndex). Blocking resume.');
+          return;
+        }
+      }
+
       final controller = _controllers[_currentIndex];
       if (controller != null && controller.value.isInitialized && !controller.value.isPlaying) {
         controller.play();

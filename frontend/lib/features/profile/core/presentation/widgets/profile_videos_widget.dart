@@ -367,6 +367,7 @@ class ProfileVideosWidget extends StatelessWidget {
                   builder: (context) => VayuLongFormPlayerScreen(
                     video: video,
                     relatedVideos: displayVideos,
+                    parentTabIndex: 3, // Profile tab index
                   ),
                 ),
               );
@@ -377,6 +378,7 @@ class ProfileVideosWidget extends StatelessWidget {
                   builder: (context) => VideoScreen(
                     initialVideos: displayVideos,
                     initialVideoId: video.id,
+                    parentTabIndex: 3, // Profile tab index
                   ),
                 ),
               );
@@ -697,6 +699,7 @@ class ProfileVideosWidget extends StatelessWidget {
                       builder: (context) => VayuLongFormPlayerScreen(
                         video: selectedEpisode,
                         relatedVideos: filteredVideos,
+                        parentTabIndex: 3, // Profile tab index
                       ),
                     ),
                   );

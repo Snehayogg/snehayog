@@ -39,14 +39,34 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     _poolDisposalSubscription = SharedVideoControllerPool().disposalStream.listen((videoId) {
       if (mounted && _controllerPool.containsKey(videoId)) {
         AppLogger.log('🧹 VideoFeed: Cleaning up stale controller for $videoId (Evicted from SharedPool)');
+        
+        // 1. Remove from local state
         _controllerPool.remove(videoId);
         _controllerStates.remove(videoId);
         _preloadedVideos.remove(videoId);
         
+        // 2. Identify the index of this video in our current feed
+        int videoIndex = -1;
+        try {
+          videoIndex = _videos.indexWhere((v) => v.id == videoId);
+        } catch (_) {}
+
+        // 3. Proactive Recovery: If this is the currently visible video, 
+        // immediately trigger re-initialization so it doesn't get stuck on a spinner.
+        if (videoIndex != -1 && videoIndex == _currentIndex && mounted) {
+          AppLogger.log('🩹 VideoFeed: PROACTIVE recovery triggered for current video at index $videoIndex');
+          
+          // Use Future.microtask to allow the UI to react to the "null" controller first
+          Future.microtask(() {
+            if (mounted && _currentIndex == videoIndex) {
+              _preloadVideo(videoIndex);
+            }
+          });
+        }
+        
         
 
-        // **CRITICAL FIX: Trigger UI rebuild to ensure VideoPlayer widgets 
-        // are removed before they can access the now-disposed controller.**
+        // 4. Trigger UI rebuild to show progress/spinner while healing
         safeSetState(() {});
       }
     });

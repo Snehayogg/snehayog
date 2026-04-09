@@ -100,32 +100,30 @@ class MainController extends ChangeNotifier {
 
   /// **NEW: Fallback method for when VideoManager is not available**
   void _handleIndexChangeFallback(int index) {
-    // If we're leaving the video tab (index 0), pause videos immediately
-    if (_currentIndex == 0) {
-      // IMMEDIATE video pause for ALL observers
-      for (final callback in _pauseObservers) {
-        try {
-          callback();
-        } catch (e) {
-          AppLogger.log('⚠️ MainController: Error in pause observer: $e');
-        }
+    // ALWAYS pause videos when switching tabs to prevent audio leak from Yug, Vayu, or Profile
+    // IMMEDIATE video pause for ALL observers
+    for (final callback in _pauseObservers) {
+      try {
+        callback();
+      } catch (e) {
+        AppLogger.log('⚠️ MainController: Error in pause observer: $e');
       }
-      _pauseVideosCallback?.call();
-
-      // SINGLE safety delay to ensure videos are paused after state transition
-      Future.delayed(const Duration(milliseconds: 150), () {
-        if (_currentIndex != 0) {
-          for (final callback in _pauseObservers) {
-            try {
-              callback();
-            } catch (_) {}
-          }
-          _pauseVideosCallback?.call();
-        }
-      });
     }
+    _pauseVideosCallback?.call();
 
-    // If we're entering the video tab, resume videos
+    // SINGLE safety delay to ensure videos are paused after state transition
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (_currentIndex != index) {
+        for (final callback in _pauseObservers) {
+          try {
+            callback();
+          } catch (_) {}
+        }
+        _pauseVideosCallback?.call();
+      }
+    });
+
+    // If we're entering the video tab (Yug), resume videos
     if (index == 0 && isAppInForeground) {
       // Notify all observers to resume
       for (final callback in _resumeObservers) {

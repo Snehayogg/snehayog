@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/features/video/core/presentation/managers/video_provider.dart';
@@ -33,7 +34,18 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isDisposed => _isDisposed;
 
   void notifyListenersSafe() {
-    if (!_isDisposed) {
+    if (_isDisposed) return;
+
+    // **CRASH PREVENTION: Handle modifications during build cycle**
+    // If the widget tree is currently building, notifying listeners synchronously 
+    // will throw "Tried to modify a provider while the widget tree was building".
+    // We detect this and defer the update to the next frame.
+    final scheduler = WidgetsBinding.instance;
+    if (scheduler.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      scheduler.addPostFrameCallback((_) {
+        if (!_isDisposed) notifyListeners();
+      });
+    } else {
       notifyListeners();
     }
   }

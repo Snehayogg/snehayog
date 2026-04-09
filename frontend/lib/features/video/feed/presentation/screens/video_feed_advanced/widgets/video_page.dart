@@ -13,6 +13,7 @@ class VideoPage extends StatelessWidget {
   final Widget? buffering;
   final Widget? progressBar;
   final bool showPlayer;
+  final VoidCallback? onControllerInvalid;
 
   const VideoPage({
     Key? key,
@@ -24,6 +25,7 @@ class VideoPage extends StatelessWidget {
     this.buffering,
     this.progressBar,
     this.showPlayer = true,
+    this.onControllerInvalid,
   }) : super(key: key);
 
   @override
@@ -72,8 +74,10 @@ class VideoPage extends StatelessWidget {
               }()))
             Positioned.fill(
               child: VideoAspectSurface(
+                key: ValueKey('vas_${controller.hashCode}'),
                 controller: controller!,
                 modelAspectRatio: video.aspectRatio,
+                onControllerInvalid: onControllerInvalid,
               ),
             ),
           if (buffering != null) Positioned.fill(child: buffering!),

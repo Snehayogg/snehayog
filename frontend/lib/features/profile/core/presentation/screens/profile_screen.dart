@@ -159,6 +159,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       // **FIX: Pause any playing videos before switching tabs to prevent audio leak**
       _pauseAllVideoControllers();
       
+      
       _activeProfileTabIndex.value = _tabController.index;
       // Trigger pagination logic if needed when switching tabs
       if (_tabController.index == 0 && _profileStateManager.userVideos.isEmpty) {

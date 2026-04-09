@@ -22,6 +22,11 @@ class SharedVideoControllerPool {
       StreamController<String>.broadcast();
   Stream<String> get disposalStream => _disposalStreamController.stream;
 
+  // **CLEANUP QUEUE: Graceful disposal to prevent race conditions**
+  // Move controllers to a "waiting room" for 200ms before disposing them.
+  final Map<String, VideoPlayerController> _cleanupQueue = {};
+  final Map<String, Timer> _cleanupTimers = {};
+
   // **LRU TRACKING**
   final Map<String, DateTime> _lastAccessed =
       {}; // Track when each video was last accessed
@@ -31,13 +36,13 @@ class SharedVideoControllerPool {
   // **DYNAMIC CONFIG: Hard limit to prevent NO_MEMORY**
   // Android usually supports ~16 hardware decoders, but other apps/services might use them.
   // We stay well below this limit.
-  int _maxPoolSize = 6; // **Increased from 4 to 6 for better multi-screen stability**
+  int _maxPoolSize = 15; // **Increased from 6 to 15 for better multi-screen stability and reactive headroom**
 
   /// **Configure pool based on device capabilities**
   void configurePool({required bool isLowEndDevice}) {
     // High-end: 6 controllers
     // Low-end: 2 controllers (ExoPlayer decoders are heavy on old phones)
-    _maxPoolSize = isLowEndDevice ? 2 : 6;
+    _maxPoolSize = isLowEndDevice ? 6 : 15;
     
     AppLogger.log(
       '📱 SharedPool Configured: Max $_maxPoolSize active controllers '
@@ -68,18 +73,50 @@ class SharedVideoControllerPool {
 
   /// **Check if video controller is already loaded (updates LRU)**
   bool isVideoLoaded(String videoId) {
+    if (_cleanupQueue.containsKey(videoId)) return false; // Treat as not loaded if pending disposal
     return _validatedController(videoId) != null;
   }
 
   /// **Check if a controller is effectively disposed**
   bool isControllerDisposed(VideoPlayerController? controller) {
     if (controller == null) return true;
+    
+    // Check if it's in the cleanup queue (effectively dead for the UI)
+    for (final pending in _cleanupQueue.values) {
+      if (pending == controller) return true;
+    }
+
     try {
       // Accessing value throws if disposed
       final _ = controller.value;
       return false;
     } catch (_) {
       return true;
+    }
+  }
+
+  /// **Check if controller is valid (not disposed, initialized, and no errors)**
+  bool isControllerValid(VideoPlayerController? controller) {
+    if (controller == null) return false;
+    
+    // Check if effectively disposed without property access if possible
+    // (Flutter doesn't provide a direct isDisposed, but accessing value is the standard way)
+    try {
+      final value = controller.value;
+      return value.isInitialized && !value.hasError;
+    } catch (_) {
+      // Accessing value on a disposed controller throws
+      return false;
+    }
+  }
+
+  /// **Safe value lookup: Returns null if controller is disposed**
+  VideoPlayerValue? safeValue(VideoPlayerController? controller) {
+    if (isControllerDisposed(controller)) return null;
+    try {
+      return controller!.value;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -225,14 +262,9 @@ class SharedVideoControllerPool {
       // **CRITICAL FIX: Only dispose if it's a different controller instance**
       // This prevents disposing the controller we're trying to save
       if (oldController != controller && !skipDisposeOld) {
-        oldController?.removeListener(_listeners[videoId] ?? () {});
-        oldController?.dispose();
-        
-        // Notify listeners that this controller is being evicted
-        _disposalStreamController.add(videoId);
-        
+        disposeController(videoId); // Use delayed disposal
         AppLogger.log(
-            '🗑️ SharedPool: Disposed old controller for video: $videoId');
+            '🗑️ SharedPool: Scheduled old controller for disposal: $videoId');
       } else {
         AppLogger.log(
             '♻️ SharedPool: Skipping dispose - same controller instance or skipDisposeOld=true');
@@ -241,6 +273,9 @@ class SharedVideoControllerPool {
       // **NEW: LRU Eviction - Remove least recently used if pool is full**
       _evictLRUIfNeeded(excluding: videoId);
     }
+
+    // Ensure it's not in the cleanup queue anymore if we're adding it back
+    _cancelCleanup(videoId);
 
     _controllerPool[videoId] = controller;
     _controllerStates[videoId] = false; // Not playing initially
@@ -343,41 +378,71 @@ class SharedVideoControllerPool {
     }
   }
 
-  /// **Dispose controller and remove from pool**
+  /// **Dispose controller and remove from pool (with 200ms safety delay)**
   Future<void> disposeController(String videoId) async {
     if (_controllerPool.containsKey(videoId)) {
       final controller = _controllerPool[videoId]!;
       final listener = _listeners[videoId];
       
-      // **CRITICAL: Remove from pool IMMEDIATELY to prevent reuse while disposing**
+      // **1. Remove from active pool IMMEDIATELY**
       _controllerPool.remove(videoId);
       _controllerStates.remove(videoId);
       _listeners.remove(videoId);
-      _lastAccessed.remove(videoId); // Remove LRU tracking
-      _videoIndices.remove(videoId); // Remove index tracking
+      _lastAccessed.remove(videoId);
+      _videoIndices.remove(videoId);
 
-      try {
-        // **PROPER CLEANUP: Pause and mute before disposal**
-        // This ensures audio actually stops before the object is killed
-        if (controller.value.isInitialized) {
-          // Fire and forget pause to avoid blocking UI, but ensure it runs
-          controller.pause(); 
-          controller.setVolume(0.0);
-        }
-        if (listener != null) {
-          controller.removeListener(listener);
-        }
-        
-        // **FIX: Instant disposal to prevent OOM**
-        // Removed delay which caused decoder pile-up during fast scroll
-        controller.dispose();
-      } catch (e) {
-        AppLogger.log('⚠️ SharedPool: Error disposing controller $videoId: $e');
+      // **2. Signal UI immediately via broadcast stream**
+      _disposalStreamController.add(videoId);
+
+      // **3. Move to Cleanup Queue**
+      _cleanupQueue[videoId] = controller;
+      
+      // **4. Schedule actual disposal with 200ms delay**
+      _cleanupTimers[videoId]?.cancel();
+      _cleanupTimers[videoId] = Timer(const Duration(milliseconds: 200), () {
+        _performActualDisposal(videoId, controller, listener);
+      });
+
+      AppLogger.log('⏳ SharedPool: Graceful disposal scheduled for $videoId (200ms buffer)');
+    }
+  }
+
+  void _performActualDisposal(String videoId, VideoPlayerController controller, VoidCallback? listener) {
+    if (!_cleanupQueue.containsKey(videoId)) return;
+    
+    try {
+      // Final sanity check: ensure it's not back in the active pool
+      if (_controllerPool[videoId] == controller) {
+        _cleanupQueue.remove(videoId);
+        _cleanupTimers.remove(videoId);
+        return;
       }
 
-      AppLogger.log('🗑️ SharedPool: Disposed controller for video: $videoId');
+      AppLogger.log('🗑️ SharedPool: Performing final disposal for $videoId');
+      
+      if (controller.value.isInitialized) {
+        controller.pause();
+        controller.setVolume(0.0);
+      }
+      if (listener != null) {
+        controller.removeListener(listener);
+      }
+      controller.dispose();
+    } catch (e) {
+      AppLogger.log('⚠️ SharedPool: Error during final disposal of $videoId: $e');
+    } finally {
+      _cleanupQueue.remove(videoId);
+      _cleanupTimers.remove(videoId);
     }
+  }
 
+  void _cancelCleanup(String videoId) {
+    if (_cleanupQueue.containsKey(videoId)) {
+      _cleanupTimers[videoId]?.cancel();
+      _cleanupTimers.remove(videoId);
+      _cleanupQueue.remove(videoId);
+      AppLogger.log('🔄 SharedPool: Cancelled cleanup for $videoId (Resurrected)');
+    }
   }
 
   /// **Attach listener to controller**
@@ -464,6 +529,20 @@ class SharedVideoControllerPool {
 
     AppLogger.log(
         '✅ SharedPool: Paused controllers${exceptVideoId != null ? ' (except current)' : ''}');
+  }
+
+  /// **Safe pause: Pause controller only if it's not disposed**
+  void safePause(VideoPlayerController? controller) {
+    if (controller == null) return;
+    try {
+      if (!isControllerDisposed(controller) &&
+          controller.value.isInitialized &&
+          controller.value.isPlaying) {
+        controller.pause();
+      }
+    } catch (_) {
+      // Silently fail if disposed mid-check
+    }
   }
 
   /// **Resume specific controller (for better UX)**

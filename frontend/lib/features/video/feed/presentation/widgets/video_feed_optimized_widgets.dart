@@ -4,6 +4,7 @@ import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/ads/data/carousel_ad_model.dart';
 import 'package:vayug/features/ads/presentation/widgets/carousel_ad_widget.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 
 /// Optimized widget components extracted from VideoFeedAdvanced
 /// These widgets use const constructors and RepaintBoundary for better performance
@@ -41,57 +42,68 @@ class VideoProgressBarWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: ValueListenableBuilder<VideoPlayerValue>(
-        valueListenable: controller,
-        builder: (context, value, child) {
-          if (!value.isInitialized) {
+      child: Builder(
+        builder: (context) {
+          // **CRASH-PROOF: Safety Gate**
+          if (!SharedVideoControllerPool().isControllerValid(controller)) {
             return const SizedBox.shrink();
           }
 
-          final duration = value.duration;
-          final position = value.position;
-          final progress = duration.inMilliseconds > 0
-              ? position.inMilliseconds / duration.inMilliseconds
-              : 0.0;
+          return ValueListenableBuilder<VideoPlayerValue>(
+            valueListenable: controller,
+            builder: (context, value, child) {
+              // Final check inside the listener to prevent race conditions
+              if (!SharedVideoControllerPool().isControllerValid(controller)) {
+                return const SizedBox.shrink();
+              }
 
-          return GestureDetector(
-            onPanUpdate: (details) => onSeek(controller, details),
-            onTapDown: (details) => onSeek(controller, details),
-            child: Container(
-              height: 4,
-              color: Colors.black.withValues(alpha: 0.2),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 2,
-                    margin: const EdgeInsets.only(top: 1),
-                    color: Colors.grey.withValues(alpha: 0.2),
-                  ),
-                  Positioned(
-                    top: 1,
-                    left: 0,
-                    child: Container(
-                      height: 2,
-                      width: MediaQuery.of(context).size.width * progress,
-                      color: Colors.green[400],
-                    ),
-                  ),
-                  if (progress > 0)
-                    Positioned(
-                      top: 0,
-                      left: (MediaQuery.of(context).size.width * progress) - 4,
-                      child: Container(
-                        width: 8,
-                        height: 6,
-                        decoration: BoxDecoration(
+              final duration = value.duration;
+              final position = value.position;
+              final progress = duration.inMilliseconds > 0
+                  ? position.inMilliseconds / duration.inMilliseconds
+                  : 0.0;
+
+              return GestureDetector(
+                onPanUpdate: (details) => onSeek(controller, details),
+                onTapDown: (details) => onSeek(controller, details),
+                child: Container(
+                  height: 4,
+                  color: Colors.black.withValues(alpha: 0.2),
+                  child: Stack(
+                    children: [
+                      Container(
+                        height: 2,
+                        margin: const EdgeInsets.only(top: 1),
+                        color: Colors.grey.withValues(alpha: 0.2),
+                      ),
+                      Positioned(
+                        top: 1,
+                        left: 0,
+                        child: Container(
+                          height: 2,
+                          width: MediaQuery.of(context).size.width * progress,
                           color: Colors.green[400],
-                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
+                      if (progress > 0)
+                        Positioned(
+                          top: 0,
+                          left:
+                              (MediaQuery.of(context).size.width * progress) - 4,
+                          child: Container(
+                            width: 8,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: Colors.green[400],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
         },
       ),

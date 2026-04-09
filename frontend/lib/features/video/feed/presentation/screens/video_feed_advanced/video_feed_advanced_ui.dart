@@ -384,35 +384,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     int index,
   ) {
     final String videoId = video.id;
-    bool controllerUsable = false;
-    // **RE-INITIALIZATION TRIGGER: If controller is disposed, restart it immediately**
-    bool isDisposed = false;
-    try {
-      if (controller == null) {
-        isDisposed = true;
-      } else {
-        isDisposed = SharedVideoControllerPool().isControllerDisposed(controller);
-      }
-    } catch (_) {
-      isDisposed = true;
-    }
-
-    if (isDisposed) {
-      controllerUsable = false;
+    // **REACTIVE RECOVERY: Validity is now handled by VideoAspectSurface**
+    // We just need to know if we should show the player or a spinner/error.
+    bool controllerUsable = SharedVideoControllerPool().isControllerValid(controller);
+    
+    if (!controllerUsable && controller != null) {
+      // If we have a controller but it's invalid (disposed), clear it for this build
       controller = null;
-      // Trigger re-initialization in next frame to avoid state mutation during build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          AppLogger.log('🔄 UI: Detected disposed controller for video $index. Re-initializing...');
-          _preloadVideo(index);
-        }
-      });
-    } else {
-      try {
-        controllerUsable = controller!.value.isInitialized;
-      } catch (_) {
-        controllerUsable = false;
-      }
     }
 
     // **NEW: Check for error state**
@@ -880,8 +858,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   Widget _buildVideoProgressBar(VideoPlayerController controller) {
-    // **CRASH-PROOF: Check disposal before passing to progress bar**
-    if (SharedVideoControllerPool().isControllerDisposed(controller)) {
+    // **CRASH-PROOF: Atomic check before passing to progress bar**
+    final sharedPool = SharedVideoControllerPool();
+    if (!sharedPool.isControllerValid(controller)) {
       return const SizedBox.shrink();
     }
 
@@ -1043,9 +1022,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
     return Align(
       alignment: Alignment.bottomCenter,
-      child: AspectRatio(
-        aspectRatio: modelAspectRatio,
-        child: VideoPlayer(controller),
+      child: VideoAspectSurface(
+        key: ValueKey('vas_p_${controller.hashCode}'),
+        controller: controller,
+        modelAspectRatio: modelAspectRatio,
+        onControllerInvalid: () => _handleControllerInvalid(
+            _videos.indexWhere((v) => v.id == currentVideo.id)),
       ),
     );
   }
@@ -1070,9 +1052,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     return Align(
       alignment:
           Alignment.center, // **FIX: Center horizontal videos vertically**
-      child: AspectRatio(
-        aspectRatio: modelAspectRatio,
-        child: VideoPlayer(controller),
+      child: VideoAspectSurface(
+        key: ValueKey('vas_l_${controller.hashCode}'),
+        controller: controller,
+        modelAspectRatio: modelAspectRatio,
+        onControllerInvalid: () => _handleControllerInvalid(
+            _videos.indexWhere((v) => v.id == currentVideo.id)),
       ),
     );
   }
@@ -1105,6 +1090,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
   Widget _buildVideoOverlay(
       VideoModel video, int index, VideoPlayerController? controller) {
+    final sharedPool = SharedVideoControllerPool();
     // **REELS/SHORTS STYLE: Position at absolute bottom with zero spacing**
     return Builder(
       builder: (context) {
@@ -1392,10 +1378,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ValueListenableBuilder<bool>(
               valueListenable: forceShowNotifier,
               builder: (context, forceShow, _) {
-                // **CRASH-PROOF: Defensive check inside the inner builder**
-                // Even if it was alive 1ms ago, check again before building the next layer.
-                if (SharedVideoControllerPool().isControllerDisposed(controller)) {
-                  // Trigger re-fetch and return fallback
+                // **CRASH-PROOF: Sequential safety check**
+                // 1. Safety Gate: Check if valid before any property access
+                if (!sharedPool.isControllerValid(controller)) {
+                  // Trigger recovery: Attempt to fetch/re-init controller
                   Future.microtask(() {
                     if (mounted) {
                       _getController(index);
@@ -1405,28 +1391,34 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   return overlayContent;
                 }
 
-                return ValueListenableBuilder<VideoPlayerValue>(
-                  valueListenable: controller,
-                  builder: (context, value, child) {
-                    bool isPlaying = false;
+                return ListenableBuilder(
+                  listenable: controller,
+                  builder: (context, child) {
                     try {
-                      isPlaying = value.isPlaying;
-                    } catch (_) {
-                      // **SAFETY VALVE**: If value access fails here, it means it was disposed mid-build.
-                      // We silently return the content and trigger a recovery link.
+                      // Final safety check: if listener fired but dispose() already happened
+                      if (sharedPool.isControllerDisposed(controller)) {
+                        return child!;
+                      }
+                      
+                      final value = controller.value;
+                      final bool isPlaying = value.isPlaying;
+                      
+                      // Show overlay if force-showing (double-tap like) OR if paused
+                      final bool shouldShow = forceShow || !isPlaying;
+                      
+                      return AnimatedOpacity(
+                        opacity: shouldShow ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        child: IgnorePointer(
+                          ignoring: !shouldShow,
+                          child: child,
+                        ),
+                      );
+                    } catch (e) {
+                      AppLogger.log('⚠️ UI Overlay: Caught disposal race condition: $e');
                       return child!;
                     }
-                    // Show overlay if force-showing (double-tap like) OR if paused
-                    final bool shouldShow = forceShow || !isPlaying;
-                    return AnimatedOpacity(
-                      opacity: shouldShow ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: IgnorePointer(
-                        ignoring: !shouldShow,
-                        child: child,
-                      ),
-                    );
                   },
                   child: overlayContent,
                 );

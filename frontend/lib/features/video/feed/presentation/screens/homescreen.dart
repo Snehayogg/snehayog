@@ -468,11 +468,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
       print(
           'Homescreen: Switching from index ${mainController.currentIndex} to $index');
 
-      // If leaving video tab, immediately pause videos through MainController
-      if (mainController.currentIndex == 0) {
-        mainController.forcePauseVideos();
+      // **FIX: Pause all videos regardless of source tab to prevent audio leak**
+      mainController.forcePauseVideos();
 
-        // **BACKGROUND PRELOADING: Stop preloading when leaving Yug tab**
+      // **BACKGROUND PRELOADING: Stop preloading when leaving Yug tab (index 0)**
+      if (mainController.currentIndex == 0) {
         _profilePreloader.stopBackgroundPreloading();
       }
 
