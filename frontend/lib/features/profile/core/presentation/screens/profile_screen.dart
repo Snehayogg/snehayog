@@ -1542,7 +1542,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
 
 
-  /// Recommendations tab – shows Top Earners from following (3-column grid)
+  /// Recommendations tab – shows Top Earners from following (Professional List view)
 
   /// **NEW: Build UPI ID Notice Banner**
 

@@ -651,6 +651,8 @@ class ProfileVideosWidget extends StatelessWidget {
   }
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
+    final BuildContext parentContext = context;
+
     AppLogger.log('🎬 ProfileVideosWidget: Showing episode list for series: ${video.seriesId}');
     VayuBottomSheet.show(
       context: context,
@@ -682,19 +684,27 @@ class ProfileVideosWidget extends StatelessWidget {
             return GestureDetector(
               onTap: () {
                 AppLogger.log('🎬 ProfileVideosWidget: Selected episode: $episodeId');
-                Navigator.pop(context);
+                
+                // **FIX: Capture necessary data before popping bottom sheet**
                 final parentType = _normalizedVideoType(video);
                 final filteredVideos = stateManager.userVideos
                     .where((item) => _normalizedVideoType(item) == parentType)
                     .toList(growable: false);
+
+                // **FIX: Use the parentContext (Stable) instead of the bottom sheet context**
+                // This prevents "Navigator operation requested with a context that does not include a Navigator"
+                // or "Provider not found" errors after the sheet is popped.
+                Navigator.pop(context);
+
                 if (parentType == 'vayu') {
                   final selectedEpisodeIndex =
                       filteredVideos.indexWhere((item) => item.id == episodeId);
                   final selectedEpisode = selectedEpisodeIndex >= 0
                       ? filteredVideos[selectedEpisodeIndex]
                       : video;
+                  
                   Navigator.push(
-                    context,
+                    parentContext,
                     MaterialPageRoute(
                       builder: (context) => VayuLongFormPlayerScreen(
                         video: selectedEpisode,
@@ -704,9 +714,10 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                   );
                 } else {
-                    final mainController = provider.Provider.of<MainController>(context, listen: false);
+                  try {
+                    final mainController = provider.Provider.of<MainController>(parentContext, listen: false);
                     Navigator.push(
-                      context,
+                      parentContext,
                       MaterialPageRoute(
                         builder: (context) => VideoScreen(
                           initialVideos: filteredVideos,
@@ -715,6 +726,20 @@ class ProfileVideosWidget extends StatelessWidget {
                         ),
                       ),
                     );
+                  } catch (e) {
+                    AppLogger.log('❌ ProfileVideosWidget: Navigation error: $e');
+                    // Fallback push without MainController dependency if it fails
+                    Navigator.push(
+                      parentContext,
+                      MaterialPageRoute(
+                        builder: (context) => VideoScreen(
+                          initialVideos: filteredVideos,
+                          initialVideoId: episodeId,
+                          parentTabIndex: 3,
+                        ),
+                      ),
+                    );
+                  }
                 }
               },
               child: Stack(

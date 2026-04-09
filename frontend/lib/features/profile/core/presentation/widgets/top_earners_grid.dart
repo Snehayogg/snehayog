@@ -11,7 +11,6 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
-import 'package:vayug/core/design/elevation.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 
 /// Compact grid (3 columns) showing top creators from the user's following list.
@@ -189,29 +188,24 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
       );
     }
 
-    // GRID: 3 columns, Instagram-style tiles
-    return GridView.builder(
+    // LIST: Professional vertical list with horizontal items
+    return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.symmetric(
-        horizontal: AppSpacing.spacing2,
-        vertical: AppSpacing.spacing3,
-      ),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: AppSpacing.spacing2,
-        mainAxisSpacing: AppSpacing.spacing3,
-        childAspectRatio: 0.68,
+        horizontal: AppSpacing.spacing4,
+        vertical: AppSpacing.spacing4,
       ),
       itemCount: _topCreators.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final creator = _topCreators[index];
-        return _buildCreatorTile(creator, index + 1);
+        return _buildCreatorListItem(creator, index + 1);
       },
     );
   }
 
-  Widget _buildCreatorTile(Map<String, dynamic> creator, int rank) {
+  Widget _buildCreatorListItem(Map<String, dynamic> creator, int rank) {
     final userId = creator['userId'] as String?;
     final name = creator['name'] as String? ?? 'Unknown';
     final profilePic = creator['profilePic'] as String?;
@@ -225,130 +219,147 @@ class _TopEarnersGridState extends State<TopEarnersGrid> {
     } else if (rank == 3) {
       badgeColor = const Color(0xFFCD7F32); // bronze
     } else {
-      badgeColor = Colors.grey.shade300;
+      badgeColor = Colors.transparent;
     }
 
     return GestureDetector(
       onTap: userId != null ? () => _navigateToUserProfile(userId) : null,
       child: Container(
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surfacePrimary,
+          color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          boxShadow: AppElevation.shadowMd,
+          border: Border.all(
+            color: AppColors.borderPrimary.withValues(alpha: 0.5),
+            width: 1,
+          ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
           children: [
-            SizedBox(height: AppSpacing.spacing3),
-            // Avatar + rank badge
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border:
-                        Border.all(color: AppColors.borderPrimary, width: 2),
-                    boxShadow: const[
-                       BoxShadow(
-                        color: AppColors.shadowSecondary,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ClipOval(
-                    child: profilePic != null && profilePic.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: profilePic,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: AppColors.backgroundSecondary,
-                              child: const Icon(Icons.person, size: 28),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: AppColors.backgroundSecondary,
-                              child: const Icon(Icons.person, size: 28),
-                            ),
-                          )
-                        : Container(
-                            color: AppColors.backgroundSecondary,
-                            child: const Icon(Icons.person, size: 28),
-                          ),
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.spacing1 + 3,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 2,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: AppColors.shadowSecondary,
-                        blurRadius: 4,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    '$rank',
-                    style: TextStyle(
-                      color: rank <= 3 ? AppColors.textInverse : AppColors.textPrimary,
-                      fontSize: AppTypography.fontSizeXS + 1,
-                      fontWeight: AppTypography.weightBold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: AppSpacing.spacing2),
-            // Name
-            Padding(
-              padding: EdgeInsets.all(AppSpacing.spacing1 + 2),
+            // Rank Number/Badge
+            Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: badgeColor != Colors.transparent 
+                    ? badgeColor 
+                    : AppColors.backgroundPrimary.withValues(alpha: 0.3),
+                shape: BoxShape.circle,
+                boxShadow: rank <= 3 ? [
+                  BoxShadow(
+                    color: badgeColor.withValues(alpha: 0.3),
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  )
+                ] : [],
+              ),
               child: Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+                '$rank',
                 style: TextStyle(
+                  color: rank <= 3 ? AppColors.textInverse : AppColors.textPrimary,
                   fontSize: AppTypography.fontSizeSM,
                   fontWeight: AppTypography.weightBold,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.2,
                 ),
               ),
             ),
-            SizedBox(height: AppSpacing.spacing1 + 2),
-            // Score (Only show if > 0)
+            const SizedBox(width: 12),
+            
+            // Avatar
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.2), 
+                  width: 2,
+                ),
+              ),
+              child: ClipOval(
+                child: profilePic != null && profilePic.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: profilePic,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: AppColors.backgroundSecondary,
+                          child: const Icon(Icons.person, size: 24),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: AppColors.backgroundSecondary,
+                          child: const Icon(Icons.person, size: 24),
+                        ),
+                      )
+                    : Container(
+                        color: AppColors.backgroundSecondary,
+                        child: const Icon(Icons.person, size: 24),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            
+            // Name
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppTypography.fontSizeBase,
+                      fontWeight: AppTypography.weightSemiBold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  if (rank <= 3)
+                    Text(
+                      rank == 1 ? 'Top Creator' : 'Popular Creator',
+                      style: TextStyle(
+                        fontSize: AppTypography.fontSizeXS,
+                        color: AppColors.primary,
+                        fontWeight: AppTypography.weightMedium,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            
+            // Score
             if (score > 0)
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppSpacing.spacing2,
-                  vertical: AppSpacing.spacing1,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.success.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                child: Text(
-                  _formatScore(score),
-                  style: TextStyle(
-                    fontSize: AppTypography.fontSizeXS + 1,
-                    fontWeight: AppTypography.weightBold,
-                    color: AppColors.success,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.trending_up, size: 14, color: AppColors.success),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatScore(score),
+                      style: TextStyle(
+                        fontSize: AppTypography.fontSizeSM,
+                        fontWeight: AppTypography.weightBold,
+                        color: AppColors.success,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            SizedBox(height: AppSpacing.spacing3),
+            
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.chevron_right,
+              color: AppColors.textTertiary,
+              size: 20,
+            ),
           ],
         ),
       ),
