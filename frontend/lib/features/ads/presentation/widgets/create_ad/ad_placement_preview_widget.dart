@@ -60,6 +60,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
     return Center(
       child: Container(
         width: 280,
+        height: 400, // Fixed height to prevent layout crash in SingleChildScrollView
         decoration: BoxDecoration(
           color: Colors.black,
           borderRadius: BorderRadius.circular(30),
@@ -78,12 +79,12 @@ class AdPlacementPreviewWidget extends StatelessWidget {
             children: [
               // Phone notch
               Container(
-                height: 30,
+                height: 25,
                 color: Colors.black,
                 child: Center(
                   child: Container(
-                    width: 150,
-                    height: 25,
+                    width: 100,
+                    height: 18,
                     decoration: BoxDecoration(
                       color: Colors.black,
                       borderRadius: BorderRadius.circular(20),
@@ -188,7 +189,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(5),
             child: Container(
-              height: 400,
+              height: 300,
               color: Colors.grey.shade900,
               child: selectedVideo != null
                   ? const Center(
@@ -258,7 +259,7 @@ class AdPlacementPreviewWidget extends StatelessWidget {
   Widget _buildVideoFeedItem(int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      height: 400,
+      height: 300,
       decoration: BoxDecoration(
         color: Colors.grey.shade900,
         borderRadius: BorderRadius.circular(8),

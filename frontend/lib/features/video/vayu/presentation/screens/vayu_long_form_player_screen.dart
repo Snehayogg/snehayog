@@ -857,6 +857,64 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     );
   }
 
+  void _showShareSuggestionBottomSheet(VideoModel video) {
+    final TextEditingController controller = TextEditingController();
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+    VayuBottomSheet.show<void>(
+      context: context,
+      title: 'Share Suggestion',
+      maxWidth: isLandscape ? 450.0 : null,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Did you face any problem while watching this video? share with us',
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 4,
+              cursorColor: AppColors.primary,
+              decoration: InputDecoration(
+                hintText: 'Type your suggestion here...',
+                hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textTertiary),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.borderPrimary),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                ),
+                filled: true,
+                fillColor: AppColors.backgroundSecondary,
+              ),
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 20),
+            AppButton(
+              onPressed: () {
+                if (controller.text.trim().isEmpty) {
+                  _showSnackBar('Please enter a suggestion', type: VayuSnackBarType.error);
+                  return;
+                }
+                Navigator.pop(context);
+                _showSnackBar('Suggestion shared successfully!', type: VayuSnackBarType.success);
+              },
+              label: 'Share Suggestion',
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openInExternalPlayer(VideoModel video) async {
     if (Theme.of(context).platform == TargetPlatform.android) {
         final intent = AndroidIntent(
@@ -1520,66 +1578,83 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           Expanded(
             child: Text('${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary, fontSize: isPortrait ? 12 : 12)),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (v.link?.isNotEmpty == true) ...[
-                IconButton(
-                  onPressed: () async {
-                    final sanitized = _sanitizeUrl(v.link!);
-                    final url = Uri.parse(sanitized);
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                    } else {
-                      _showSnackBar('Could not open link', type: VayuSnackBarType.error);
-                    }
-                  },
-                  icon: Icon(
-                    Icons.open_in_new_rounded,
-                    color: AppColors.textSecondary,
-                    size: isPortrait ? 20 : 20,
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (v.link?.isNotEmpty == true) ...[
+                    IconButton(
+                      onPressed: () async {
+                        final sanitized = _sanitizeUrl(v.link!);
+                        final url = Uri.parse(sanitized);
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        } else {
+                          _showSnackBar('Could not open link', type: VayuSnackBarType.error);
+                        }
+                      },
+                      icon: Icon(
+                        Icons.open_in_new_rounded,
+                        color: AppColors.textSecondary,
+                        size: isPortrait ? 20 : 20,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Visit Now',
+                    ),
+                  ],
+                  IconButton(
+                    onPressed: () => _showShareOptions(v),
+                    icon: Icon(
+                      Icons.share_outlined,
+                      color: AppColors.textSecondary,
+                      size: isPortrait ? 20 : 20,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    constraints: const BoxConstraints(),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Visit Now',
-                ),
-              ],
-              IconButton(
-                onPressed: () => _showShareOptions(v),
-                icon: Icon(
-                  Icons.share_outlined,
-                  color: AppColors.textSecondary,
-                  size: isPortrait ? 20 : 20,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                constraints: const BoxConstraints(),
-              ),
-              IconButton(
-                onPressed: () { 
-                  _handleToggleSave(index); 
-                }, 
-                icon: Icon(
-                  v.isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, 
-                  color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
-                  size: isPortrait ? 20 : 20,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                constraints: const BoxConstraints(),
-              ),
-              if (v.episodes != null && v.episodes!.isNotEmpty) ...[
-                IconButton(
-                  onPressed: () => _showEpisodeList(context, v),
-                  icon: Icon(
-                    Icons.playlist_play_rounded,
-                    color: AppColors.textSecondary,
-                    size: isPortrait ? 20 : 20,
+                  IconButton(
+                    onPressed: () => _showShareSuggestionBottomSheet(v),
+                    icon: Icon(
+                      Icons.tips_and_updates_outlined,
+                      color: AppColors.textSecondary,
+                      size: isPortrait ? 20 : 20,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Share Suggestion',
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Episodes',
-                ),
-              ],
-            ],
+                  IconButton(
+                    onPressed: () { 
+                      _handleToggleSave(index); 
+                    }, 
+                    icon: Icon(
+                      v.isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, 
+                      color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
+                      size: isPortrait ? 20 : 20,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    constraints: const BoxConstraints(),
+                  ),
+                  if (v.episodes != null && v.episodes!.isNotEmpty) ...[
+                    IconButton(
+                      onPressed: () => _showEpisodeList(context, v),
+                      icon: Icon(
+                        Icons.playlist_play_rounded,
+                        color: AppColors.textSecondary,
+                        size: isPortrait ? 20 : 20,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Episodes',
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ],
       ),

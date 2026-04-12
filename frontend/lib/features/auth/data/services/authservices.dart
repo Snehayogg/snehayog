@@ -295,7 +295,7 @@ class AuthService {
                 Uri.parse('${NetworkHelper.apiBaseUrl}/videos/sync-watch-history'),
                 headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': 'Bearer ${authData['token']}',
+                'Authorization': 'Bearer ${authData['accessToken'] ?? authData['token']}',
                   if (platformId.isNotEmpty) 'x-device-id': platformId,
                 },
                 body: jsonEncode({
@@ -767,9 +767,18 @@ class AuthService {
       if (_cachedProfile != null && _lastProfileFetch != null) {
         final age = DateTime.now().difference(_lastProfileFetch!);
         if (age < _cacheTtl) {
-          AppLogger.log(
-              '♻️ AuthService: Returning cached profile data (${age.inSeconds}s old)');
-          return _cachedProfile;
+          // **NEW: Verify the cached token is still what we have in SharedPreferences**
+          final prefs = await SharedPreferences.getInstance();
+          final currentToken = prefs.getString('jwt_token');
+          
+          if (_cachedProfile!['token'] == currentToken) {
+            AppLogger.log(
+                '♻️ AuthService: Returning cached profile data (${age.inSeconds}s old)');
+            return _cachedProfile;
+          } else {
+            AppLogger.log('⚠️ AuthService: Cached token is stale - forcing fresh fetch');
+            _cachedProfile = null;
+          }
         }
       }
 
@@ -888,11 +897,32 @@ class AuthService {
            throw Exception('No token available for backend verification');
         }
 
-        final response = await httpClientService.get(
-          Uri.parse('${NetworkHelper.usersEndpoint}/profile'),
-          headers: {'Authorization': 'Bearer $token'},
-          timeout: const Duration(seconds: 3),
-        );
+        final response = await () async {
+          // **NEW: Fetch app version and platform for background update**
+          try {
+            final packageInfo = await PackageInfo.fromPlatform();
+            final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+            final platform = PlatformIdService().getPlatformType();
+            
+            return await httpClientService.get(
+              Uri.parse('${NetworkHelper.usersEndpoint}/profile'),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'x-app-version': appVersion,
+                'x-platform': platform,
+              },
+              timeout: const Duration(seconds: 3),
+            );
+          } catch (e) {
+            AppLogger.log('⚠️ AuthService: Error preparing profile headers: $e');
+            // Fallback to basic request
+            return await httpClientService.get(
+              Uri.parse('${NetworkHelper.usersEndpoint}/profile'),
+              headers: {'Authorization': 'Bearer $token'},
+              timeout: const Duration(seconds: 3),
+            );
+          }
+        }();
 
         if (response.statusCode == 200) {
           final userData = jsonDecode(response.body);

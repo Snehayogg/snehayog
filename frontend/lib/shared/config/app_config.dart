@@ -8,8 +8,11 @@ class AppConfig {
   // **NEW: API Version (Date-Based)**
   static const String kApiVersion = '2026-04-02';
 
-  // Set to true to force local development server, false for remote server (Fly/custom domain)
-  static const bool isDevelopment = false;
+  // Set to true to force local development server
+  static const bool isDevelopment = true;
+  
+  // Set to true to use production Cloudflare worker even in development
+  static const bool useProductionWorker = true; 
 
   // Use the explicit flag instead of kReleaseMode
   static bool get _isDevelopment => isDevelopment;
@@ -19,7 +22,9 @@ class AppConfig {
 
   // Find your IP: Windows: ipconfig | Linux/Mac: ifconfig or ip address
   // Make sure your phone/emulator is on the same Wi‑Fi network
-  static const String _localIpBaseUrl = 'http://192.168.0.197:5001';
+  static const String _currentMobileIp = 'http://192.168.0.197:5001';
+  static const String _currentMobileIp2 = 'http://172.20.10.2:5001';
+  static const String _localIpBaseUrl = _currentMobileIp;
 
   // Local development server (localhost) - for web
   static const String _localWebBaseUrl = 'http://localhost:5001';
@@ -34,7 +39,20 @@ class AppConfig {
   static const String _workerDevelopmentUrl = 'http://localhost:8787';
 
   static String get workerUrl {
-    return _isDevelopment ? _workerDevelopmentUrl : _workerProductionUrl;
+    if (!_isDevelopment || useProductionWorker) return _workerProductionUrl;
+
+    // For web development, localhost is the standard
+    if (kIsWeb) return _workerDevelopmentUrl;
+
+    // For mobile development, we MUST use the machine's local IP instead of 'localhost'
+    // This allows the physical device to connect to the computer running the worker.
+    try {
+      final ipUri = Uri.parse(_localIpBaseUrl);
+      return 'http://${ipUri.host}:8787';
+    } catch (e) {
+      // Fallback if parsing fails
+      return _workerDevelopmentUrl;
+    }
   }
 
   // Backend API configuration - Strict Mode

@@ -140,6 +140,7 @@ app.use(cors({
       'http://127.0.0.1', // Localhost alternative (any port)
       /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 port (for Flutter web)
       'http://192.168.0.197:5001', // Local development (User Laptop)
+      'http://172.20.10.2:5001',   // Current Hotspot IP
       'http://10.78.84.104:5001', // Previous Wifi IP
       'http://10.78.84.18:5001', // Current Wifi IP (New)
       'http://172.19.176.1:5001', // vEthernet (Default Switch)

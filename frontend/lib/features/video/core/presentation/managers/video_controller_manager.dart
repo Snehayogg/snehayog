@@ -597,8 +597,38 @@ class VideoControllerManager {
 
   /// **NEW: Handle app lifecycle changes**
   void onAppPaused() {
-    AppLogger.log('⏸️ VideoControllerManager: App paused - pausing all videos');
-    pauseAllVideos();
+    AppLogger.log('⏸️ VideoControllerManager: App paused');
+    onAppBackgrounded();
+  }
+
+  /// **App backgrounded: Perform aggressive cleanup to free memory**
+  void onAppBackgrounded() {
+    AppLogger.log('🧹 VideoControllerManager: App backgrounded - releasing non-active controllers');
+    
+    // 1. Identify the most recently used controller index
+    int? currentIndex;
+    if (_order.isNotEmpty) {
+      currentIndex = _order.last;
+    }
+
+    // 2. Dispose all controllers except the current one
+    if (currentIndex != null) {
+      AppLogger.log('🛡️ VideoControllerManager: Keeping active controller at index $currentIndex, clearing neighbors');
+      
+      // Pause current
+      final controller = _controllers[currentIndex];
+      if (controller != null && controller.value.isInitialized) {
+        controller.pause();
+      }
+
+      // Dispose others
+      final otherIndices = _controllers.keys.where((i) => i != currentIndex).toList();
+      for (final index in otherIndices) {
+        _disposeController(index);
+      }
+    } else {
+      clear();
+    }
   }
 
   void onAppResumed() {

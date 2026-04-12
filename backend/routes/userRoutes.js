@@ -202,6 +202,18 @@ router.get('/profile', verifyToken, async (req, res) => {
       });
     }
 
+    // **NEW: Update app version and last active in background**
+    const appVersion = req.headers['x-app-version'];
+    const platform = req.headers['x-platform']; // Optional, could be used for analytics
+    
+    // Always update lastActive, and update appVersion if provided
+    User.updateOne(query, { 
+      $set: { 
+        lastActive: new Date(),
+        ...(appVersion ? { appVersion } : {})
+      } 
+    }).catch(err => console.error('⚠️ Profile API: Failed to update background stats:', err.message));
+
     // **FIX: Automatic Sync for 0-count profiles**
     // If counts are 0, trigger a background sync to ensure accuracy
     if (currentUser.followerCount === 0 || currentUser.followingCount === 0 || (currentUser.videos || []).length === 0) {

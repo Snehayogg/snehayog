@@ -75,12 +75,14 @@ class VideoAspectSurface extends StatelessWidget {
 
           if (modelAspectRatio < 1.0) {
             // Portrait
-            return FittedBox(
-              fit: BoxFit.contain,
-              child: SizedBox(
-                width: videoWidth,
-                height: videoHeight,
-                child: VideoPlayer(controller),
+            return SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover, // **FIX: Edge-to-edge full screen for vertical videos**
+                child: SizedBox(
+                  width: videoWidth,
+                  height: videoHeight,
+                  child: VideoPlayer(controller),
+                ),
               ),
             );
           } else {

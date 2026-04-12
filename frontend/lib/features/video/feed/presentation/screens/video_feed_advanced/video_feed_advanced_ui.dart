@@ -440,7 +440,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ValueListenableBuilder<VideoPlayerValue>(
               valueListenable: (controller != null && controllerUsable) 
                 ? controller 
-                : ValueNotifier(VideoPlayerValue.uninitialized()),
+                : ValueNotifier(const VideoPlayerValue.uninitialized()),
               builder: (context, value, child) {
                 // Hide thumbnail if video is initialized AND has started playing or rendering
                 final bool hideThumbnail = value.isInitialized && 
@@ -449,15 +449,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 return AnimatedOpacity(
                   opacity: hideThumbnail ? 0.0 : 1.0,
                   duration: const Duration(milliseconds: 300),
-                  child: Align(
-                    alignment: video.aspectRatio < 1.0 
-                        ? Alignment.bottomCenter 
-                        : Alignment.center,
-                    child: AspectRatio(
-                      aspectRatio: video.aspectRatio,
-                      child: _buildVideoThumbnail(video),
-                    ),
-                  ),
+                  child: video.aspectRatio < 1.0 
+                      ? SizedBox.expand(
+                          child: _buildVideoThumbnail(video),
+                        )
+                      : Align(
+                          alignment: Alignment.center,
+                          child: AspectRatio(
+                            aspectRatio: video.aspectRatio,
+                            child: _buildVideoThumbnail(video),
+                          ),
+                        ),
                 );
               },
             ),
@@ -465,7 +467,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             // **FEEDBACK: Show spinner while loading, identical to Vayu player**
             if (controller == null || !controllerUsable)
               Align(
-                alignment: Alignment.bottomCenter,
+                alignment: Alignment.center,
                 child: AspectRatio(
                   aspectRatio: video.aspectRatio,
                   child: const Center(
@@ -936,13 +938,11 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     
     return RepaintBoundary(
       key: ValueKey('player_${video.id}_${langCode}_${controller.hashCode}'),
-      child: Center(
-        child: Hero(
-          tag: 'video_player_${video.id}_$langCode',
-          child: _buildVideoWithCorrectAspectRatio(
-            controller,
-            video,
-          ),
+      child: Hero(
+        tag: 'video_player_${video.id}_$langCode',
+        child: _buildVideoWithCorrectAspectRatio(
+          controller,
+          video,
         ),
       ),
     );
@@ -1038,15 +1038,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       return const SizedBox.shrink();
     }
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: VideoAspectSurface(
-        key: ValueKey('vas_p_${controller.hashCode}'),
-        controller: controller,
-        modelAspectRatio: modelAspectRatio,
-        onControllerInvalid: () => _handleControllerInvalid(
-            _videos.indexWhere((v) => v.id == currentVideo.id)),
-      ),
+    return VideoAspectSurface(
+      key: ValueKey('vas_p_${controller.hashCode}'),
+      controller: controller,
+      modelAspectRatio: modelAspectRatio,
+      onControllerInvalid: () => _handleControllerInvalid(
+          _videos.indexWhere((v) => v.id == currentVideo.id)),
     );
   }
 

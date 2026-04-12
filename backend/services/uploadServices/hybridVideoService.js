@@ -52,32 +52,34 @@ class HybridVideoService {
       const stats = fs.statSync(absoluteVideoPath);
       console.log('📊 Video file size:', stats.size, 'bytes');
       
-      // **SAFE EARLY THUMBNAIL GENERATION**
-      let r2ThumbnailUrl = '';
-      try {
-        console.log('📸 Generating thumbnail early for immediate display...');
-        const thumbnailPath = await this.generateThumbnailWithFFmpeg(absoluteVideoPath, videoName, userId);
-        if (thumbnailPath) {
-          console.log('📤 Uploading early thumbnail to R2...');
-          r2ThumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
-          
-          try {
-            const Video = (await import('../../models/Video.js')).default;
-            const videoRecord = await Video.findById(videoId);
-            if (videoRecord) {
-              videoRecord.thumbnailUrl = r2ThumbnailUrl;
-              await videoRecord.save();
-              console.log('💾 Early Video record updated with thumbnail');
-            }
-          } catch (dbError) {
-              console.warn('⚠️ Safe DB update failed:', dbError.message);
-          }
+        // **SAFE EARLY THUMBNAIL GENERATION**
+        let r2ThumbnailUrl = '';
+        const Video = (await import('../../models/Video.js')).default;
+        const videoRecord = await Video.findById(videoId);
 
-          if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
+        if (videoRecord && videoRecord.thumbnailUrl && videoRecord.thumbnailUrl.startsWith('http')) {
+          console.log('✅ Custom thumbnail already present, skipping generation.');
+          r2ThumbnailUrl = videoRecord.thumbnailUrl;
+        } else {
+          try {
+            console.log('📸 Generating thumbnail early for immediate display...');
+            const thumbnailPath = await this.generateThumbnailWithFFmpeg(absoluteVideoPath, videoName, userId);
+            if (thumbnailPath) {
+              console.log('📤 Uploading early thumbnail to R2...');
+              r2ThumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
+              
+              if (videoRecord) {
+                videoRecord.thumbnailUrl = r2ThumbnailUrl;
+                await videoRecord.save();
+                console.log('💾 Early Video record updated with thumbnail');
+              }
+
+              if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
+            }
+          } catch (thumbError) {
+            console.warn('⚠️ Early thumbnail step failed:', thumbError.message);
+          }
         }
-      } catch (thumbError) {
-        console.warn('⚠️ Early thumbnail step failed:', thumbError.message);
-      }
       
       console.log('📊 Getting original video info...');
       const originalVideoInfo = await this.getOriginalVideoInfo(absoluteVideoPath);

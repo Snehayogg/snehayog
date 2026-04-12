@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
@@ -435,6 +436,7 @@ class _MediaUploaderWidgetState extends ConsumerState<MediaUploaderWidget> {
   }
 
   Future<void> _pickSingleImage() async {
+    FocusScope.of(context).unfocus(); // Dismiss keyboard before opening picker
     final ImagePicker picker = ImagePicker();
     // prevent autoplay on resume
     if (mounted) {
@@ -683,7 +685,7 @@ class _MediaUploaderWidgetState extends ConsumerState<MediaUploaderWidget> {
 
   Future<bool> _validateImageFile(File file) async {
     try {
-      final fileName = file.path.split('/').last.toLowerCase();
+      final fileName = p.basename(file.path).toLowerCase();
       final isSupported = fileName.endsWith('.jpg') ||
           fileName.endsWith('.jpeg') ||
           fileName.endsWith('.png') ||
@@ -715,7 +717,7 @@ class _MediaUploaderWidgetState extends ConsumerState<MediaUploaderWidget> {
 
   Future<bool> _validateVideoFile(File file) async {
     try {
-      final fileName = file.path.split('/').last.toLowerCase();
+      final fileName = p.basename(file.path).toLowerCase();
       final supportedExtensions = ['.mp4', '.webm', '.avi', '.mov', '.mkv'];
 
       if (!supportedExtensions.any((ext) => fileName.endsWith(ext))) {

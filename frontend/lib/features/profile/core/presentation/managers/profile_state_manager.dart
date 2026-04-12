@@ -1242,8 +1242,30 @@ class ProfileStateManager extends ChangeNotifier {
         AppLogger.log(
             '✅ ProfileStateManager: Single video deleted successfully');
 
-        // Remove from local list
+        // 1. Remove from main user videos list
         _userVideos.removeWhere((video) => video.id == videoId);
+        
+        // 2. NEW: Proactively remove from any series episode list locally
+        // This ensures the UI reflects the deletion if the video was part of a series
+        for (int i = 0; i < _userVideos.length; i++) {
+          final video = _userVideos[i];
+          if (video.episodes != null && video.episodes!.isNotEmpty) {
+            final List<Map<String, dynamic>> updatedEpisodes = 
+                List<Map<String, dynamic>>.from(video.episodes!);
+            
+            final int initialCount = updatedEpisodes.length;
+            updatedEpisodes.removeWhere((episode) {
+              final epId = episode['id']?.toString() ?? episode['_id']?.toString();
+              return epId == videoId;
+            });
+            
+            if (updatedEpisodes.length != initialCount) {
+              AppLogger.log('🔗 ProfileStateManager: Removed episode $videoId from series parent ${video.id}');
+              _userVideos[i] = video.copyWith(episodes: updatedEpisodes);
+            }
+          }
+        }
+
         if (!_userVideos.any(_isVideoStillProcessing)) {
           _stopProcessingStatusPolling();
         }
@@ -1264,6 +1286,7 @@ class ProfileStateManager extends ChangeNotifier {
           }
         }
 
+        notifyListenersSafe();
         return true;
       } else {
         throw Exception('Backend deletion failed');
@@ -1277,6 +1300,7 @@ class ProfileStateManager extends ChangeNotifier {
       return false;
     }
   }
+
 
   /// Converts technical error messages to user-friendly messages
   String _getUserFriendlyErrorMessage(dynamic error) {

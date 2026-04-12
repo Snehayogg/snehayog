@@ -186,7 +186,7 @@ class ProfileDialogsWidget {
   }) {
     return ListTile(
       leading: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           color: (iconColor ?? AppColors.textTertiary).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -210,6 +210,45 @@ class ProfileDialogsWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
     );
   }
+
+  static Future<bool> showDeleteConfirmationDialog(
+    BuildContext context, {
+    String title = 'Delete Content?',
+    String message = 'Are you sure you want to delete this? This action cannot be undone.',
+    String confirmLabel = 'Delete',
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          title,
+          style: AppTypography.titleLarge.copyWith(color: AppColors.textPrimary),
+        ),
+        content: Text(
+          message,
+          style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+            ),
+          ),
+          AppButton(
+            onPressed: () => Navigator.pop(context, true),
+            label: confirmLabel,
+            variant: AppButtonVariant.danger,
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
 
   static void showHelpDialog(BuildContext context) {
     showDialog(
@@ -318,35 +357,18 @@ class ProfileDialogsWidget {
             color: Colors.green,
           ),
           _buildFAQItem(
-            question:
-                "YouTube already has monetization. Why switch to Vayug?",
+            question: "Viewers ke liye kya fayde hai?",
             answer:
-                "YouTube has strict entry rules. On Vayug, there's no barrier — creators start building their engagement from the first upload. It's a platform that values your effort, not just your follower count.",
-            icon: Icons.video_library,
-            color: Colors.red,
-          ),
-          _buildFAQItem(
-            question: "Does Vayug have a creator support model?",
-            answer:
-                "Yes — we use a creator-first model where rewards are distributed based on engagement. The system automatically updates your score based on your views and interaction. Our goal is to make creators independent and valued.",
-            icon: Icons.account_balance_wallet,
-            color: Colors.orange,
-          ),
-          _buildFAQItem(
-            question:
-                "What's the point of joining a new app if my followers are on Instagram and YouTube?",
-            answer:
-                "That's exactly why now is the best time — you can be an early creator on a growing platform. Early creators get more reach, visibility, and partnership opportunities. On Vayug, you're not lost in the crowd — your content actually gets discovered.",
-            icon: Icons.trending_up,
-            color: Colors.purple,
-          ),
-          _buildFAQItem(
-            question:
-                "How will I get views or reach on Vayug? New platforms usually have low traffic.",
-            answer:
-                "We're actively promoting creators through in-app boosts and personalized recommendations. Because fewer creators are competing right now, your chances to go viral are much higher. Early users always benefit the most — just like YouTubers who started in 2010.",
+                "Viewers ke liye sabse bada fayda hai 'Ad-free Experience'. Aap bina kisi distraction ke apne favorite show ya videos dekh sakte hai. Saath hi, humara algorithm aapko wahi dikhata hai jo aapke liye value add kare, na ki bekar ki ads.",
             icon: Icons.visibility,
-            color: Colors.blue,
+            color: Colors.green,
+          ),
+          _buildFAQItem(
+            question: "Creators ke liye kya fayde hai?",
+            answer:
+                "Creators ko hum pehle din se monetization ka mauka dete hai. Aapko YouTube ki tarah lambe intezar ki zaroorat nahi hai. Aapki video ki quality aur engagement ke hisaab se aapko rewards milte hai. Early joining se aapko reach bhi zyada milti hai.",
+            icon: Icons.stars,
+            color: Colors.orange,
           ),
           const SizedBox(height: 20),
           AppButton(
@@ -440,17 +462,17 @@ class ProfileDialogsWidget {
       icon: Icons.gavel_rounded,
       iconColor: AppColors.primary,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Column(
+      child: const Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
+        children:  [
+           Text(
             'Policies and contact information',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 8),
+           SizedBox(height: 8),
           // **FIX: Use _LegalItemWidget to provide visual feedback on click**
-          _VerticalLegalItem(
+         const _VerticalLegalItem(
             title: 'Privacy Policy',
             icon: Icons.privacy_tip_outlined,
             url: 'https://snehayog.site/privacy.html',
@@ -476,13 +498,6 @@ class ProfileDialogsWidget {
             url: 'https://snehayog.site/about.html',
           ),
           const SizedBox(height: 8),
-          Center(
-            child: Text(
-              'Version 1.0.0',
-              style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textTertiary, fontSize: 11),
-            ),
-          ),
         ],
       ),
     );

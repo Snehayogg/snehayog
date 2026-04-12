@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 class BannerImageProcessor {
   // Mobile banner specifications - Updated for better mobile banner sizing
@@ -114,7 +115,7 @@ class BannerImageProcessor {
 
       // Create unique filename for processed banner
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final originalName = originalPath.split('/').last.split('.').first;
+      final originalName = p.basenameWithoutExtension(originalPath);
       final processedPath =
           '${tempDir.path}/banner_${originalName}_$timestamp.jpg';
 

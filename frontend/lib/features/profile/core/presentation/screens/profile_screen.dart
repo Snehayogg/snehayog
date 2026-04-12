@@ -27,6 +27,7 @@ import 'package:vayug/features/profile/core/presentation/widgets/profile_static_
 import 'package:vayug/features/ads/data/services/ad_service.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
+import 'package:vayug/features/profile/core/presentation/screens/search_discovery_screen.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
 import 'package:vayug/shared/utils/app_text.dart';
@@ -1415,13 +1416,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         ),
         tooltip: 'Search videos & creators',
         onPressed: () {
-          showSearch(
-            context: context,
-            delegate: VideoCreatorSearchDelegate(),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SearchDiscoveryScreen(),
+            ),
           );
         },
       ),
-      if (isViewingOwnProfile) _buildFeedbackAction(),
+      if (isViewingOwnProfile) ...[
+        _buildHelpAction(),
+        _buildFeedbackAction(),
+      ],
     ];
 
     if (isViewingOwnProfile && stateManager.isSelecting && stateManager.selectedVideoIds.isNotEmpty) {
@@ -1466,6 +1472,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     }
 
     return actions;
+  }
+
+  Widget _buildHelpAction() {
+    return IconButton(
+      icon: const HugeIcon(icon: HugeIcons.strokeRoundedHelpCircle,
+        color: AppColors.primary,
+        size: 20,
+      ),
+      tooltip: 'Help & FAQ',
+      onPressed: _showFAQDialog,
+    );
   }
 
   Widget _buildFeedbackAction() {

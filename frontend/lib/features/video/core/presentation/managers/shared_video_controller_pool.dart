@@ -679,6 +679,34 @@ class SharedVideoControllerPool {
     AppLogger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
+  /// **App backgrounded: Perform aggressive cleanup to free memory**
+  void onAppBackgrounded() {
+    AppLogger.log('🧹 SharedPool: App backgrounded - releasing all controllers except the current one');
+    
+    // 1. Identify most recently accessed video ID
+    String? currentVideoId;
+    if (_lastAccessed.isNotEmpty) {
+      final sortedEntries = _lastAccessed.entries.toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      currentVideoId = sortedEntries.last.key;
+    }
+
+    // 2. Clear all except the current one to free up hardware decoders
+    if (currentVideoId != null) {
+      AppLogger.log('🛡️ SharedPool: Keeping current video $currentVideoId, clearing others');
+      
+      // Pause it first
+      final controller = _controllerPool[currentVideoId];
+      if (controller != null && controller.value.isInitialized) {
+        controller.pause();
+      }
+      
+      clearExcept([currentVideoId]);
+    } else {
+      clearAll();
+    }
+  }
+
   /// **Dispose all resources**
   void dispose() {
     AppLogger.log('🗑️ SharedPool: Disposing all resources');

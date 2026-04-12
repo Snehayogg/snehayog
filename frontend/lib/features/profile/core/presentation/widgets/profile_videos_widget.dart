@@ -12,6 +12,8 @@ import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_pl
 import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
+
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -661,7 +663,7 @@ class ProfileVideosWidget extends StatelessWidget {
       initialChildSize: 0.5,
       minChildSize: 0.3,
       maxChildSize: 0.8,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 4, 16),
       builder: (context, scrollController) {
         return GridView.builder(
           controller: scrollController,
@@ -794,6 +796,49 @@ class ProfileVideosWidget extends StatelessWidget {
                       ),
                     ),
                   ),
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: PopupMenuButton<String>(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'More options',
+                      icon: const Icon(
+                        Icons.more_vert_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                          onSelected: (value) async {
+                            if (value == 'delete') {
+                              final confirm = await ProfileDialogsWidget.showDeleteConfirmationDialog(
+                                context,
+                                title: 'Delete Episode?',
+                                message: 'Are you sure you want to delete this episode?',
+                              );
+
+                              if (confirm == true) {
+                                final success = await stateManager.deleteSingleVideo(episodeId);
+                                if (success && context.mounted) {
+                                  Navigator.pop(context); // Close bottom sheet to refresh state
+                                  // Optionally re-open or the UI will naturally update if handled by state
+                                }
+                              }
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, color: AppColors.error, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Delete', style: TextStyle(color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                    ),
                 ],
               ),
             );

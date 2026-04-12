@@ -142,8 +142,8 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
     }
 
     // Validate file type (basic check)
-    if (!fileType.startsWith('video/')) {
-       return res.status(400).json({ error: 'Only video files are allowed' });
+    if (!fileType.startsWith('video/') && !fileType.startsWith('image/')) {
+       return res.status(400).json({ error: 'Only video or image files are allowed' });
     }
     
     // Max size check (700MB)
@@ -154,7 +154,8 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
     // Generate unique R2 key
     const timestamp = Date.now();
     const cleanFileName = fileName.replace(/[^a-zA-Z0-9]/g, '_');
-    const key = `uploads/raw/${userId}/${timestamp}_${cleanFileName}`;
+    const folder = fileType.startsWith('image/') ? 'uploads/thumbnails' : 'uploads/raw';
+    const key = `${folder}/${userId}/${timestamp}_${cleanFileName}`;
 
     // Get presigned URL
     const uploadUrl = await cloudflareR2Service.getPresignedUploadUrl(key, fileType);
@@ -180,7 +181,7 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
  */
 router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, res) => {
   try {
-    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber } = req.body;
+    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber, thumbnailKey } = req.body;
     const userId = req.user.id;
 
     if (!key || !videoName) {
@@ -205,7 +206,7 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       videoType: videoType || 'yog',
       link: link || '',
       videoUrl: cloudflareR2Service.getPublicUrl(key),
-      thumbnailUrl: '',
+      thumbnailUrl: thumbnailKey ? cloudflareR2Service.getPublicUrl(thumbnailKey) : '',
       processingStatus: 'processing',
       processingProgress: 0,
       processingError: null,
@@ -234,7 +235,7 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
     // 2. Trigger Background Processing
     const r2Url = cloudflareR2Service.getPublicUrl(key);
         
-    processVideoHybrid(newVideo._id, r2Url, videoName, userId, crossPostPlatforms).catch(err => {
+    processVideoHybrid(newVideo._id, r2Url, videoName, userId, crossPostPlatforms, thumbnailKey).catch(err => {
         console.error('❌ Background processing failed for direct upload:', err);
     });
 
@@ -374,7 +375,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     await video.save();
 
     // Start processing in background with proper error handling
-    processVideoHybrid(video._id, videoPath, videoName, userId, crossPostPlatforms).catch(error => {
+    processVideoHybrid(video._id, videoPath, videoName, userId, crossPostPlatforms, null).catch(error => {
       console.error('❌ Background processing failed:', error);
       console.error('❌ Error stack:', error.stack);
     });
@@ -442,7 +443,7 @@ function normalizeVideoUrl(url) {
   return normalizedUrl;
 }
 
-async function processVideoHybrid(videoId, videoPath, videoName, userId, crossPostPlatforms = []) {
+async function processVideoHybrid(videoId, videoPath, videoName, userId, crossPostPlatforms = [], customThumbnailKey = null) {
   try {
     // Sanitize video name for safe file storage in R2
     const sanitizedVideoName = videoName.replace(/[^a-zA-Z0-9\s_-]/g, '_').replace(/\s+/g, '_').substring(0, 50);
@@ -500,7 +501,11 @@ async function processVideoHybrid(videoId, videoPath, videoName, userId, crossPo
     const normalizedThumbnailUrl = normalizeVideoUrl(hybridResult.thumbnailUrl);
 
     video.videoUrl = normalizedVideoUrl; // R2 video URL with FREE bandwidth
-    video.thumbnailUrl = normalizedThumbnailUrl; // R2 thumbnail URL
+    
+    // Only update thumbnail if not manually provided
+    if (normalizedThumbnailUrl && !video.thumbnailUrl) {
+      video.thumbnailUrl = normalizedThumbnailUrl;
+    }
 
     // **NEW: Clear old quality URLs (single format now)**
     video.preloadQualityUrl = null;

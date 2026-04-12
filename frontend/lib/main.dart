@@ -174,39 +174,30 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// **NEW: Pause all videos globally regardless of which screen user is on**
   void _pauseAllVideosGlobally() {
     try {
-      AppLogger.log('⏸️ MyApp: Pausing all videos globally (app minimized)');
+      AppLogger.log('⏸️ MyApp: Pausing and cleaning memory for background');
 
-      // 1. Pause videos from MainController
+      // 1. Pause and cleanup VideoControllerManager (singleton)
       try {
-        final mainController = ref.read(mainControllerProvider);
-        mainController.forcePauseVideos();
-        AppLogger.log('✅ MyApp: Paused videos via MainController');
+        final videoManager = VideoControllerManager();
+        videoManager.onAppPaused(); // This now calls onAppBackgrounded internally
+        AppLogger.log('✅ MyApp: Cleaned VideoControllerManager');
       } catch (e) {
-        AppLogger.log('⚠️ MyApp: Error pausing via MainController: $e');
+        AppLogger.log('⚠️ MyApp: Error cleaning VideoControllerManager: $e');
       }
 
-      // 2. Pause videos from SharedVideoControllerPool (singleton - used across all screens)
+      // 2. Pause and cleanup SharedVideoControllerPool (singleton)
       try {
         final sharedPool = SharedVideoControllerPool();
         sharedPool.pauseAllControllers();
-        AppLogger.log(
-            '✅ MyApp: Paused all videos from SharedVideoControllerPool');
+        sharedPool.onAppBackgrounded(); // Aggressive cleanup
+        AppLogger.log('✅ MyApp: Cleaned SharedVideoControllerPool');
       } catch (e) {
-        AppLogger.log('⚠️ MyApp: Error pausing SharedVideoControllerPool: $e');
+        AppLogger.log('⚠️ MyApp: Error cleaning SharedVideoControllerPool: $e');
       }
-
-      // 3. Pause videos from VideoControllerManager (singleton)
-      try {
-        final videoManager = VideoControllerManager();
-        videoManager.onAppPaused();
-        AppLogger.log('✅ MyApp: Paused videos via VideoControllerManager');
-      } catch (e) {
-        AppLogger.log('⚠️ MyApp: Error pausing VideoControllerManager: $e');
-      }
-
-      AppLogger.log('✅ MyApp: All videos paused globally');
+      
+      AppLogger.log('✅ MyApp: Background memory optimization completed');
     } catch (e) {
-      AppLogger.log('❌ MyApp: Error pausing videos globally: $e');
+      AppLogger.log('❌ MyApp: Error during background cleanup: $e');
     }
   }
 
@@ -328,17 +319,19 @@ class _MainScreenWithLocationCheckState
   }
 
   /// **Handle Get Started button click**
-  void _handleGetStarted() {
-    setState(() {
-      _shouldShowWelcome = false;
-    });
+  void _handleGetStarted() async {
+    // **FIX: Mark onboarding as shown FIRST and await it to ensure persistence**
+    await WelcomeOnboardingService.markWelcomeOnboardingShown();
     
-    // **FIX: Mark onboarding as shown so it doesn't show again**
-    WelcomeOnboardingService.markWelcomeOnboardingShown();
-
-    // Check permissions in background after welcome screen
-    _checkLocationInBackground();
-    _checkGalleryInBackground();
+    if (mounted) {
+      setState(() {
+        _shouldShowWelcome = false;
+      });
+      
+      // Check permissions in background after welcome screen
+      _checkLocationInBackground();
+      _checkGalleryInBackground();
+    }
   }
 
   /// **Check location permission in background without blocking UI**
@@ -360,7 +353,7 @@ class _MainScreenWithLocationCheckState
         // Wait a bit so user sees the main screen first
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            _requestLocationPermission();
+            LocationOnboardingService.showLocationOnboarding(context);
           }
         });
       }
@@ -390,36 +383,7 @@ class _MainScreenWithLocationCheckState
     }
   }
 
-  /// **Request location permission and show dialog if needed**
-  Future<void> _requestLocationPermission() async {
-    if (!mounted) return;
 
-    try {
-
-
-      // Check current permission status first
-      final hasPermission =
-          await LocationOnboardingService.isLocationPermissionGranted();
-
-      if (!hasPermission) {
-        // Show location onboarding dialog
-        final granted =
-            await LocationOnboardingService.showLocationOnboarding(context);
-
-
-
-        if (granted) {
-
-        } else {
-
-        }
-      } else {
-
-      }
-    } catch (e) {
-
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

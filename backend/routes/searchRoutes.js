@@ -4,11 +4,6 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
-// **HELPER: Escape special regex characters to prevent errors**
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 // GET /api/search/videos?q=...&limit=20
 router.get('/videos', async (req, res) => {
   try {
@@ -19,32 +14,102 @@ router.get('/videos', async (req, res) => {
       return res.json({ videos: [] });
     }
 
-    // **FIX: Escape special regex characters for safe searching**
-    const escapedQuery = escapeRegex(q);
-    // eslint-disable-next-line no-console
-    console.log(
-      `🔍 searchRoutes: Searching videos with query="${q}" (escaped="${escapedQuery}")`,
-    );
+    console.log(`🔍 Atlas Compound Search: Querying videos for "${q}"`);
 
-    const videos = await Video.find({
-      videoName: { $regex: escapedQuery, $options: 'i' },
-    })
-      .sort({ uploadedAt: -1 })
-      .limit(limit)
-      // **NEW: Populate uploader so frontend has name/profilePic like main feed**
-      .populate('uploader', 'googleId name profilePic')
-      .lean();
+    // **NEW: COMPOUND SEARCH STRATEGY**
+    // combines Exact Match (Weight 5), Fuzzy Match (Weight 2), and Tags (Weight 1)
+    const videos = await Video.aggregate([
+      {
+        $search: {
+          index: 'default',
+          compound: {
+            should: [
+              // 1. Exact or Partial Match on Video Name (Highest Priority)
+              // This acts like the old regex search but smarter
+              {
+                text: {
+                  query: q,
+                  path: 'videoName',
+                  score: { boost: { value: 5 } }
+                }
+              },
+              // 2. Fuzzy Match on Video Name (Typo Tolerance)
+              {
+                text: {
+                  query: q,
+                  path: 'videoName',
+                  fuzzy: { maxEdits: 1, prefixLength: 1 },
+                  score: { boost: { value: 2 } }
+                }
+              },
+              // 3. Search in Tags
+              {
+                text: {
+                  query: q,
+                  path: 'tags',
+                  score: { boost: { value: 1 } }
+                }
+              }
+            ],
+            // **OPTIONAL: Minimum should match. We keep it at 1 so any match counts.**
+            minimumShouldMatch: 1
+          }
+        }
+      },
+      { $limit: limit },
+      // Populate uploader
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'uploader',
+          foreignField: '_id',
+          as: 'uploader'
+        }
+      },
+      { $unwind: '$uploader' },
+      // Project final fields for frontend
+      {
+        $project: {
+          score: { $meta: 'searchScore' },
+          videoName: 1,
+          videoUrl: 1,
+          thumbnailUrl: 1,
+          uploader: { _id: 1, googleId: 1, name: 1, profilePic: 1 },
+          videoType: 1,
+          duration: 1,
+          uploadedAt: 1,
+          views: 1,
+          likes: 1,
+          category: 1,
+          tags: 1,
+          videoHash: 1,
+          hlsPlaylistUrl: 1,
+          hlsMasterPlaylistUrl: 1,
+          seriesId: 1,
+          episodeNumber: 1
+        }
+      }
+    ]);
 
-    // eslint-disable-next-line no-console
-    console.log(
-      `✅ searchRoutes: Found ${videos.length} videos for query="${q}"`,
-    );
+    const normalized = videos.map(v => ({
+      ...v,
+      id: v._id.toString()
+    }));
 
-    return res.json({ videos });
+    return res.json({ videos: normalized });
+    
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('❌ searchRoutes: Error searching videos', err);
-    return res.status(500).json({ error: 'Failed to search videos' });
+    console.error('❌ Atlas Search Error (videos):', err);
+    // Legacy Regex Fallback
+    const fallback = await Video.find({
+      videoName: { $regex: q, $options: 'i' }
+    })
+    .limit(limit)
+    .populate('uploader', 'googleId name profilePic')
+    .sort({ uploadedAt: -1 })
+    .lean();
+    
+    return res.json({ videos: fallback });
   }
 });
 
@@ -58,35 +123,62 @@ router.get('/creators', async (req, res) => {
       return res.json({ creators: [] });
     }
 
-    // **FIX: Escape special regex characters for safe searching**
-    const escapedQuery = escapeRegex(q);
-    // eslint-disable-next-line no-console
-    console.log(`🔍 searchRoutes: Searching creators with query="${q}" (escaped="${escapedQuery}")`);
+    const creators = await User.aggregate([
+      {
+        $search: {
+          index: 'default',
+          compound: {
+            should: [
+              {
+                text: {
+                  query: q,
+                  path: 'name',
+                  score: { boost: { value: 3 } }
+                }
+              },
+              {
+                text: {
+                  query: q,
+                  path: 'name',
+                  fuzzy: { maxEdits: 1 }
+                }
+              }
+            ]
+          }
+        }
+      },
+      { $limit: limit },
+      {
+        $project: {
+          score: { $meta: 'searchScore' },
+          _id: 1,
+          googleId: 1,
+          name: 1,
+          profilePic: 1,
+          bio: 1,
+          followers: 1,
+          createdAt: 1
+        }
+      }
+    ]);
 
-    const creators = await User.find({
-      name: { $regex: escapedQuery, $options: 'i' },
-    })
-      .select('_id googleId name profilePic bio followers createdAt') // **FIXED: Added _id and bio so frontend UserModel.id = MongoDB _id**
-      .sort({ 'followers.length': -1 })
-      .limit(limit)
-      .lean();
-
-    // Normalize for frontend convenience
     const normalized = creators.map((u) => ({
       ...u,
-      id: u.googleId || u._id, // Prioritize googleId for seamless profile loading
-      _id: u._id, // Keep original _id explicitly available
+      id: u.googleId || u._id.toString(),
+      _id: u._id,
       followersCount: Array.isArray(u.followers) ? u.followers.length : 0,
     }));
 
-    // eslint-disable-next-line no-console
-    console.log(`✅ searchRoutes: Found ${normalized.length} creators for query="${q}"`);
-
     return res.json({ creators: normalized });
+    
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('❌ searchRoutes: Error searching creators', err);
-    return res.status(500).json({ error: 'Failed to search creators' });
+    console.error('❌ Atlas Search Error (creators):', err);
+    const fallback = await User.find({
+      name: { $regex: q, $options: 'i' }
+    })
+    .limit(limit)
+    .lean();
+    return res.json({ creators: fallback.map(u => ({...u, id: u.googleId || u._id.toString()})) });
   }
 });
 

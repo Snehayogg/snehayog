@@ -1,13 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
-import 'package:vayug/shared/config/app_config.dart';
+import 'package:path/path.dart' as p;
 import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Unified media upload service backed by Cloudflare R2 (via your backend APIs).
-/// Replaces the old "CloudinaryService" naming which was confusing.
 class CloudflareR2Service {
+  final AuthService authService = AuthService();
+
   static final CloudflareR2Service _instance =
       CloudflareR2Service._internal();
   factory CloudflareR2Service() => _instance;
@@ -15,14 +18,26 @@ class CloudflareR2Service {
 
   /// Get direct upload URL from Worker
   Future<Map<String, dynamic>> _getUploadUrl(String fileName, String folder) async {
-    final authService = AuthService();
-    final userData = await authService.getUserData();
+    final userData = await authService.getUserData(forceRefresh: true); // Force fresh token
     if (userData == null) throw Exception('User not authenticated');
 
+    final token = userData['token'] as String?;
+    if (token == null) throw Exception('No authentication token found');
+
+    // **DIAGNOSTIC: Log token structure without revealing secret parts**
+    final segments = token.split('.');
+    AppLogger.log('🔍 CloudflareR2Service: Token segment count: ${segments.length}');
+    if (segments.length == 3) {
+      AppLogger.log('🔍 CloudflareR2Service: Token appears to be a valid JWT format');
+      AppLogger.log('🔍 CloudflareR2Service: Token prefix: ${token.substring(0, min(10, token.length))}...');
+    } else {
+      AppLogger.log('⚠️ CloudflareR2Service: Token is NOT a 3-part JWT! This will fail at the Worker.');
+    }
+
     final response = await http.get(
-      Uri.parse('${NetworkHelper.uploadUrlEndpoint}?filename=$fileName&folder=$folder'),
+      Uri.parse('${NetworkHelper.uploadUrlEndpoint}?filename=${Uri.encodeComponent(fileName)}&folder=${Uri.encodeComponent(folder)}'),
       headers: {
-        'Authorization': 'Bearer ${userData['token']}',
+        'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
     );
@@ -30,23 +45,54 @@ class CloudflareR2Service {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
+      AppLogger.log('❌ CloudflareR2Service: Worker rejected token!');
+      AppLogger.log('❌ Status Code: ${response.statusCode}');
+      AppLogger.log('❌ Response Body: ${response.body}');
+      
+      if (response.body.contains('Invalid Token')) {
+        AppLogger.log('💡 TIP: "Invalid Token" from Worker means the signature verification failed.');
+        AppLogger.log('💡 TIP: Ensure your backend JWT_SECRET matches the Worker\'s JWT_SECRET.');
+      }
+      
       throw Exception('Failed to get upload URL: ${response.body}');
     }
   }
 
-  /// Perform binary PUT upload to R2
-  Future<void> _binaryPutUpload(String uploadUrl, File file) async {
+  Future<void> _binaryPutUpload(String uploadUrl, File file, String mimeType) async {
     final bytes = await file.readAsBytes();
     final response = await http.put(
       Uri.parse(uploadUrl),
       body: bytes,
       headers: {
-        'Content-Type': 'application/octet-stream',
+        'Content-Type': mimeType,
       },
     );
 
-    if (response.statusCode != 200) {
+    if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Binary upload failed: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  String _getMimeType(String filePath) {
+    final extension = p.extension(filePath).toLowerCase();
+    switch (extension) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.gif':
+        return 'image/gif';
+      case '.webp':
+        return 'image/webp';
+      case '.mp4':
+        return 'video/mp4';
+      case '.mov':
+        return 'video/quicktime';
+      case '.webm':
+        return 'video/webm';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -55,7 +101,7 @@ class CloudflareR2Service {
     try {
       if (!await imageFile.exists()) throw Exception('Image file does not exist');
       
-      final fileName = imageFile.path.split('/').last.toLowerCase();
+      final fileName = p.basename(imageFile.path).toLowerCase();
       final targetFolder = folder ?? 'snehayog/ads/images';
       
       AppLogger.log('🔍 CloudflareR2Service: Getting signed URL for image...');
@@ -64,7 +110,8 @@ class CloudflareR2Service {
       final publicUrl = uploadData['publicUrl'];
 
       AppLogger.log('🔍 CloudflareR2Service: Uploading image to R2...');
-      await _binaryPutUpload(uploadUrl, imageFile);
+      final mimeType = _getMimeType(imageFile.path);
+      await _binaryPutUpload(uploadUrl, imageFile, mimeType);
 
       AppLogger.log('✅ CloudflareR2Service: Image uploaded successfully to $publicUrl');
       return publicUrl;
@@ -84,7 +131,7 @@ class CloudflareR2Service {
     bool enableHLS = true,
   }) async {
     try {
-      final fileName = videoFile.path.split('/').last.toLowerCase();
+      final fileName = p.basename(videoFile.path).toLowerCase();
       final targetFolder = folder ?? 'snehayog/videos';
 
       AppLogger.log('🔍 CloudflareR2Service: Getting signed URL for video...');
@@ -93,7 +140,8 @@ class CloudflareR2Service {
       final r2Key = uploadData['key'];
 
       AppLogger.log('🔍 CloudflareR2Service: Uploading video to R2...');
-      await _binaryPutUpload(uploadUrl, videoFile);
+      final mimeType = _getMimeType(videoFile.path);
+      await _binaryPutUpload(uploadUrl, videoFile, mimeType);
 
       AppLogger.log('🔍 CloudflareR2Service: Registering upload with backend...');
       final authService = AuthService();

@@ -462,7 +462,7 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return SingleChildScrollView(
-      key: const PageStorageKey('createAdScroll'),
+      physics: const AlwaysScrollableScrollPhysics(), // Ensure scrolling is always possible
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       controller: _scrollController,
       padding: EdgeInsets.fromLTRB(
@@ -1732,7 +1732,7 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
         errorMessage = AppText.get('ad_error_network');
       } else if (errorMessage.contains('upload') ||
           errorMessage.contains('media')) {
-        errorMessage = AppText.get('ad_error_media_upload');
+        errorMessage = "${AppText.get('ad_error_media_upload')}: $errorMessage";
       } else if (errorMessage.contains('payment') ||
           errorMessage.contains('billing')) {
         errorMessage = AppText.get('ad_error_payment');
@@ -1748,6 +1748,8 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
       } else if (errorMessage.contains('forbidden') ||
           errorMessage.contains('403')) {
         errorMessage = AppText.get('ad_error_forbidden');
+      } else if (errorMessage.contains('Invalid Token')) {
+        errorMessage = "🔐 Authentication Error: Your session token is invalid for the ad server. Please try logging out and logging back in. If the issue persists, your backend JWT_SECRET may be mismatched with the Cloudflare Worker secret.";
       }
 
       setState(() {
