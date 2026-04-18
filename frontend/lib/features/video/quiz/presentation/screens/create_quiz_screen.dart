@@ -194,23 +194,16 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
   }
 
   Widget _buildQuizRow(int index, QuizModel quiz) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSecondary.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.quiz_rounded, color: AppColors.textPrimary, size: 20),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
         ),
+        child: const Icon(Icons.quiz_rounded, color: AppColors.textPrimary, size: 20),
+      ),
         title: Text(
           quiz.question.isEmpty ? 'New Question' : quiz.question,
           maxLines: 1,
@@ -236,8 +229,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
           ],
         ),
         onTap: () => _showQuizEditor(index),
-      ),
-    );
+      );
   }
 
   void _showQuizEditor(int index) {
@@ -276,13 +268,15 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
   late TextEditingController _questionController;
   late TextEditingController _timeController;
   late List<TextEditingController> _optionControllers;
+  late QuizModel _localQuiz;
 
   @override
   void initState() {
     super.initState();
-    _questionController = TextEditingController(text: widget.quiz.question);
-    _timeController = TextEditingController(text: widget.quiz.timestamp.toStringAsFixed(1));
-    _optionControllers = widget.quiz.options
+    _localQuiz = widget.quiz;
+    _questionController = TextEditingController(text: _localQuiz.question);
+    _timeController = TextEditingController(text: _localQuiz.timestamp.toStringAsFixed(1));
+    _optionControllers = _localQuiz.options
         .map((opt) => TextEditingController(text: opt))
         .toList();
   }
@@ -301,11 +295,18 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
     final val = double.tryParse(_timeController.text);
     if (val != null) {
       final clamped = val.clamp(0.0, widget.maxDuration);
-      widget.onChanged(widget.quiz.copyWith(timestamp: clamped));
+      setState(() {
+        _localQuiz = _localQuiz.copyWith(timestamp: clamped);
+      });
+      widget.onChanged(_localQuiz);
       if (clamped != val) {
         _timeController.text = clamped.toStringAsFixed(1);
       }
     }
+  }
+
+  void _onQuizContentChanged() {
+    widget.onChanged(_localQuiz);
   }
 
   @override
@@ -347,7 +348,10 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
             TextField(
               controller: _questionController,
               onChanged: (val) {
-                widget.onChanged(widget.quiz.copyWith(question: val));
+                setState(() {
+                  _localQuiz = _localQuiz.copyWith(question: val);
+                });
+                _onQuizContentChanged();
               },
               maxLines: 2,
               decoration: InputDecoration(
@@ -395,12 +399,15 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
                 overlayColor: AppColors.primary.withValues(alpha: 0.1),
               ),
               child: Slider(
-                value: widget.quiz.timestamp.clamp(0.0, widget.maxDuration),
+                value: _localQuiz.timestamp.clamp(0.0, widget.maxDuration),
                 min: 0,
                 max: widget.maxDuration > 0 ? widget.maxDuration : 1.0,
                 onChanged: (val) {
-                  widget.onChanged(widget.quiz.copyWith(timestamp: val));
-                  _timeController.text = val.toStringAsFixed(1);
+                  setState(() {
+                    _localQuiz = _localQuiz.copyWith(timestamp: val);
+                    _timeController.text = val.toStringAsFixed(1);
+                  });
+                  _onQuizContentChanged();
                 },
               ),
             ),
@@ -410,16 +417,18 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
             // Options List
             const Text('OPTIONS & CORRECT ANSWER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.8)),
             AppSpacing.vSpace16,
-            ...List.generate(widget.quiz.options.length, (optIndex) {
-              final isCorrect = widget.quiz.correctIndex == optIndex;
+            ...List.generate(_localQuiz.options.length, (optIndex) {
+              final isCorrect = _localQuiz.correctIndex == optIndex;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
                     GestureDetector(
                       onTap: () {
-                        widget.onChanged(widget.quiz.copyWith(correctIndex: optIndex));
-                        setState(() {});
+                        setState(() {
+                          _localQuiz = _localQuiz.copyWith(correctIndex: optIndex);
+                        });
+                        _onQuizContentChanged();
                       },
                       child: Container(
                         width: 44,
@@ -437,9 +446,12 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
                       child: TextField(
                         controller: _optionControllers[optIndex],
                         onChanged: (val) {
-                          final newOptions = List<String>.from(widget.quiz.options);
+                          final newOptions = List<String>.from(_localQuiz.options);
                           newOptions[optIndex] = val;
-                          widget.onChanged(widget.quiz.copyWith(options: newOptions));
+                          setState(() {
+                            _localQuiz = _localQuiz.copyWith(options: newOptions);
+                          });
+                          _onQuizContentChanged();
                         },
                         decoration: InputDecoration(
                           hintText: 'Option ${optIndex + 1}',
@@ -462,19 +474,20 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
                         ),
                       ),
                     ),
-                    if (widget.quiz.options.length > 2)
+                    if (_localQuiz.options.length > 2)
                       IconButton(
                         icon: const Icon(Icons.remove_circle_outline, size: 22, color: Colors.redAccent),
                         onPressed: () {
                           setState(() {
                             _optionControllers.removeAt(optIndex);
+                            final newOptions = List<String>.from(_localQuiz.options);
+                            newOptions.removeAt(optIndex);
+                            _localQuiz = _localQuiz.copyWith(
+                              options: newOptions,
+                              correctIndex: _localQuiz.correctIndex >= newOptions.length ? 0 : _localQuiz.correctIndex,
+                            );
                           });
-                          final newOptions = List<String>.from(widget.quiz.options);
-                          newOptions.removeAt(optIndex);
-                          widget.onChanged(widget.quiz.copyWith(
-                            options: newOptions,
-                            correctIndex: widget.quiz.correctIndex >= newOptions.length ? 0 : widget.quiz.correctIndex,
-                          ));
+                          _onQuizContentChanged();
                         },
                       ),
                   ],
@@ -486,9 +499,10 @@ class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
               onPressed: () {
                 setState(() {
                   _optionControllers.add(TextEditingController());
+                  final newOptions = List<String>.from(_localQuiz.options)..add('');
+                  _localQuiz = _localQuiz.copyWith(options: newOptions);
                 });
-                final newOptions = List<String>.from(widget.quiz.options)..add('');
-                widget.onChanged(widget.quiz.copyWith(options: newOptions));
+                _onQuizContentChanged();
               },
               icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
               label: const Text('Add Option', style: TextStyle(fontWeight: FontWeight.bold)),
