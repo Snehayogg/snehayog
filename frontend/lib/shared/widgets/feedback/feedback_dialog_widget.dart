@@ -185,21 +185,24 @@ class _FeedbackDialogWidgetState extends State<FeedbackDialogWidget> {
                 ),
                const SizedBox(height: 24),
               
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (index) {
-                  final filled = index < _rating.round();
-                  return IconButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    constraints: const BoxConstraints(),
-                    icon: Icon(
-                      filled ? Icons.star : Icons.star_border,
-                      color: filled ? Colors.amber : Colors.grey,
-                      size: 40,
-                    ),
-                    onPressed: () => setState(() => _rating = index + 1.0),
-                  );
-                }),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final filled = index < _rating.round();
+                    return IconButton(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      constraints: const BoxConstraints(),
+                      icon: Icon(
+                        filled ? Icons.star : Icons.star_border,
+                        color: filled ? Colors.amber : Colors.grey,
+                        size: 40,
+                      ),
+                      onPressed: () => setState(() => _rating = index + 1.0),
+                    );
+                  }),
+                ),
               ),
               const SizedBox(height: 24),
               TextFormField(

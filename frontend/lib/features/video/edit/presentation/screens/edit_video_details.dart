@@ -5,6 +5,8 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/video/upload/presentation/widgets/quiz_editor_widget.dart';
+import 'package:vayug/features/video/quiz/presentation/screens/create_quiz_screen.dart';
 
 class EditVideoDetails extends StatefulWidget {
   final VideoModel video;
@@ -19,6 +21,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
   late TextEditingController _linkController;
   late TextEditingController _tagsController;
   late List<Map<String, dynamic>> _episodes;
+  late List<QuizModel> _quizzes;
   String? _seriesId;
   final VideoService _videoService = VideoService();
   bool _isSaving = false;
@@ -30,6 +33,8 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
     _titleController = TextEditingController(text: widget.video.videoName);
     _linkController = TextEditingController(text: widget.video.link ?? '');
     _tagsController = TextEditingController(text: widget.video.tags?.join(', ') ?? '');
+    
+    _quizzes = widget.video.quizzes != null ? List<QuizModel>.from(widget.video.quizzes!) : [];
     
     // Initialize episodes and ensure the current video is IN the list
     final episodesFromVideo = widget.video.episodes ?? [];
@@ -84,6 +89,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
         newTitle,
         link: newLink,
         tags: newTags,
+        quizzes: _quizzes,
       );
 
       // 2. Handle Series Linking (Bulk Update)
@@ -123,6 +129,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             tags: newTags,
             seriesId: '', // Explicitly clear
             episodeNumber: 0, // Explicitly clear
+            quizzes: _quizzes,
           );
         }
 
@@ -244,6 +251,69 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             AppSpacing.vSpace8,
             _buildEpisodeManager(),
             
+            AppSpacing.vSpace24,
+            InkWell(
+              onTap: () async {
+                final List<QuizModel>? result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CreateQuizScreen(
+                      initialQuizzes: _quizzes,
+                      videoDurationInSeconds: widget.video.duration.inSeconds.toDouble(),
+                    ),
+                  ),
+                );
+                if (result != null) {
+                  setState(() {
+                    _quizzes = result;
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundSecondary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.add_task_rounded, color: AppColors.primary, size: 20),
+                    ),
+                    AppSpacing.hSpace12,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Manage Quizzes',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            _quizzes.isEmpty 
+                                ? 'Add questions to the video' 
+                                : '${_quizzes.length} quizzes added',
+                            style: TextStyle(
+                              fontSize: 12, 
+                              color: _quizzes.isEmpty ? AppColors.textSecondary : AppColors.primary,
+                              fontWeight: _quizzes.isEmpty ? FontWeight.normal : FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textTertiary),
+                  ],
+                ),
+              ),
+            ),
+            
             AppSpacing.vSpace32,
           ],
         ),
@@ -280,7 +350,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
                   leading: Text('${index + 1}', style: AppTypography.titleSmall.copyWith(color: isCurrent ? AppColors.primary : AppColors.textTertiary)),
                   title: Text(ep['videoName'] ?? 'Untitled', style: AppTypography.bodySmall.copyWith(color: isCurrent ? AppColors.textPrimary : AppColors.textSecondary, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
                   trailing: isCurrent 
-                    ? Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: Text('CURRENT', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)))
+                    ? Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: const Text('CURRENT', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)))
                     : IconButton(icon: const Icon(Icons.remove_circle_outline_rounded, size: 18, color: Colors.redAccent), onPressed: () => setState(() => _episodes.removeAt(index))),
                 );
               },

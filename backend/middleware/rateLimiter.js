@@ -56,6 +56,8 @@ export const globalLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   handler: handler,
   skip: (req) => {
+    // **FIX: Skip rate limiting in test mode**
+    if (process.env.NODE_ENV === 'test') return true;
     // Skip static files/HLS which are naturally high-volume
     if (req.path.startsWith('/hls') || req.path.startsWith('/uploads')) return true;
     return false;

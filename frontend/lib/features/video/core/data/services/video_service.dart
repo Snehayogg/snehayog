@@ -128,6 +128,7 @@ class VideoService {
     int limit = 15,
     String? videoType,
     bool clearSession = false,
+    String? cursor,
   }) async {
     try {
       String url = '${NetworkHelper.apiBaseUrl}/videos?page=$page&limit=$limit';
@@ -147,6 +148,10 @@ class VideoService {
         url += '&clearSession=true';
         AppLogger.log(
             '🧹 VideoService: Clearing session state for fresh videos');
+      }
+
+      if (cursor != null && cursor.isNotEmpty) {
+        url += '&cursor=${Uri.encodeComponent(cursor)}';
       }
 
       Map<String, String> headers = {
@@ -624,6 +629,7 @@ class VideoService {
     List<String>? crossPostPlatforms,
     String? seriesId,
     int? episodeNumber,
+    List<QuizModel>? quizzes,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting video upload...');
@@ -670,6 +676,7 @@ class VideoService {
         crossPostPlatforms: crossPostPlatforms,
         seriesId: seriesId,
         episodeNumber: episodeNumber,
+        quizzes: quizzes,
       );
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
@@ -696,6 +703,7 @@ class VideoService {
     List<String>? crossPostPlatforms,
     String? seriesId,
     int? episodeNumber,
+    List<QuizModel>? quizzes,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting Direct R2 Upload...');
@@ -773,6 +781,7 @@ class VideoService {
           'crossPostPlatforms': crossPostPlatforms,
           'seriesId': seriesId,
           'episodeNumber': episodeNumber,
+          'quizzes': quizzes?.map((q) => q.toJson()).toList(),
         },
       );
 
@@ -788,7 +797,8 @@ class VideoService {
       {String? link,
       List<String>? tags,
       String? seriesId,
-      int? episodeNumber}) async {
+      int? episodeNumber,
+      List<QuizModel>? quizzes}) async {
     try {
       AppLogger.log('🔄 VideoService: Updating metadata for video: $videoId');
 
@@ -803,6 +813,9 @@ class VideoService {
       if (tags != null) updateData['tags'] = tags;
       if (seriesId != null) updateData['seriesId'] = seriesId;
       if (episodeNumber != null) updateData['episodeNumber'] = episodeNumber;
+      if (quizzes != null) {
+        updateData['quizzes'] = quizzes.map((q) => q.toJson()).toList();
+      }
 
       final res = await httpClientService.patch(
         Uri.parse(url),
@@ -812,8 +825,9 @@ class VideoService {
       );
 
       if (res.statusCode == 200) {
+        final traceId = res.headers['x-trace-id'] ?? 'unknown';
+        AppLogger.log('✅ VideoService: Video updated successfully (Trace ID: $traceId)');
         final data = json.decode(res.body);
-        AppLogger.log('✅ VideoService: Video updated successfully');
         // The backend now returns the full video object in data['video']
         return VideoModel.fromJson(data['video']);
       } else if (res.statusCode == 401) {
@@ -1208,6 +1222,7 @@ class VideoService {
       'total': responseData['total'] ?? videos.length,
       'currentPage': responseData['currentPage'] ?? page,
       'totalPages': responseData['totalPages'] ?? 1,
+      'nextCursor': responseData['nextCursor'], // **NEW: Cursor for next page**
     };
   }
 }

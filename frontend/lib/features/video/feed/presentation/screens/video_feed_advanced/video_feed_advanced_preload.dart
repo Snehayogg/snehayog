@@ -408,6 +408,7 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         _applyLoopingBehavior(controller);
         _attachEndListenerIfNeeded(controller, index);
         _attachBufferingListenerIfNeeded(controller, index);
+        _attachQuizListenerIfNeeded(controller, index);
         _attachErrorListenerIfNeeded(controller, index);
 
 
@@ -632,6 +633,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
               ctrl.removeListener(errorListener);
             } catch (_) {}
             _errorListeners.remove(videoId);
+          }
+
+          final quizListener = _quizListeners[videoId];
+          if (quizListener != null) {
+            try {
+              ctrl.removeListener(quizListener);
+            } catch (_) {}
+            _quizListeners.remove(videoId);
           }
 
           try {
@@ -1135,5 +1144,59 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
         });
       }
     }
+  }
+
+  void _attachQuizListenerIfNeeded(VideoPlayerController controller, int index) {
+    if (index >= _videos.length) return;
+    final video = _videos[index];
+    final videoId = video.id;
+
+    if (video.quizzes == null || video.quizzes!.isEmpty) return;
+
+    final existingListener = _quizListeners[videoId];
+    if (existingListener != null) {
+      controller.removeListener(existingListener);
+    }
+
+    void handleQuizCheck() {
+      if (!mounted) return;
+      if (_currentIndex != index) return;
+      if (_activeQuizVN.value != null) return;
+
+      try {
+        if (SharedVideoControllerPool().isControllerDisposed(controller)) return;
+        if (!controller.value.isInitialized) return;
+
+        final currentPosition = controller.value.position;
+        final currentSeconds = currentPosition.inSeconds;
+        final currentMillis = currentPosition.inMilliseconds;
+        final shownQuizzes = _shownQuizzesPerVideo[videoId] ??= {};
+
+        for (int i = 0; i < video.quizzes!.length; i++) {
+          final quiz = video.quizzes![i];
+          if (shownQuizzes.contains(i)) continue;
+
+          // **ROBUST TRIGGER (Senior Move)**:
+          // 1. Check if we are within 1 second of the target
+          // 2. OR check if we just passed the target in the last 500ms
+          // This prevents "skipping" the trigger due to frame drops or streaming lag.
+          final targetMillis = quiz.timestamp * 1000;
+          final diff = currentMillis - targetMillis;
+
+          if (diff >= 0 && diff < 1500) { // If we are at or up to 1.5s past the mark
+            _activeQuizVN.value = quiz;
+            shownQuizzes.add(i);
+            (_quizHistoryPerVideo[videoId] ??= []).add(quiz);
+            AppLogger.log('🎉 YugFeed: Triggered quiz "${quiz.question}" at $currentSeconds seconds');
+            break;
+          }
+        }
+      } catch (e) {
+        // Silently ignore disposal errors
+      }
+    }
+
+    _quizListeners[videoId] = handleQuizCheck;
+    controller.addListener(handleQuizCheck);
   }
 }

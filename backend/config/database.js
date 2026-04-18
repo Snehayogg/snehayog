@@ -6,6 +6,7 @@ class DatabaseManager {
   }
 
   async connect() {
+    if (this.isConnected) return;
     try {
       console.log('🔌 Connecting to MongoDB...');
       
@@ -48,6 +49,12 @@ class DatabaseManager {
   }
 
   handleDisconnect() {
+    // **FIX: Don't retry in test mode to allow clean teardown**
+    if (process.env.NODE_ENV === 'test') {
+      console.log('⚠️ MongoDB disconnected (Test Mode - skipping retry)');
+      this.isConnected = false;
+      return;
+    }
     console.log('⚠️ MongoDB disconnected. Retrying in 5s...');
     this.isConnected = false;
     setTimeout(() => this.connect(), 5000);

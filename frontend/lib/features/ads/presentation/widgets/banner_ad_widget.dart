@@ -157,9 +157,9 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       return Align(
         alignment: Alignment.topLeft,
         child: Container(
-          width: MediaQuery.of(context).size.width * 0.8,
+          width: double.infinity,
           height: 50,
-          margin: const EdgeInsets.only(top: 1, left: 16),
+          margin: const EdgeInsets.only(top: 1),
           decoration: BoxDecoration(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(12),
@@ -223,9 +223,9 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       child: Align(
         alignment: Alignment.topLeft,
         child: Container(
-            width: MediaQuery.of(context).size.width * 0.8, // 20% narrower
+            width: double.infinity, 
             height: 50, // **REDUCED from 60 for more video space**
-            margin: const EdgeInsets.only(top: 1, left: 16), // left margin
+            margin: const EdgeInsets.only(top: 1), 
             decoration: BoxDecoration(
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(12),

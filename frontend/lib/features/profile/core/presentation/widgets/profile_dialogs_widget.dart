@@ -350,25 +350,18 @@ class ProfileDialogsWidget {
           const SizedBox(height: 16),
           // **FIX: Removed Expanded and ListView to prevent layout crashes in VayuBottomSheet**
           _buildFAQItem(
-            question: "Why should I use Vayug instead of Instagram?",
-            answer:
-                "Because on Vayug, you can start growing your profile from day one, with meaningful content. And unlike Instagram, you'll see relevant, meaningful content, not adult or sexual material. It's a platform built to reward real creators and protect genuine viewers.",
-            icon: Icons.compare_arrows,
-            color: Colors.green,
-          ),
-          _buildFAQItem(
-            question: "Viewers ke liye kya fayde hai?",
-            answer:
-                "Viewers ke liye sabse bada fayda hai 'Ad-free Experience'. Aap bina kisi distraction ke apne favorite show ya videos dekh sakte hai. Saath hi, humara algorithm aapko wahi dikhata hai jo aapke liye value add kare, na ki bekar ki ads.",
-            icon: Icons.visibility,
-            color: Colors.green,
-          ),
-          _buildFAQItem(
             question: "Creators ke liye kya fayde hai?",
             answer:
-                "Creators ko hum pehle din se monetization ka mauka dete hai. Aapko YouTube ki tarah lambe intezar ki zaroorat nahi hai. Aapki video ki quality aur engagement ke hisaab se aapko rewards milte hai. Early joining se aapko reach bhi zyada milti hai.",
+                "Creators ko hum pehle din se monetization ka mauka dete hai. Aapko YouTube ki tarah lambe intezar ki zaroorat nahi hai. Creators can monetize from Day 1.",
             icon: Icons.stars,
             color: Colors.orange,
+          ),
+          _buildFAQItem(
+            question: "Kamaya hua paisa kab aur kaise milega?",
+            answer:
+                "App ko kam se kam 2 logo ko share karein, uske baad aapko 'Setup Billing' ka option dikhega. Wahan apna UPI ID daalein. Bas phir har mahine ki 1st date ko aapka kamaya hua paisa automatic aapke bank account mein credit kar diya jayega.",
+            icon: Icons.account_balance_wallet_outlined,
+            color: Colors.blue,
           ),
           const SizedBox(height: 20),
           AppButton(

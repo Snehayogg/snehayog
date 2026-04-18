@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:vayug/core/design/radius.dart';
 import 'package:flutter/material.dart';
 import 'package:vayug/features/profile/core/presentation/screens/edit_profile_screen.dart';
+import 'package:vayug/features/profile/core/presentation/screens/search_discovery_screen.dart';
 import 'package:provider/provider.dart' as p;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,8 +27,6 @@ import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:vayug/features/profile/core/presentation/widgets/profile_static_views.dart';
 import 'package:vayug/features/ads/data/services/ad_service.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
-import 'package:vayug/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
-import 'package:vayug/features/profile/core/presentation/screens/search_discovery_screen.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/profile/analytics/presentation/screens/creator_revenue_screen.dart';
 import 'package:vayug/shared/utils/app_text.dart';
@@ -1380,7 +1379,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         leading: isViewingOwnProfile
             ? IconButton(
                 icon: const HugeIcon(icon: HugeIcons.strokeRoundedMenu01,
-                    color: AppColors.textPrimary, size: 20),
+                    color: Colors.white, size: 20),
                 tooltip: 'Menu',
                 onPressed: () {
                   _scaffoldKey.currentState?.openDrawer();
@@ -1388,7 +1387,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               )
             : IconButton(
                 icon: const HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01,
-                    color: AppColors.textPrimary, size: 20),
+                    color: Colors.white, size: 20),
                 tooltip: 'Back',
                 onPressed: () {
                   Navigator.of(context).pop();
@@ -1411,7 +1410,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final actions = <Widget>[
       IconButton(
         icon: const HugeIcon(icon: HugeIcons.strokeRoundedSearch01,
-          color: AppColors.textPrimary,
+          color: Colors.white,
           size: 20,
         ),
         tooltip: 'Search videos & creators',
@@ -1477,7 +1476,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Widget _buildHelpAction() {
     return IconButton(
       icon: const HugeIcon(icon: HugeIcons.strokeRoundedHelpCircle,
-        color: AppColors.primary,
+        color: Colors.white,
         size: 20,
       ),
       tooltip: 'Help & FAQ',
@@ -1488,7 +1487,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Widget _buildFeedbackAction() {
     return IconButton(
       icon: const HugeIcon(icon: HugeIcons.strokeRoundedIdea01,
-        color: Color(0xFF10B981),
+        color: Colors.white,
         size: 20,
       ),
       tooltip: 'Provide Feedback',

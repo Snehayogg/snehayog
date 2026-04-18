@@ -148,7 +148,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         // **NEW: Pause all videos when app is paused (minimized)**
         _pauseAllVideosGlobally();
         // **AGGRESSIVE CACHING: Save stale videos for next cold start**
-        ref.read(videoProvider).saveStaleVideos();
+        try {
+          ref.read(videoProvider).saveStaleVideos();
+        } catch (_) {}
         // **HOT UI: Preserve state when app goes to background**
         hotUIManager.handleAppLifecycleChange(state);
         break;

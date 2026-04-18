@@ -293,8 +293,15 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
           await _loadVideos(page: 1, clearSession: false, forceResetIndex: true);
 
           if (mounted) {
-            // **CRITICAL: Always insert shared video at index 0 BEFORE any ranking**
-            _videos.insert(0, targetVideo);
+            // **CRITICAL: Only insert if not already present in the list**
+            final bool alreadyPresent = _videos.any((v) => v.id == targetVideo.id);
+            if (!alreadyPresent) {
+              _videos.insert(0, targetVideo);
+            } else {
+              // Move it to top if present elsewhere
+              _videos.removeWhere((v) => v.id == targetVideo.id);
+              _videos.insert(0, targetVideo);
+            }
 
             // **CRITICAL: Re-rank videos but preserve deep link video at index 0**
             // Use preserveVideoKey to ensure deep link video stays at position 0

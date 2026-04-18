@@ -13,6 +13,7 @@ import cloudflareR2Service from '../../services/uploadServices/cloudflareR2Servi
 import { uploadLimiter } from '../../middleware/rateLimiter.js';
 import AdmZip from 'adm-zip';
 import { addSocialJob } from '../../services/socialQueue.js';
+import queueService from '../../services/yugFeedServices/queueService.js';
 
 const router = express.Router();
 
@@ -232,11 +233,15 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       hybridVideoService = service;
     }
 
-    // 2. Trigger Background Processing
-    const r2Url = cloudflareR2Service.getPublicUrl(key);
-        
-    processVideoHybrid(newVideo._id, r2Url, videoName, userId, crossPostPlatforms, thumbnailKey).catch(err => {
-        console.error('❌ Background processing failed for direct upload:', err);
+    // 2. Trigger Background Processing via BullMQ
+    // We add the job to the queue instead of processing it locally
+    await queueService.addVideoJob({
+      videoId: newVideo._id.toString(),
+      rawVideoKey: key,
+      videoName: videoName,
+      userId: userId,
+      crossPostPlatforms: crossPostPlatforms || [],
+      thumbnailKey: thumbnailKey
     });
 
     // 3. Return success immediately
@@ -374,11 +379,20 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     // **NEW: Save video record first**
     await video.save();
 
-    // Start processing in background with proper error handling
-    processVideoHybrid(video._id, videoPath, videoName, userId, crossPostPlatforms, null).catch(error => {
-      console.error('❌ Background processing failed:', error);
-      console.error('❌ Error stack:', error.stack);
+    // Start processing in background via BullMQ
+    // In fallback mode, we still add to queue for processing
+    // Note: Local worker will handle downloading from the temp URL if it's a localhost URL,
+    // but typically we want to upload to R2 first then process.
+    // For now, let's just queue the job.
+    await queueService.addVideoJob({
+      videoId: video._id.toString(),
+      rawVideoKey: tempVideoUrl, // Passing the temp URL as the source
+      videoName: videoName || req.file.originalname,
+      userId: userId,
+      crossPostPlatforms: crossPostPlatforms || []
     });
+    
+    console.log('✅ Video queued for worker processing:', video._id);
 
     // **NEW: Return immediate response with processing status**
     res.status(201).json({
@@ -443,202 +457,8 @@ function normalizeVideoUrl(url) {
   return normalizedUrl;
 }
 
-async function processVideoHybrid(videoId, videoPath, videoName, userId, crossPostPlatforms = [], customThumbnailKey = null) {
-  try {
-    // Sanitize video name for safe file storage in R2
-    const sanitizedVideoName = videoName.replace(/[^a-zA-Z0-9\s_-]/g, '_').replace(/\s+/g, '_').substring(0, 50);
-
-    // **NEW: Lazy load hybrid service to ensure env vars are loaded**
-    if (!hybridVideoService) {
-      const { default: service } = await import('../../services/uploadServices/hybridVideoService.js');
-      hybridVideoService = service;
-    }
-
-    // **NEW: Update status to processing**
-    const video = await Video.findById(videoId);
-    if (!video) {
-      throw new Error('Video not found');
-    }
-
-    video.processingStatus = 'processing';
-    video.processingProgress = 10;
-    await video.save();
-
-    // **UPDATE: Validation phase (10-30%)**
-    video.processingProgress = 30;
-    await video.save();
-
-    // **NEW: Process video using hybrid approach with timeout**
-    let hybridResult;
-    try {
-      hybridResult = await Promise.race([
-        hybridVideoService.processVideoHybrid(
-          videoId,
-          videoPath,
-          sanitizedVideoName,
-          userId
-        ),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Hybrid processing timeout after 30 minutes')), 30 * 60 * 1000)
-        )
-      ]);
-    } catch (error) {
-      console.error('❌ Hybrid processing failed:', error);
-      // Update video status to failed
-      video.processingStatus = 'failed';
-      video.processingError = error.message;
-      await video.save();
-      throw error;
-    }
-
-    // **UPDATE: Finalizing phase (80-95%)**
-    video.processingProgress = 95;
-    await video.save();
-
-    // **NEW: Update video record with R2 URLs**
-    // **FIX: Validate and normalize URLs before saving**
-    const normalizedVideoUrl = normalizeVideoUrl(hybridResult.videoUrl);
-    const normalizedThumbnailUrl = normalizeVideoUrl(hybridResult.thumbnailUrl);
-
-    video.videoUrl = normalizedVideoUrl; // R2 video URL with FREE bandwidth
-    
-    // Only update thumbnail if not manually provided
-    if (normalizedThumbnailUrl && !video.thumbnailUrl) {
-      video.thumbnailUrl = normalizedThumbnailUrl;
-    }
-
-    // **NEW: Clear old quality URLs (single format now)**
-    video.preloadQualityUrl = null;
-    video.lowQualityUrl = normalizedVideoUrl; // Same as main URL (480p)
-    video.mediumQualityUrl = null;
-    video.highQualityUrl = null;
-
-    // **NEW: If URL is HLS (.m3u8), set HLS flags/fields for frontend autoplay**
-    if (normalizedVideoUrl && normalizedVideoUrl.includes('.m3u8')) {
-      video.isHLSEncoded = true;
-      video.hlsPlaylistUrl = normalizedVideoUrl;
-      video.hlsMasterPlaylistUrl = normalizedVideoUrl;
-    } else {
-      video.isHLSEncoded = false;
-      video.hlsPlaylistUrl = null;
-      video.hlsMasterPlaylistUrl = null;
-    }
-
-    video.processingStatus = 'completed';
-    video.processingProgress = 100;
-
-    // **NEW: Add hybrid metadata**
-    video.originalSize = hybridResult.size;
-    video.originalFormat = 'mp4';
-    video.originalResolution = {
-      width: 854,
-      height: 480
-    };
-
-    // **NEW: Add single quality version**
-    video.qualitiesGenerated = [{
-      quality: 'optimized',
-      url: normalizedVideoUrl,
-      size: hybridResult.size,
-      resolution: {
-        width: 854,
-        height: 480
-      },
-      bitrate: '550k',
-      generatedAt: new Date()
-    }];
-
-    if (hybridResult.duration && hybridResult.duration > 0) {
-      video.duration = hybridResult.duration;
-    }
-    
-    // **SOURCE OF TRUTH: Always update videoType and aspectRatio based on actual processed result**
-    if (hybridResult.aspectRatio) {
-      video.aspectRatio = hybridResult.aspectRatio;
-      video.videoType = hybridResult.aspectRatio > 1.0 ? 'vayu' : 'yog';
-      console.log(`📏 Updated metadata for ${videoId}: AR=${video.aspectRatio}, Type=${video.videoType}`);
-    }
-
-    await video.save();
-    console.log('🎉 Hybrid video processing completed successfully!');
-
-    // **NEW: Trigger Free Local Moderation BEFORE file cleanup**
-    try {
-      const { default: localModerationService } = await import('../../services/uploadServices/localModerationService.js');
-      
-      console.log('🛡️ Starting local AI moderation scan...');
-      
-      // Use the LOCAL video path (before cleanup) so FFmpeg can extract frames
-      const moderationResult = await localModerationService.moderateVideo(videoPath);
-      
-      const updatedVideo = await Video.findById(video._id);
-      if (updatedVideo) {
-        updatedVideo.moderationResult = {
-          isFlagged: moderationResult.isFlagged,
-          confidence: moderationResult.confidence,
-          label: moderationResult.label,
-          processedAt: new Date(),
-          provider: 'local-transformers'
-        };
-        
-        // If flagged, we hide it from the feed
-        if (moderationResult.isFlagged) {
-          console.log(`🚩 Video ${video._id} FLAGGED by local AI. Marking as hidden.`);
-          updatedVideo.processingStatus = 'flagged';
-        }
-        
-      await updatedVideo.save();
-    }
-  } catch (modErr) {
-    console.error('⚠️ Local moderation failed (skipping to ensure availability):', modErr.message);
-  }
-
-  // **NEW: Trigger Cross-Posting Jobs after all internal processing is done**
-  if (crossPostPlatforms && crossPostPlatforms.length > 0) {
-    console.log(`📡 Triggering cross-posting for video ${videoId} to platforms: ${crossPostPlatforms.join(', ')}`);
-    for (const platform of crossPostPlatforms) {
-      try {
-        await addSocialJob(platform, {
-          videoId,
-          userId,
-          title: videoName,
-          description: video.description,
-          tags: video.tags
-        });
-      } catch (queueErr) {
-        console.error(`❌ Failed to add ${platform} job to queue:`, queueErr.message);
-      }
-    }
-  }
-
-  // **NEW: Cleanup local source file if it exists**
-  if (videoPath && !videoPath.startsWith('http')) {
-    try {
-      if (fsSync.existsSync(videoPath)) {
-        await fs.unlink(videoPath);
-        console.log('🧹 Cleaned up original video file:', videoPath);
-      }
-    } catch (err) {
-      console.warn('⚠️ Failed to cleanup original video file:', err.message);
-    }
-  }
-
-  } catch (error) {
-    console.error('❌ Error in hybrid video processing:', error);
-
-    try {
-      // **NEW: Update video status to failed**
-      const video = await Video.findById(videoId);
-      if (video) {
-        video.processingStatus = 'failed';
-        video.processingError = error.message;
-        await video.save();
-      }
-    } catch (updateError) {
-      console.error('❌ Failed to update video status:', updateError);
-    }
-  }
-}
+// DISMISSED: Local processVideoHybrid removed to avoid OOM on main server.
+// Processing is now handled exclusively by background workers.
 
 // **NEW: Get video processing status**
 router.get('/video/:videoId/status', verifyToken, async (req, res) => {

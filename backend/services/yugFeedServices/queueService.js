@@ -47,7 +47,21 @@ const videoQueue = new Queue('video-processing', {
 
 class FeedQueueService {
     constructor() {
-        this.addRankCalculationJob(); // Schedule initial job
+        // **FIX: Skip automatic scheduling in test mode**
+        if (process.env.NODE_ENV !== 'test') {
+            this.addRankCalculationJob(); 
+        }
+    }
+
+    /**
+     * **NEW: Close the queue connection (for Clean Teardown)**
+     */
+    async close() {
+        try {
+            await videoQueue.close();
+        } catch (error) {
+            // Silently fail if already closed
+        }
     }
 
     /**

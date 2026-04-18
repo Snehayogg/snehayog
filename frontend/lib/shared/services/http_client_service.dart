@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:firebase_performance/firebase_performance.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -117,6 +118,12 @@ class HttpClientService {
             if (_appVersion != "unknown") {
               options.headers['X-App-Version'] = _appVersion;
             }
+
+            // **NEW: Inject Trace ID for Distributed Tracing**
+            final traceId = _generateTraceId();
+            options.headers['X-Trace-ID'] = traceId;
+            options.extra['traceId'] = traceId;
+            AppLogger.log('🆔 Trace ID: $traceId for ${options.method} ${options.path}');
 
             // **NEW: Automatically inject Auth Token if missing**
             if (!options.headers.containsKey('Authorization')) {
@@ -637,6 +644,20 @@ class HttpClientService {
       default:
         return HttpMethod.Get;
     }
+  }
+
+  /// Generate a unique Trace ID for distributed tracing (UUID v4 style)
+  String _generateTraceId() {
+    final random = Random.secure();
+    final values = List<int>.generate(16, (i) => random.nextInt(256));
+    
+    // Set version to 4
+    values[6] = (values[6] & 0x0f) | 0x40;
+    // Set variant to RFC4122
+    values[8] = (values[8] & 0x3f) | 0x80;
+    
+    final hex = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 }
 

@@ -631,7 +631,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 ),
               ),
             ),
-            _buildVideoOverlay(video, index, controller),
+            Positioned.fill(
+              child: _buildVideoOverlay(video, index, controller),
+            ),
             if (controller != null &&
                 isActive &&
                 (() {
@@ -660,7 +662,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 );
               },
             ),
-            // **Long-press carousel ad preview overlay**
             ValueListenableBuilder<bool>(
               valueListenable: _showLongPressAdOverlayVN,
               builder: (context, showOverlay, _) {
@@ -670,6 +671,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 return _buildLongPressAdOverlay(index);
               },
             ),
+
+            // Quiz Overlay is now handled inside _buildVideoOverlay for proper bottom alignment
+
           ],
         ),
       ),
@@ -957,12 +961,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         final screenWidth = constraints.maxWidth;
         final screenHeight = constraints.maxHeight;
 
-        // **FIX: Use video's actual aspect ratio from controller if model doesn't have one**
-        // This ensures ALL videos display in their original aspect ratio regardless of size, duration, etc.
-        double modelAspectRatio = currentVideo.aspectRatio > 0
-            ? currentVideo.aspectRatio
-            : _getDetectedAspectRatio(
-                controller); // Use detected ratio from video controller
+        // **FIX: Prioritize detected aspect ratio from video controller**
+        // Metadata in the model may incorrectly identify landscape videos as portrait in vertical feeds.
+        final double detectedRatio = _getDetectedAspectRatio(controller);
+        double modelAspectRatio = detectedRatio > 0
+            ? detectedRatio
+            : (currentVideo.aspectRatio > 0 ? currentVideo.aspectRatio : 9 / 16);
 
         // final Size videoSize = controller.value.size; // Unused
         // final int rotation = controller.value.rotationCorrection; // Unused
@@ -1390,57 +1394,89 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
         return Stack(
           children: [
-            ValueListenableBuilder<bool>(
-              valueListenable: forceShowNotifier,
-              builder: (context, forceShow, _) {
-                // **CRASH-PROOF: Sequential safety check**
-                // 1. Safety Gate: Check if valid before any property access
-                if (!sharedPool.isControllerValid(controller)) {
-                  // Trigger recovery: Attempt to fetch/re-init controller
-                  Future.microtask(() {
-                    if (mounted) {
-                      _getController(index);
-                      safeSetState(() {});
-                    }
-                  });
-                  return overlayContent;
-                }
+            ValueListenableBuilder<QuizModel?>(
+              valueListenable: _activeQuizVN,
+              builder: (context, activeQuiz, _) {
+                // If quiz is active, hide the rest of the overlay for clean UI
+                final bool hideOverlayForQuiz = activeQuiz != null;
 
-                return ListenableBuilder(
-                  listenable: controller,
-                  builder: (context, child) {
-                    try {
-                      // Final safety check: if listener fired but dispose() already happened
-                      if (sharedPool.isControllerDisposed(controller)) {
-                        return child!;
-                      }
-                      
-                      final value = controller.value;
-                      final bool isPlaying = value.isPlaying;
-                      
-                      // Show overlay if force-showing (double-tap like) OR if paused
-                      final bool shouldShow = forceShow || !isPlaying;
-                      
-                      return AnimatedOpacity(
-                        opacity: shouldShow ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        child: IgnorePointer(
-                          ignoring: !shouldShow,
-                          child: child,
+                return Stack(
+                  children: [
+                    ValueListenableBuilder<bool>(
+                      valueListenable: forceShowNotifier,
+                      builder: (context, forceShow, _) {
+                        // **CRASH-PROOF: Sequential safety check**
+                        if (!sharedPool.isControllerValid(controller)) {
+                          Future.microtask(() {
+                            if (mounted) {
+                              _getController(index);
+                              safeSetState(() {});
+                            }
+                          });
+                          return overlayContent;
+                        }
+
+                        return ListenableBuilder(
+                          listenable: controller,
+                          builder: (context, child) {
+                            try {
+                              if (sharedPool.isControllerDisposed(controller)) {
+                                return child!;
+                              }
+                              
+                              final value = controller.value;
+                              final bool isPlaying = value.isPlaying;
+                              
+                              // Show overlay if force-showing OR if paused
+                              // BUT hide it if a quiz is currently active!
+                              final bool shouldShow = (forceShow || !isPlaying) && !hideOverlayForQuiz;
+                              
+                              return AnimatedOpacity(
+                                opacity: shouldShow ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                                child: IgnorePointer(
+                                  ignoring: !shouldShow,
+                                  child: child,
+                                ),
+                              );
+                            } catch (e) {
+                              return child!;
+                            }
+                          },
+                          child: overlayContent,
+                        );
+                      },
+                    ),
+                    // Quiz Overlay positioned at the bottom, above progress bar
+                    if (activeQuiz != null && index == _currentIndex)
+                      Positioned(
+                        bottom: bottomPadding + 20,
+                        left: 16,
+                        right: 16,
+                        child: QuizOverlay(
+                          quiz: activeQuiz,
+                          onDismiss: () => _activeQuizVN.value = null,
+                          onBack: () {
+                            final String videoId = _videos[index].id;
+                            final history = _quizHistoryPerVideo[videoId];
+                            if (history != null && history.length > 1) {
+                              history.removeLast(); // Remove current
+                              _activeQuizVN.value = history.last; // Show previous
+                            }
+                          },
+                          onAnswered: (int answerIndex) {
+                            AppLogger.log('📝 YugFeed: Quiz answered: $answerIndex');
+                          },
                         ),
-                      );
-                    } catch (e) {
-                      AppLogger.log('⚠️ UI Overlay: Caught disposal race condition: $e');
-                      return child!;
-                    }
-                  },
-                  child: overlayContent,
+                      ),
+                  ],
                 );
               },
             ),
             // **Visit Now button remains visible outside AnimatedOpacity**
             Positioned(left: 0, bottom: 0, child: visitNowButton),
+
           ],
         );
       },
@@ -1466,60 +1502,55 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: _primaryActionHitTargetSize,
-                  height: _primaryActionHitTargetSize,
-                  child: LikeButton(
-                    padding: EdgeInsets.zero,
-                    size: _primaryActionHitTargetSize,
-                    isLiked: isLiked,
-                    circleColor: const CircleColor(
-                      start: Color(0xff00ddff),
-                      end: Color(0xff0099cc),
-                    ),
-                    bubblesColor: const BubblesColor(
-                      dotPrimaryColor: Color(0xff33b5e5),
-                      dotSecondaryColor: Color(0xff0099cc),
-                    ),
-                    likeBuilder: (bool isLiked) {
-                      return Center(
-                        child: Container(
-                          width: AppConstants.primaryActionButtonContainerSize,
-                          height: AppConstants.primaryActionButtonContainerSize,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: AppColors.backgroundSecondary
-                                .withValues(alpha: 0.7),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.shadowSecondary
-                                    .withValues(alpha: 0.2),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            isLiked ? Icons.favorite : Icons.favorite_border,
-                            color: isLiked ? AppColors.error : AppColors.white,
-                            size: AppConstants.primaryActionButtonSize,
-                            shadows: const [
-                              Shadow(
-                                color: AppColors.overlayMedium,
-                                blurRadius: 4,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                    onTap: (bool isLiked) async {
-                      await _handleLike(video);
-                      return !isLiked;
-                    },
+                LikeButton(
+                  size: AppConstants.primaryActionButtonContainerSize,
+                  isLiked: isLiked,
+                  circleColor: const CircleColor(
+                    start: Color(0xff00ddff),
+                    end: Color(0xff0099cc),
                   ),
+                  bubblesColor: const BubblesColor(
+                    dotPrimaryColor: Color(0xff33b5e5),
+                    dotSecondaryColor: Color(0xff0099cc),
+                  ),
+                  likeBuilder: (bool isLiked) {
+                    return Center(
+                      child: Container(
+                        width: AppConstants.primaryActionButtonContainerSize,
+                        height: AppConstants.primaryActionButtonContainerSize,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.backgroundSecondary
+                              .withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.shadowSecondary
+                                  .withValues(alpha: 0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          color: isLiked ? AppColors.error : AppColors.white,
+                          size: AppConstants.primaryActionButtonSize,
+                          shadows: const [
+                            Shadow(
+                              color: AppColors.overlayMedium,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  onTap: (bool isLiked) async {
+                    await _handleLike(video);
+                    return !isLiked;
+                  },
                 ),
                 AppSpacing.vSpace4,
                 Text(
@@ -1529,6 +1560,8 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     fontSize: AppTypography.fontSizeSM,
                     fontWeight: AppTypography.weightMedium,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             );
@@ -1884,128 +1917,33 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   void _showEpisodeList(BuildContext context, VideoModel video) {
     if (video.episodes == null || video.episodes!.isEmpty) return;
     
-    showModalBottomSheet(
+    VayuBottomSheet.show(
       context: context,
-      backgroundColor: AppColors.backgroundPrimary,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4, vertical: AppSpacing.spacing2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Episodes', style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold, color: AppColors.white)),
-                    IconButton(icon: const Icon(Icons.close_rounded, color: AppColors.white), onPressed: () => Navigator.pop(context)),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: AppColors.divider),
-              AppSpacing.vSpace8,
-              Flexible(
-                child: _buildShortsEpisodeGrid(video),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildShortsEpisodeGrid(VideoModel video) {
-    return GridView.builder(
-      shrinkWrap: true,
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: AppSpacing.spacing3,
-        mainAxisSpacing: AppSpacing.spacing3,
-        childAspectRatio: 9 / 16,
-      ),
-      itemCount: video.episodes!.length,
-      itemBuilder: (context, index) {
-        final ep = video.episodes![index];
-        final isCurrent = ep['id'] == video.id || ep['_id'] == video.id;
-        
-        return GestureDetector(
-          onTap: () {
-            Navigator.pop(context);
-            if (!isCurrent) {
-               final epId = ep['id'] ?? ep['_id'];
-               if (epId != null) {
-                 final targetIndex = _videos.indexWhere((v) => v.id == epId);
-                 if (targetIndex != -1) {
-                   _pageController.animateToPage(
-                     targetIndex,
-                     duration: const Duration(milliseconds: 300),
-                     curve: Curves.easeInOut,
-                   );
-                 } else {
-                   // Optional: If not in feed, we could potentiall fetch and insert it
-                   // or just show a snackbar. Since it's a feed, jump-if-present is safest.
-                   _showSnackBar('Episode is not in current feed. Scrolling to find it...');
-                 }
-               }
+      title: 'Episodes',
+      child: EpisodeGridWidget(
+        episodes: video.episodes!,
+        currentVideoId: video.id,
+        onEpisodeTap: (ep, index) {
+          Navigator.pop(context);
+          final String epId = (ep['id'] ?? ep['_id'])?.toString() ?? '';
+          if (epId != video.id) {
+            final targetIndex = _videos.indexWhere((v) => v.id == epId);
+            if (targetIndex != -1) {
+              _pageController.animateToPage(
+                targetIndex,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            } else {
+              _showSnackBar('Episode is not in current feed. Scrolling to find it...');
             }
-          },
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: AppColors.backgroundSecondary,
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (ep['thumbnailUrl'] != null)
-                  CachedNetworkImage(imageUrl: ep['thumbnailUrl'], fit: BoxFit.cover),
-                
-                // Blur Overlay with numbers
-                Positioned.fill(
-                  child: ClipRRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 1, sigmaY: 1),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 48, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                
-                // Active Border
-                if (isCurrent)
-                  Container(decoration: BoxDecoration(border: Border.all(color: AppColors.primary, width: 2), borderRadius: BorderRadius.circular(12))),
-
-                // Title at bottom
-                Positioned(
-                  bottom: 0, left: 0, right: 0,
-                  child: Container(
-                    padding: EdgeInsets.all(AppSpacing.spacing2),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent]),
-                    ),
-                    child: Text(ep['videoName'] ?? 'Ep ${index + 1}', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.bodySmall.copyWith(color: AppColors.white, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+          }
+        },
+      ),
     );
   }
+
+
 
   String _formatUploadDate(DateTime date) {
     final now = DateTime.now();

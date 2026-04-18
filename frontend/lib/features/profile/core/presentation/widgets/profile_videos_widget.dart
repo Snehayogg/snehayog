@@ -13,6 +13,7 @@ import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
 import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
+import 'package:vayug/shared/widgets/episode_grid_widget.dart';
 
 
 class ProfileVideosWidget extends StatelessWidget {
@@ -653,198 +654,105 @@ class ProfileVideosWidget extends StatelessWidget {
   }
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
+    if (video.episodes == null || video.episodes!.isEmpty) return;
     final BuildContext parentContext = context;
 
     AppLogger.log('🎬 ProfileVideosWidget: Showing episode list for series: ${video.seriesId}');
     VayuBottomSheet.show(
       context: context,
-      title: 'More Episodes',
-      useDraggable: true,
-      initialChildSize: 0.5,
-      minChildSize: 0.3,
-      maxChildSize: 0.8,
-      padding: const EdgeInsets.fromLTRB(16, 0, 4, 16),
-      builder: (context, scrollController) {
-        return GridView.builder(
-          controller: scrollController,
-          padding: EdgeInsets.zero,
-          physics: const BouncingScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 0.7,
-          ),
-          itemCount: video.episodes!.length,
-          itemBuilder: (context, index) {
-            final episodeData = video.episodes![index];
-            final String episodeId = (episodeData['_id'] ?? episodeData['id'])?.toString() ?? '';
-            final String thumbnailUrl =
-                (episodeData['thumbnailUrl'] ?? video.thumbnailUrl)?.toString() ?? '';
-            final String sequenceNumber = (index + 1).toString();
+      title: 'Episodes',
+      child: EpisodeGridWidget(
+        episodes: video.episodes!,
+        currentVideoId: video.id,
+        onEpisodeTap: (episodeData, index) {
+          final String episodeId = (episodeData['_id'] ?? episodeData['id'])?.toString() ?? '';
+          Navigator.pop(context);
 
-            return GestureDetector(
-              onTap: () {
-                AppLogger.log('🎬 ProfileVideosWidget: Selected episode: $episodeId');
-                
-                // **FIX: Capture necessary data before popping bottom sheet**
-                final parentType = _normalizedVideoType(video);
-                final filteredVideos = stateManager.userVideos
-                    .where((item) => _normalizedVideoType(item) == parentType)
-                    .toList(growable: false);
+          final parentType = _normalizedVideoType(video);
+          final filteredVideos = stateManager.userVideos
+              .where((item) => _normalizedVideoType(item) == parentType)
+              .toList(growable: false);
 
-                // **FIX: Use the parentContext (Stable) instead of the bottom sheet context**
-                // This prevents "Navigator operation requested with a context that does not include a Navigator"
-                // or "Provider not found" errors after the sheet is popped.
-                Navigator.pop(context);
-
-                if (parentType == 'vayu') {
-                  final selectedEpisodeIndex =
-                      filteredVideos.indexWhere((item) => item.id == episodeId);
-                  final selectedEpisode = selectedEpisodeIndex >= 0
-                      ? filteredVideos[selectedEpisodeIndex]
-                      : video;
-                  
-                  Navigator.push(
-                    parentContext,
-                    MaterialPageRoute(
-                      builder: (context) => VayuLongFormPlayerScreen(
-                        video: selectedEpisode,
-                        relatedVideos: filteredVideos,
-                        parentTabIndex: 3, // Profile tab index
-                      ),
-                    ),
-                  );
-                } else {
-                  try {
-                    final mainController = provider.Provider.of<MainController>(parentContext, listen: false);
-                    Navigator.push(
-                      parentContext,
-                      MaterialPageRoute(
-                        builder: (context) => VideoScreen(
-                          initialVideos: filteredVideos,
-                          initialVideoId: episodeId,
-                          parentTabIndex: mainController.currentIndex,
-                        ),
-                      ),
-                    );
-                  } catch (e) {
-                    AppLogger.log('❌ ProfileVideosWidget: Navigation error: $e');
-                    // Fallback push without MainController dependency if it fails
-                    Navigator.push(
-                      parentContext,
-                      MaterialPageRoute(
-                        builder: (context) => VideoScreen(
-                          initialVideos: filteredVideos,
-                          initialVideoId: episodeId,
-                          parentTabIndex: 3,
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: thumbnailUrl.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: thumbnailUrl,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) =>
-                                Container(color: Colors.grey[300]),
-                            errorWidget: (context, url, error) => Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.error),
-                            ),
-                          )
-                        : Container(color: Colors.black12),
-                  ),
-                  Positioned(
-                    top: 4,
-                    left: 4,
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        sequenceNumber,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: PopupMenuButton<String>(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'More options',
-                      icon: const Icon(
-                        Icons.more_vert_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                          onSelected: (value) async {
-                            if (value == 'delete') {
-                              final confirm = await ProfileDialogsWidget.showDeleteConfirmationDialog(
-                                context,
-                                title: 'Delete Episode?',
-                                message: 'Are you sure you want to delete this episode?',
-                              );
-
-                              if (confirm == true) {
-                                final success = await stateManager.deleteSingleVideo(episodeId);
-                                if (success && context.mounted) {
-                                  Navigator.pop(context); // Close bottom sheet to refresh state
-                                  // Optionally re-open or the UI will naturally update if handled by state
-                                }
-                              }
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete_outline, color: AppColors.error, size: 20),
-                                  SizedBox(width: 8),
-                                  Text('Delete', style: TextStyle(color: AppColors.error)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                    ),
-                ],
+          if (parentType == 'vayu') {
+            final selectedEpisodeIndex = filteredVideos.indexWhere((item) => item.id == episodeId);
+            final selectedEpisode = selectedEpisodeIndex >= 0 ? filteredVideos[selectedEpisodeIndex] : video;
+            
+            Navigator.push(
+              parentContext,
+              MaterialPageRoute(
+                builder: (context) => VayuLongFormPlayerScreen(
+                  video: selectedEpisode,
+                  relatedVideos: filteredVideos,
+                  parentTabIndex: 3, 
+                ),
               ),
             );
-          },
-        );
-      },
+          } else {
+            try {
+              final mainController = provider.Provider.of<MainController>(parentContext, listen: false);
+              Navigator.push(
+                parentContext,
+                MaterialPageRoute(
+                  builder: (context) => VideoScreen(
+                    initialVideos: filteredVideos,
+                    initialVideoId: episodeId,
+                    parentTabIndex: mainController.currentIndex,
+                  ),
+                ),
+              );
+            } catch (e) {
+              Navigator.push(
+                parentContext,
+                MaterialPageRoute(
+                  builder: (context) => VideoScreen(
+                    initialVideos: filteredVideos,
+                    initialVideoId: episodeId,
+                    parentTabIndex: 3,
+                  ),
+                ),
+              );
+            }
+          }
+        },
+        onLongPressEpisode: (episodeData, index) {
+          final String episodeId = (episodeData['_id'] ?? episodeData['id'])?.toString() ?? '';
+          _showEpisodeActionSheet(context, episodeId, stateManager);
+        },
+      ),
+    );
+  }
+
+  void _showEpisodeActionSheet(BuildContext context, String episodeId, ProfileStateManager stateManager) {
+    VayuBottomSheet.show(
+      context: context,
+      title: 'Episode Options',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: AppColors.error),
+            title: const Text('Delete Episode', style: TextStyle(color: AppColors.error)),
+            onTap: () async {
+              Navigator.pop(context); // Close action sheet
+              if (context.mounted) {
+                final confirm = await ProfileDialogsWidget.showDeleteConfirmationDialog(
+                  context,
+                  title: 'Delete Episode?',
+                  message: 'Are you sure you want to delete this episode?',
+                );
+
+                if (confirm == true) {
+                  final success = await stateManager.deleteSingleVideo(episodeId);
+                  if (success && context.mounted) {
+                    Navigator.pop(context); // Close the episode list bottom sheet too
+                  }
+                }
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
 }

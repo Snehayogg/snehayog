@@ -57,9 +57,34 @@ dart format .
 
 ### Test Types
 
-1. **Unit Tests** - Test individual functions/classes
-2. **Widget Tests** - Test UI components in isolation
-3. **Integration Tests** - Test complete user flows
+1. **Unit Tests** - Test individual functions/classes (`flutter test`)
+2. **Widget Tests** - Test UI components in isolation (`flutter test`)
+3. **Integration Tests** - Test complete user flows on a device or browser (`flutter test integration_test`)
+
+### 🧪 Integration Testing Details
+
+Unlike unit tests, integration tests run in the `integration_test/` folder and require a connected device or emulator.
+
+#### Run All Integration Tests
+```bash
+# Run from the frontend directory
+flutter test integration_test
+```
+
+#### Run Specific Integration Test
+```bash
+flutter test integration_test/features/profile/profile_episode_navigation_test.dart
+```
+
+#### Selection of Target Device
+If you have multiple devices connected, specify one using the `-d` flag:
+```bash
+# Get device IDs
+flutter devices
+
+# Run on specific device
+flutter test integration_test -d <device_id>
+```
 
 ### Critical Areas to Test
 

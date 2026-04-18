@@ -281,7 +281,31 @@ const videoSchema = new mongoose.Schema({
   canonicalMp4Key: {
     type: String,
     description: 'R2 Key for optimized MP4 version'
-  }
+  },
+  
+  // **NEW: Interactive Quizzes**
+  quizzes: [{
+    timestamp: {
+      type: Number,
+      required: true,
+      description: 'Time in seconds when the quiz should appear'
+    },
+    question: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    options: [{
+      type: String,
+      required: true,
+      trim: true
+    }],
+    correctIndex: {
+      type: Number,
+      required: true,
+      min: 0
+    }
+  }]
 }, {
   timestamps: true
 });
@@ -299,6 +323,7 @@ videoSchema.index({ finalScore: -1 });
 videoSchema.index({ videoType: 1, finalScore: -1 }); // **OPTIMIZATION: For feed queries**
 videoSchema.index({ videoType: 1, uploadedAt: -1 }); // **OPTIMIZATION: For freshness priority**
 videoSchema.index({ uploadedAt: -1 }); // **OPTIMIZATION: General recency sort**
+videoSchema.index({ createdAt: -1 }); // **OPTIMIZATION: For cursor-based pagination**
 
 // **NEW: Virtual field to check if video has multiple qualities**
 videoSchema.virtual('hasMultipleQualities').get(function() {
@@ -343,13 +368,14 @@ videoSchema.methods.addQualityVersion = function(quality, url, metadata) {
 // Instead of embedding views in the Video document (which causes massive documents),
 // we now use a separate 'View' collection.
 
-videoSchema.methods.incrementView = async function(userId, duration = 2) {
+videoSchema.methods.incrementView = async function(userId, duration = 2, source = 'app') {
   // 1. Create a View record (Fire-and-Forget Strategy)
   // We do NOT await this. It runs in the background.
   View.create({
     video: this._id,
     user: userId,
-    duration: duration
+    duration: duration,
+    source: source // **NEW: Track source**
   }).catch(err => console.error('Error logging view (background):', err));
 
   // 2. Atomically increment the total views counter

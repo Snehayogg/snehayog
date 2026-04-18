@@ -6,8 +6,9 @@
  */
 
 import cloudflareR2Service from '../../services/uploadServices/cloudflareR2Service.js';
+import { logger } from '../../middleware/traceMiddleware.js';
 
-export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
+export const serializeVideo = (video, apiVersion, requestingUserObjectId, traceId = 'internal') => {
   if (!video) return null;
 
   const videoObj = video.toObject ? video.toObject() : video;
@@ -46,8 +47,13 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
     seriesId: videoObj.seriesId || null,
     episodeNumber: videoObj.episodeNumber || 0,
     episodes: videoObj.episodes || [],
-    dubbedUrls: dubbedUrls
+    dubbedUrls: dubbedUrls,
+    quizzes: videoObj.quizzes || []
   };
+
+  if (base.quizzes.length > 0) {
+    logger.info(traceId, 'Serialized video with quizzes', { videoId: base._id, quizCount: base.quizzes.length });
+  }
 
   /**
    * VERSION SPECIFIC LOGIC
@@ -82,7 +88,7 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId) => {
   return base;
 };
 
-export const serializeVideos = (videos, apiVersion, requestingUserObjectId) => {
+export const serializeVideos = (videos, apiVersion, requestingUserObjectId, traceId = 'internal') => {
   if (!Array.isArray(videos)) return [];
-  return videos.map(v => serializeVideo(v, apiVersion, requestingUserObjectId));
+  return videos.map(v => serializeVideo(v, apiVersion, requestingUserObjectId, traceId));
 };

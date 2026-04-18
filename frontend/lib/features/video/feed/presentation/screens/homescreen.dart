@@ -705,19 +705,19 @@ class _MainScreenState extends ConsumerState<MainScreen>
                   child: RotationTransition(
                     turns: _refreshAnimationController,
                     child: Container(
-                      width: 36, // Same size for all icons
-                      height: 34, // Same size for all icons
+                      width: 42,
+                      height: 32,
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFF2196F3).withValues(alpha: 0.2)
+                            ? Colors.white
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(
                         Icons.refresh,
-                        size: isSelected ? 30 : 28,
+                        size: 24,
                         color: isSelected
-                            ? AppColors.primary
+                            ? AppColors.backgroundPrimary
                             : AppColors.textSecondary,
                       ),
                     ),
@@ -726,33 +726,35 @@ class _MainScreenState extends ConsumerState<MainScreen>
               else
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 36, // Increased to fit larger icons
-                  height: 34, // Increased to fit larger icons
+                  width: 42, // Slightly wider for a better pill shape
+                  height: 32, // More pill-like height
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.primary.withValues(alpha:0.2)
+                        ? Colors.white
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: HugeIcon(
                     icon: isSelected ? activeIcon : icon,
-                    size: isSelected ? 30.0 : 28.0, // Matches Youtube larger icons
+                    size: isSelected ? 24.0 : 24.0, // Standardized size for cleaner look
                     color: isSelected
-                        ? AppColors.primary
+                        ? AppColors.backgroundPrimary // Dark icon on white pill
                         : AppColors.textSecondary,
                   ),
                 ),
 
-              // Label always visible below icon (removed SizedBox completely)
+              const SizedBox(height: 4), // Added small gap for clarity
+
+              // Label always visible below icon
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
                 style: TextStyle(
-                  fontSize: 10, // Slightly more legible when compact
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   color: isSelected
-                      ? AppColors.primary
+                      ? Colors.white
                       : AppColors.textSecondary,
-                  letterSpacing: 0.2,
+                  letterSpacing: 0.1,
                 ),
                 child: Text(isRefreshingYug ? 'Refreshing...' : label),
               ),

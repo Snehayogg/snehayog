@@ -46,6 +46,8 @@ class VideoModel {
   // **NEW: Series Metadata**
   final String? seriesId;
   final int? episodeNumber;
+  // **NEW: Interactive Quizzes**
+  final List<QuizModel>? quizzes;
 
   VideoModel({
     required this.id,
@@ -80,6 +82,7 @@ class VideoModel {
     this.episodes, // **NEW: Related episodes**
     this.seriesId,
     this.episodeNumber,
+    this.quizzes, // **NEW: Interactive quizzes**
     this.dubbedUrls,
     this.isLiked = false,
     this.isSaved = false, // **NEW: Default to false**
@@ -93,10 +96,10 @@ class VideoModel {
       final parsedAspectRatio = (json['aspectRatio'] is num)
           ? (json['aspectRatio'] as num).toDouble()
           : double.tryParse(json['aspectRatio']?.toString() ?? '0.5625') ??
-              9 / 16;
+               9 / 16;
       final rawVideoType = (json['videoType'] ??
-              json['video_type'] ??
-              json['type'])
+               json['video_type'] ??
+               json['type'])
           ?.toString()
           .trim()
           .toLowerCase();
@@ -315,7 +318,6 @@ class VideoModel {
 
             return null;
           } catch (e) {
-            print('⚠️ VideoModel: Error parsing hlsVariants: $e');
             return null;
           }
         }(),
@@ -376,6 +378,14 @@ class VideoModel {
         crossPostDetails: json['crossPostDetails'] != null
             ? Map<String, dynamic>.from(json['crossPostDetails'] as Map)
             : null,
+        quizzes: () {
+          if (json['quizzes'] is List) {
+            return (json['quizzes'] as List)
+                .map((q) => QuizModel.fromJson(Map<String, dynamic>.from(q as Map)))
+                .toList();
+          }
+          return null;
+        }(),
       );
     } catch (e) {
       
@@ -443,6 +453,7 @@ class VideoModel {
       'isOptimistic': isOptimistic,
       'crossPostStatus': crossPostStatus,
       'crossPostDetails': crossPostDetails,
+      'quizzes': quizzes?.map((q) => q.toJson()).toList(),
     };
   }
 
@@ -484,6 +495,7 @@ class VideoModel {
     bool? isOptimistic,
     Map<String, String>? crossPostStatus,
     Map<String, dynamic>? crossPostDetails,
+    List<QuizModel>? quizzes,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -524,6 +536,7 @@ class VideoModel {
       isOptimistic: isOptimistic ?? this.isOptimistic,
       crossPostStatus: crossPostStatus ?? this.crossPostStatus,
       crossPostDetails: crossPostDetails ?? this.crossPostDetails,
+      quizzes: quizzes ?? this.quizzes,
     );
   }
 
@@ -665,5 +678,48 @@ class Uploader {
   }
 }
 
+class QuizModel {
+  final double timestamp;
+  final String question;
+  final List<String> options;
+  final int correctIndex;
 
+  QuizModel({
+    required this.timestamp,
+    required this.question,
+    required this.options,
+    required this.correctIndex,
+  });
 
+  factory QuizModel.fromJson(Map<String, dynamic> json) {
+    return QuizModel(
+      timestamp: (json['timestamp'] as num).toDouble(),
+      question: json['question'] as String,
+      options: List<String>.from(json['options'] as List),
+      correctIndex: json['correctIndex'] as int,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'timestamp': timestamp,
+      'question': question,
+      'options': options,
+      'correctIndex': correctIndex,
+    };
+  }
+
+  QuizModel copyWith({
+    double? timestamp,
+    String? question,
+    List<String>? options,
+    int? correctIndex,
+  }) {
+    return QuizModel(
+      timestamp: timestamp ?? this.timestamp,
+      question: question ?? this.question,
+      options: options ?? this.options,
+      correctIndex: correctIndex ?? this.correctIndex,
+    );
+  }
+}

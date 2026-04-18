@@ -34,7 +34,7 @@ const connectDB = async () => {
 connectDB();
 
 async function handleVideoProcessing(job) {
-  const { videoId, rawVideoKey, videoName, userId } = job.data;
+  const { videoId, rawVideoKey, videoName, userId, crossPostPlatforms, thumbnailKey } = job.data;
   const tempDir = path.join(process.cwd(), 'temp_raw_downloads');
   if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
@@ -42,25 +42,46 @@ async function handleVideoProcessing(job) {
   const localRawPath = path.join(tempDir, `${videoId}_raw${path.extname(rawVideoKey) || '.mp4'}`);
 
   try {
+    // 1. Initial Status Update
     await Video.findByIdAndUpdate(videoId, { 
         processingStatus: 'processing',
         processingProgress: 10 
     });
 
-    await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
+    // 2. Download from R2 (unless it's already a local path from fallback upload)
+    if (rawVideoKey.startsWith('http')) {
+        console.log('👷 Worker: Downloading raw video from URL:', rawVideoKey);
+        // Handle axios download if needed, or assume cloudflareR2Service handles URLs
+        // For simplicity, let's assume rawVideoKey is usually an R2 Key
+        await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
+    } else {
+        console.log('👷 Worker: Downloading raw video from R2 Key:', rawVideoKey);
+        await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
+    }
+    
     await Video.findByIdAndUpdate(videoId, { processingProgress: 30 });
 
+    // 3. Process Video to HLS
+    // Note: processVideoToHLS handles FFmpeg encoding and R2 upload of segments
     const hlsResult = await hybridVideoService.processVideoToHLS(
         localRawPath,
         videoName,
         userId
     );
 
+    // 4. Update Video Record with Results
     const video = await Video.findById(videoId);
     if (video) {
         video.videoUrl = hlsResult.videoUrl;
         video.hlsPlaylistUrl = hlsResult.hlsPlaylistUrl;
-        video.thumbnailUrl = hlsResult.thumbnailUrl;
+        
+        // Use custom thumbnail if provided, otherwise use generated one
+        if (thumbnailKey) {
+            video.thumbnailUrl = cloudflareR2Service.getPublicUrl(thumbnailKey);
+        } else {
+            video.thumbnailUrl = hlsResult.thumbnailUrl;
+        }
+
         video.processingStatus = 'completed';
         video.processingProgress = 100;
         video.isHLSEncoded = true;
@@ -68,32 +89,47 @@ async function handleVideoProcessing(job) {
         
         if (hlsResult.aspectRatio) video.aspectRatio = hlsResult.aspectRatio;
         if (hlsResult.width) video.originalResolution = { width: hlsResult.width, height: hlsResult.height };
-        
-        if (hlsResult.duration) {
-            video.duration = hlsResult.duration;
-        }
+        if (hlsResult.duration) video.duration = hlsResult.duration;
 
-        // **SOURCE OF TRUTH: Always update videoType and aspectRatio based on actual processed result**
+        // **SOURCE OF TRUTH: Always update videoType based on aspect ratio**
         if (hlsResult.aspectRatio) {
-            video.aspectRatio = hlsResult.aspectRatio;
             video.videoType = hlsResult.aspectRatio > 1.0 ? 'vayu' : 'yog';
-            console.log(`👷 Worker: Updated metadata for ${videoId}: AR=${video.aspectRatio}, Type=${video.videoType}`);
         }
 
-        video.finalScore = RecommendationService.calculateFinalScore({
+        // Initialize Recommendation Score
+        video.finalScore = recommendationService.calculateFinalScore({
             totalWatchTime: 0,
             duration: video.duration,
             likes: 0,
-            comments: 0,
             shares: 0,
             views: 0,
             uploadedAt: video.createdAt
         });
         
         await video.save();
+        console.log(`✅ Worker: Video ${videoId} processed and saved.`);
 
+        // 5. Trigger Social Cross-Posting if requested
+        if (crossPostPlatforms && Array.isArray(crossPostPlatforms) && crossPostPlatforms.length > 0) {
+            console.log(`📡 Worker: Triggering cross-posting for ${videoId}`);
+            for (const platform of crossPostPlatforms) {
+                try {
+                    await addSocialJob(platform, {
+                        videoId: video._id.toString(),
+                        userId: userId,
+                        title: videoName,
+                        description: video.description,
+                        tags: video.tags
+                    });
+                } catch (err) {
+                    console.error(`❌ Worker: Failed to add ${platform} job:`, err.message);
+                }
+            }
+        }
+
+        // 6. Local Moderation (AI Scan)
         try {
-            const moderationResult = await localModerationService.moderateVideo(localRawPath);
+            const moderationResult = await moderationService.moderateVideo(localRawPath);
             const updatedVideo = await Video.findById(videoId);
             if (updatedVideo) {
                 updatedVideo.moderationResult = {
@@ -103,32 +139,42 @@ async function handleVideoProcessing(job) {
                     processedAt: new Date(),
                     provider: 'local-transformers'
                 };
-                if (moderationResult.isFlagged) updatedVideo.processingStatus = 'flagged';
+                if (moderationResult.isFlagged) {
+                    console.log(`🚩 Worker: Video ${videoId} FLAGGED by AI.`);
+                    updatedVideo.processingStatus = 'flagged';
+                }
                 await updatedVideo.save();
             }
         } catch (modError) {
             console.error('⚠️ Worker: Local moderation failed:', modError.message);
         }
 
+        // 7. Cache Invalidation
         try {
             const user = await User.findById(userId);
             if (user && user.googleId) {
-                if (redisService.getConnectionStatus()) {
-                    await invalidateCache([
-                        'user:feed:*',
-                        VideoCacheKeys.feed('all'),
-                        VideoCacheKeys.user(user.googleId),
-                        VideoCacheKeys.all()
-                    ]);
-                }
+                await invalidateCache([
+                    'user:feed:*',
+                    VideoCacheKeys.feed('all'),
+                    VideoCacheKeys.user(user.googleId),
+                    VideoCacheKeys.all()
+                ]);
+                console.log('🧹 Worker: Cache invalidated for user feed.');
             }
         } catch (cacheError) {
             console.error('❌ Worker: Cache invalidation failed:', cacheError);
         }
     }
 
-    await cloudflareR2Service.deleteFile(rawVideoKey);
-    if (fs.existsSync(localRawPath)) fs.unlinkSync(localRawPath);
+    // 8. Cleanup
+    // Delete raw video from R2 (optional, depends on policy)
+    // await cloudflareR2Service.deleteFile(rawVideoKey); 
+    
+    // Always cleanup local temp file
+    if (fs.existsSync(localRawPath)) {
+        fs.unlinkSync(localRawPath);
+        console.log('🧹 Worker: Cleaned up local temp file.');
+    }
 
     return { status: 'completed', videoId };
 
@@ -152,22 +198,16 @@ const videoWorker = new Worker('video-processing', async (job) => {
         return await handleVideoProcessing(job);
         
       case 'sync-counts':
-        // JOB: Verify follower/following/saved counts for a user
         console.log('🔄 Worker: Syncing user counts...');
-        // Implementation logic here...
         return { status: 'done' };
         
       case 'cleanup-orphaned':
-        // JOB: Cleanup R2 files for deleted videos
         console.log('🧹 Worker: Cleaning up orphaned R2 files...');
-        // Implementation logic here...
         return { status: 'done' };
         
       case 'recalculate-ranks':
-        // JOB: Recalculate global creator ranks (scheduled every 2h)
         console.log('🏆 Worker: Recalculating global creator ranks...');
-        await RecommendationService._calculateAndCacheRanks();
-        console.log('✅ Worker: Ranks updated successfully');
+        await recommendationService._calculateAndCacheRanks();
         return { status: 'completed' };
         
       default:
@@ -180,7 +220,7 @@ const videoWorker = new Worker('video-processing', async (job) => {
   }
 }, {
   connection: redisOptions,
-  concurrency: 5 // Increased concurrency for higher throughput
+  concurrency: 1 // CRITICAL: Only 1 job at a time on 1GB Fly.io machine
 });
 
 videoWorker.on('completed', (job) => {

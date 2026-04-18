@@ -11,6 +11,7 @@ class AppRadius {
   static double get md => 12.0.r;
   static double get lg => 16.0.r;
   static double get xl => 24.0.r;
+  static double get card => 12.0.r; // Apple TV style unified radius
   static double get pill => 999.0.r;
 
   // Legacy variables for mapping to AppTheme/AppLayout exactly - Responsive via .r
@@ -35,5 +36,6 @@ class AppRadius {
   static BorderRadius get borderRadiusMD => BorderRadius.circular(md);
   static BorderRadius get borderRadiusLG => BorderRadius.circular(lg);
   static BorderRadius get borderRadiusXL => BorderRadius.circular(xl);
+  static BorderRadius get borderRadiusCard => BorderRadius.circular(card);
   static BorderRadius get borderRadiusPill => BorderRadius.circular(pill);
 }

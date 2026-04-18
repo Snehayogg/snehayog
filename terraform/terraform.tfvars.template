@@ -1,0 +1,8 @@
+fly_api_token             = "YOUR_FLY_TOKEN"
+mongodb_atlas_public_key  = "YOUR_ATLAS_PUBLIC_KEY"
+mongodb_atlas_private_key = "YOUR_ATLAS_PRIVATE_KEY"
+mongodb_atlas_project_id  = "67bea34b4adf7a7538fb4b62"
+cloudflare_api_token      = "YOUR_CLOUDFLARE_TOKEN"
+cloudflare_account_id     = "c3c6f21fa187ec5534c488446cb3d0da"
+upstash_email             = "YOUR_UPSTASH_EMAIL"
+upstash_api_key           = "YOUR_UPSTASH_API_KEY"

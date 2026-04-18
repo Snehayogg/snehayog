@@ -10,7 +10,7 @@ const viewSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false,
     index: true // Faster lookup by user
   },
   viewedAt: {
@@ -25,6 +25,12 @@ const viewSchema = new mongoose.Schema({
   isCounted: {
     type: Boolean,
     default: true
+  },
+  // **NEW: Track view source**
+  source: {
+    type: String,
+    enum: ['app', 'embed'],
+    default: 'app'
   }
 }, {
   timestamps: true

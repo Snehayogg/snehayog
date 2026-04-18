@@ -1,7 +1,7 @@
-# 🎥 Snehayog
+# 🎥 Vayug
 
-**Snehayog** is an open-source platform that empowers content creators by allowing them to upload short and long-form videos, build audiences, and earn 80% of ad revenue.
-Inspired by platforms like YouTube Shorts and Instagram Reels, Snehayog focuses on creator-first monetization and a seamless video-sharing experience.
+**Vayug** is an open-source platform that empowers content creators by allowing them to upload short and long-form videos, build audiences, and earn 80% of ad revenue.
+Inspired by platforms like YouTube Shorts and Instagram Reels, Vayug focuses on creator-first monetization and a seamless video-sharing experience.
 
 ---
 
@@ -37,7 +37,7 @@ Inspired by platforms like YouTube Shorts and Instagram Reels, Snehayog focuses 
 ### Clone the repo
 
 ```bash
-git clone https://github.com/Snehayogg/snehayog.git
+git clone https://github.com/Vayug12/snehayog.git
 cd snehayog
 ```
 

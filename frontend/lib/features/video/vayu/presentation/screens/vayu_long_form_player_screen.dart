@@ -42,6 +42,7 @@ import 'package:vayug/features/video/core/presentation/managers/main_controller.
 import 'package:vayug/features/video/core/data/services/video_view_tracker.dart';
 import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vayug/features/video/core/presentation/widgets/quiz_overlay.dart';
 
 class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   final VideoModel video;
@@ -129,6 +130,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   late final AdImpressionService _adImpressionService;
   final Map<int, Timer> _viewUITimers = {};
   final Map<int, Duration> _lastKnownPositions = {};
+
+  // Quiz State
+  QuizModel? _activeQuiz;
+  final Map<String, Set<int>> _shownQuizzesPerVideo = {};
+  final List<QuizModel> _activeQuizHistory = []; // Stack for current video session
+  bool _isQuizListenerAttached = false;
 
 
   @override
@@ -460,7 +467,11 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   void _setupLateInitialization(int index, VideoPlayerController controller) async {
+    controller.removeListener(_onPositionChanged); // Prevent double-attach
     controller.addListener(_onPositionChanged);
+    
+    print('🔔 VayuPlayer: Listener attached for index $index (Video ID: ${_videos[index].id})');
+    
     if (index == _currentIndex) {
       _enableWakelock();
       _resumePlayback(index);
@@ -480,11 +491,13 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _onPositionChanged() {
     if (!mounted) return;
-    setState(() {});
     
+    // Check if the current video is actually disposed while swiping
     final controller = _controllers[_currentIndex];
     if (controller == null) return;
-
+    
+    if (mounted) setState(() {});
+    
     final currentPos = controller.value.position;
     final lastPos = _lastKnownPositions[_currentIndex] ?? Duration.zero;
 
@@ -498,6 +511,38 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
     if (controller.value.isPlaying && currentPos.inSeconds % 5 == 0) {
       _savePlaybackPosition(_currentIndex);
+    }
+
+    // Check for Quizzes
+    _checkAndTriggerQuiz(controller);
+  }
+
+  void _checkAndTriggerQuiz(VideoPlayerController controller) {
+    if (_activeQuiz != null) return;
+
+    final video = _videos[_currentIndex];
+    final quizzes = video.quizzes;
+    if (quizzes == null || quizzes.isEmpty) return;
+
+    final currentMs = controller.value.position.inMilliseconds;
+    final shownQuizzes = _shownQuizzesPerVideo[video.id] ??= {};
+
+    for (int i = 0; i < quizzes.length; i++) {
+      final quiz = quizzes[i];
+      if (shownQuizzes.contains(i)) continue;
+
+      final targetMs = (quiz.timestamp * 1000).toInt();
+      final diff = currentMs - targetMs;
+
+      // Trigger quiz if within 1.5s window
+      if (diff >= 0 && diff < 1500) {
+        setState(() {
+          _activeQuiz = quiz;
+          shownQuizzes.add(i);
+          _activeQuizHistory.add(quiz);
+        });
+        break;
+      }
     }
   }
 
@@ -786,6 +831,23 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   },
                 ),
               ),
+              
+              // Quiz Overlay
+              if (_activeQuiz != null)
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.spacing2,
+                    vertical: AppSpacing.spacing3,
+                  ),
+                  child: QuizOverlay(
+                    quiz: _activeQuiz!,
+                    onDismiss: () => setState(() => _activeQuiz = null),
+                    onAnswered: (answerIndex) {
+                      AppLogger.log('📝 VayuPlayer: Quiz answered: $answerIndex');
+                      // Future analytics tracking could go here
+                    },
+                  ),
+                ),
             ],
           ),
         );
@@ -1513,8 +1575,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             itemCount: _videos.length,
             itemBuilder: (context, index) => SafeArea(
               top: !isLandscape,
-              left: !isLandscape,
-              right: !isLandscape,
+              left: false,
+              right: false,
               bottom: false, 
               child: _buildFeedItem(index)
             ),
@@ -1538,6 +1600,18 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       if (mounted) setState(() => _isScrollingLocked = locked);
     },
     onShowSnackBar: _showSnackBar,
+    activeQuiz: index == _currentIndex ? _activeQuiz : null,
+    onQuizDismiss: () {
+      if (mounted) setState(() => _activeQuiz = null);
+    },
+    onQuizBack: () {
+      if (_activeQuizHistory.length > 1) {
+        setState(() {
+          _activeQuizHistory.removeLast(); // Remove current
+          _activeQuiz = _activeQuizHistory.last; // Show previous
+        });
+      }
+    },
     buildAdSection: _buildAdSection, 
     buildVideoInfo: _buildVideoInfo, buildChannelRow: _buildChannelRow,
     buildScrubbingOverlay: _buildScrubbingOverlay,
@@ -1549,9 +1623,14 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildVideoInfo(int index) {
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final v = _videos[index];
-    // Use asymmetrical padding: Left 16 (for alignment with titles), Right 8 (to push icons to edge)
-    return Padding(padding: EdgeInsets.fromLTRB(16, 0, 8, isPortrait ? 4 : 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Padding(padding: const EdgeInsets.only(right: 8), child: Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis)),
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: AppSpacing.spacing3,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+      Text(_compactTitle(v.videoName, maxChars: 80), style: AppTypography.bodyLarge.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
       if (v.tags != null && v.tags!.isNotEmpty) ...[
         SizedBox(height: isPortrait ? 8 : 8),
         Padding(
@@ -1571,94 +1650,115 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         ),
       ],
       const SizedBox(height: 12),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Text('${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary, fontSize: isPortrait ? 12 : 12)),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (v.link?.isNotEmpty == true) ...[
-                    IconButton(
-                      onPressed: () async {
-                        final sanitized = _sanitizeUrl(v.link!);
-                        final url = Uri.parse(sanitized);
-                        if (await canLaunchUrl(url)) {
-                          await launchUrl(url, mode: LaunchMode.externalApplication);
-                        } else {
-                          _showSnackBar('Could not open link', type: VayuSnackBarType.error);
-                        }
-                      },
-                      icon: Icon(
-                        Icons.open_in_new_rounded,
-                        color: AppColors.textSecondary,
-                        size: isPortrait ? 20 : 20,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Visit Now',
-                    ),
-                  ],
-                  IconButton(
-                    onPressed: () => _showShareOptions(v),
-                    icon: Icon(
-                      Icons.share_outlined,
-                      color: AppColors.textSecondary,
-                      size: isPortrait ? 20 : 20,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    constraints: const BoxConstraints(),
-                  ),
-                  IconButton(
-                    onPressed: () => _showShareSuggestionBottomSheet(v),
-                    icon: Icon(
-                      Icons.tips_and_updates_outlined,
-                      color: AppColors.textSecondary,
-                      size: isPortrait ? 20 : 20,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Share Suggestion',
-                  ),
-                  IconButton(
-                    onPressed: () { 
-                      _handleToggleSave(index); 
-                    }, 
-                    icon: Icon(
-                      v.isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, 
-                      color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
-                      size: isPortrait ? 20 : 20,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    constraints: const BoxConstraints(),
-                  ),
-                  if (v.episodes != null && v.episodes!.isNotEmpty) ...[
-                    IconButton(
-                      onPressed: () => _showEpisodeList(context, v),
-                      icon: Icon(
-                        Icons.playlist_play_rounded,
-                        color: AppColors.textSecondary,
-                        size: isPortrait ? 20 : 20,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Episodes',
-                    ),
-                  ],
-                ],
-              ),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Views and Time
+            Text(
+              '${FormatUtils.formatViews(v.views)} views • ${FormatUtils.formatTimeAgo(v.uploadedAt)}', 
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textTertiary, 
+                fontSize: isPortrait ? 11 : 12,
+                fontWeight: FontWeight.w500,
+              )
             ),
-          ),
-        ],
+            const SizedBox(width: 10), // Spacing between views and buttons
+            
+            // Action Buttons
+            if (v.link?.isNotEmpty == true) 
+              _buildActionButton(
+                context,
+                icon: Icon(Icons.open_in_new_rounded, color: AppColors.textSecondary, size: isPortrait ? 18 : 20),
+                onPressed: () async {
+                  final sanitized = _sanitizeUrl(v.link!);
+                  final url = Uri.parse(sanitized);
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  } else {
+                    _showSnackBar('Could not open link', type: VayuSnackBarType.error);
+                  }
+                },
+                tooltip: 'Visit Now',
+              ),
+            _buildActionButton(
+              context,
+              icon: Icon(Icons.share_outlined, color: AppColors.textSecondary, size: isPortrait ? 18 : 20),
+              onPressed: () => _showShareOptions(v),
+              tooltip: 'Share',
+            ),
+            _buildActionButton(
+              context,
+              icon: Icon(Icons.tips_and_updates_outlined, color: AppColors.textSecondary, size: isPortrait ? 18 : 20),
+              onPressed: () => _showShareSuggestionBottomSheet(v),
+              tooltip: 'Share Suggestion',
+            ),
+            _buildActionButton(
+              context,
+              icon: Icon(
+                v.isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, 
+                color: v.isSaved ? AppColors.primary : AppColors.textSecondary, 
+                size: isPortrait ? 18 : 20,
+              ),
+              onPressed: () => _handleToggleSave(index),
+              tooltip: v.isSaved ? 'Saved' : 'Save',
+            ),
+            if (v.episodes != null && v.episodes!.isNotEmpty) 
+              _buildActionButton(
+                context,
+                icon: Icon(Icons.playlist_play_rounded, color: AppColors.textSecondary, size: isPortrait ? 18 : 20),
+                onPressed: () => _showEpisodeList(context, v),
+                tooltip: 'Episodes',
+              ),
+            const SizedBox(width: 12), // End padding for comfortable scrolling
+          ],
+        ),
       ),
     ]));
+  }
+
+  Widget _buildActionButton(BuildContext context, {
+    required Widget icon,
+    required VoidCallback onPressed,
+    String? tooltip,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                if (tooltip != null && (tooltip == 'Visit Now' || tooltip == 'Episodes')) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    tooltip,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildAdSection(int index) {
@@ -1669,7 +1769,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final userId = userData?['id'] ?? userData?['googleId'] ?? 'anonymous';
     
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16), 
+      padding: EdgeInsets.symmetric(
+        vertical: AppSpacing.spacing3,
+      ),
       child: BannerAdSection(
         adData: {...ad, 'creatorId': _videos[index].uploader.id}, 
         onVideoPause: () => _controllers[index]?.pause(), 
@@ -1691,7 +1793,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildChannelRow(int index) {
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final v = _videos[index];
-    return Padding(padding: EdgeInsets.symmetric(horizontal: isPortrait ? 16 : 16), child: Row(children: [
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: AppSpacing.spacing3,
+      ),
+      child: Row(
+        children: [
       InteractiveScaleButton(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => ProfileScreen(userId: v.uploader.id))), child: CircleAvatar(radius: isPortrait ? 18 : 18, backgroundImage: v.uploader.profilePic.isNotEmpty ? CachedNetworkImageProvider(v.uploader.profilePic) : null, backgroundColor: AppColors.backgroundSecondary, child: v.uploader.profilePic.isEmpty ? const Icon(Icons.person_rounded, color: Colors.white, size: 21) : null)),
       SizedBox(width: isPortrait ? 10 : 10),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(v.uploader.name, style: AppTypography.bodyMedium.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textPrimary : Colors.black87, fontWeight: FontWeight.bold), maxLines: 1), if (v.uploader.totalVideos != null) Text('${v.uploader.totalVideos} videos', style: AppTypography.bodySmall.copyWith(color: Theme.of(context).brightness == Brightness.dark ? AppColors.textSecondary : Colors.black54, fontSize: isPortrait ? 10 : 10))])),
@@ -1709,8 +1816,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final horizontalPadding = isFull ? 60.0 : 14.0;
     
     return Stack(children: [
-      // TOP SCRIM (ONLY IN LANDSCAPE)
-      if (!isPortrait) Positioned(
+      // TOP SCRIM (Consistent visibility for top controls)
+      Positioned(
         top: 0, left: 0, right: 0,
         height: 60,
         child: IgnorePointer(
@@ -1720,12 +1827,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.4),
-                  Colors.black.withOpacity(0.2),
-                  Colors.black.withOpacity(0.05),
+                  Colors.black.withOpacity(0.75),
+                  Colors.black.withOpacity(0.40),
+                  Colors.black.withOpacity(0.15),
                   Colors.transparent,
                 ],
-                stops: const [0.0, 0.45, 0.8, 1.0],
+                stops: const [0.0, 0.4, 0.8, 1.0],
               ),
             ),
           ),
@@ -1748,10 +1855,21 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
               const SizedBox(width: 30), // Balance
               IconButton(
                 constraints: const BoxConstraints(),
-                icon: Icon(Icons.more_vert_rounded, color: Colors.white, size: isPortrait ? 26 : 30),
+                icon: Icon(
+                  Icons.more_vert_rounded, 
+                  color: Colors.white, 
+                  size: isPortrait ? 26 : 30,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
                 onPressed: _showMoreOptions,
                 style: IconButton.styleFrom(
-                  backgroundColor: Colors.black.withOpacity(0.12), 
+                  backgroundColor: Colors.black.withOpacity(0.55), 
                   padding: EdgeInsets.zero,
                   fixedSize: Size(isPortrait ? 26 : 30, isPortrait ? 26 : 30),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1762,8 +1880,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         ),
       ),
       
-      // BOTTOM SCRIM (ONLY IN LANDSCAPE)
-      if (!isPortrait) Positioned(
+      // BOTTOM SCRIM (Consistent visibility for progress bar area)
+      Positioned(
         bottom: 0, left: 0, right: 0,
         height: 80,
         child: IgnorePointer(
@@ -1773,9 +1891,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
                 colors: [
+                  Colors.black.withOpacity(0.65),
                   Colors.black.withOpacity(0.45),
-                  Colors.black.withOpacity(0.25),
-                  Colors.black.withOpacity(0.08),
+                  Colors.black.withOpacity(0.20),
                   Colors.transparent,
                 ],
                 stops: const [0.0, 0.4, 0.8, 1.0],
@@ -1796,8 +1914,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   onTap: _previousVideo,
                   child: Container(
                     width: 38, height: 38,
-                    decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Icon(Icons.skip_previous_rounded, color: Colors.white, size: 38),
+                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                    child: const Icon(
+                      Icons.skip_previous_rounded, 
+                      color: Colors.white, 
+                      size: 38,
+                      shadows: [
+                        Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2)),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 42),
@@ -1807,11 +1932,14 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                 child: InteractiveScaleButton(
                   onTap: _togglePlay,
                   child: Container(
-                    decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
                     child: Icon(
                       controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, 
                       color: Colors.white, 
                       size: 50,
+                      shadows: const [
+                        Shadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 2)),
+                      ],
                     ),
                   ),
                 ),
@@ -1822,8 +1950,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
                   onTap: _nextVideo,
                   child: Container(
                     width: 38, height: 38,
-                    decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-                    child: Icon(Icons.skip_next_rounded, color: Colors.white, size: 38),
+                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                    child: const Icon(
+                      Icons.skip_next_rounded, 
+                      color: Colors.white, 
+                      size: 38,
+                      shadows: [
+                        Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2)),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -2031,6 +2166,9 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   final Widget Function(int) buildCustomControls;
   final Widget Function(int) buildDubbingProgress;
   final String Function(Duration) formatDuration;
+  final QuizModel? activeQuiz;
+  final VoidCallback onQuizDismiss;
+  final VoidCallback? onQuizBack;
 
   const VayuFeedItem({
     super.key, required this.index, required this.video, this.controller, this.chewie,
@@ -2047,6 +2185,9 @@ class VayuFeedItem extends ConsumerStatefulWidget {
     required this.buildCustomControls, required this.buildDubbingProgress, 
     required this.formatDuration,
     required this.onOpenExternalPlayer,
+    this.activeQuiz,
+    this.onQuizBack,
+    required this.onQuizDismiss,
   });
 
   @override
@@ -2084,14 +2225,34 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
     }
     return Column(children: [
       _buildVideoSection(orientation),
-      Expanded(child: SingleChildScrollView(child: Column(children: [
-        const SizedBox(height: 12), widget.buildAdSection(widget.index),
-        const SizedBox(height: 12), widget.buildVideoInfo(widget.index),
-        const SizedBox(height: 8), widget.buildChannelRow(widget.index),
-        const SizedBox(height: 12), widget.buildDubbingProgress(widget.index),
-        const SizedBox(height: 48),
-      ]))),
-    ]);
+      Expanded(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+            child: Column(
+              children: [
+              widget.buildAdSection(widget.index),
+              widget.buildVideoInfo(widget.index),
+              widget.buildChannelRow(widget.index),
+              if (widget.activeQuiz != null)
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    vertical: AppSpacing.spacing3,
+                  ),
+                  child: QuizOverlay(
+                    quiz: widget.activeQuiz!,
+                    onDismiss: widget.onQuizDismiss,
+                    onBack: (widget.onQuizBack != null) ? widget.onQuizBack : null,
+                    onAnswered: (idx) {},
+                  ),
+                ),
+              widget.buildDubbingProgress(widget.index),
+              const SizedBox(height: 48),
+            ],
+          ),
+        ),
+      ),
+   ) ]);
   }
 
   Widget _buildVideoSection(Orientation orientation) {
@@ -2282,7 +2443,7 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
                         height: 30,
                         padding: const EdgeInsets.symmetric(horizontal: 6), // Tightened from 10 to 6
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.12),
+                          color: Colors.black.withOpacity(0.40),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Center(

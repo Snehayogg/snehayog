@@ -34,9 +34,9 @@ class _BannerAdSectionState extends State<BannerAdSection> {
         child: Align(
           alignment: Alignment.topLeft,
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.4, // Smaller width for loading
+            width: double.infinity, 
             height: 30, // Smaller height for loading
-            margin: const EdgeInsets.only(top: 20, left: 16),
+            margin: const EdgeInsets.only(top: 20),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),

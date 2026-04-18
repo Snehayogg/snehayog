@@ -47,6 +47,7 @@ import 'package:vayug/shared/widgets/report_dialog_widget.dart';
 import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/shared/services/share_service.dart';
+import 'package:vayug/shared/widgets/episode_grid_widget.dart';
 import 'video_feed_advanced/widgets/throttled_progress_bar.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,6 +63,7 @@ import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayug/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
+import 'package:vayug/features/video/core/presentation/widgets/quiz_overlay.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -158,6 +160,12 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     // Initialize services
     _initializeServices();
     _checkDeviceCapabilities();
+
+    // **FIX: Immediately mark screen as visible if opened as a dedicated player (Profile/DeepLink)**
+    // This allows forcePlayCurrent to work immediately without waiting for VisibilityDetector.
+    if (_openedFromProfile || _openedFromDeepLink) {
+      _isScreenVisible = true;
+    }
   }
 
   @override
@@ -681,13 +689,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
     
-    // 4. Component Visibility Guard
-    if (!_isScreenVisible) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: component hidden (_isScreenVisible=false)');
-      return false;
-    }
-
-    // 5. Auth Loading Guard
+    // 4. Auth Loading Guard
     final authController = ref.read(googleSignInProvider);
     if (authController.isLoading) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: Auth is loading');
@@ -696,7 +698,13 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
     // **LAYER 2: Priority/Bypass Logic**
     if (_openedFromProfile || _openedFromDeepLink) {
-      return true; // These already passed the visibility gate above
+      return true; // These already passed the route and tab visibility gates above
+    }
+
+    // 4. Component Visibility Guard
+    if (!_isScreenVisible) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: component hidden (_isScreenVisible=false)');
+      return false;
     }
 
     // Additional safeguard for main feed tabs

@@ -500,6 +500,7 @@
                 </select>
 
                 <select id="creatorSort" onchange="filterCreators()">
+                    <option value="newest">Newest Joined</option>
                     <option value="earnings">Sort by Earnings</option>
                     <option value="views">Sort by Total Views</option>
                     <option value="uploads">Sort by Monthly Uploads</option> <!-- NEW -->
@@ -1366,6 +1367,8 @@
                         return a.name.localeCompare(b.name);
                     case 'pending':
                         return Number(b.pendingEarningsINR || 0) - Number(a.pendingEarningsINR || 0);
+                    case 'newest':
+                        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
                     case 'earnings':
                     default:
                         return netB - netA;
@@ -1377,7 +1380,7 @@
 
         function resetCreatorFilters() {
             document.getElementById('creatorSearch').value = '';
-            document.getElementById('creatorSort').value = 'earnings';
+            document.getElementById('creatorSort').value = 'newest';
             const statusSelect = document.getElementById('creatorStatusFilter');
             if (statusSelect) {
                     statusSelect.value = 'all';

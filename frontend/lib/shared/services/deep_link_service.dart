@@ -2,6 +2,11 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:flutter/material.dart';
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
 
 class DeepLinkService {
   static final DeepLinkService _instance = DeepLinkService._internal();
@@ -51,12 +56,23 @@ class DeepLinkService {
     }
 
     // Check for social success (vayu://auth/social-success?platform=youtube)
-    if (uri.path.contains('social-success')) {
+    if (path.contains('social-success')) {
       final platform = uri.queryParameters['platform'];
       AppLogger.log('🔗 DeepLinkService: Social connection success for $platform');
-      // No immediate action needed as user is likely in browser, 
-      // but we logged it for tracking.
       return;
+    }
+
+    // **NEW: Handle Video Links (vayu://video/ID or snehayog://video/ID)**
+    if (path.startsWith('/video/')) {
+      final segments = uri.pathSegments;
+      if (segments.length >= 2) {
+        final videoId = segments[1];
+        AppLogger.log('🔗 DeepLinkService: Handling deep link for video: $videoId');
+        
+        // Smart Routing: Fetch metadata first to decide between Yug and Vayu
+        _routeToVideoSmartly(videoId);
+        return;
+      }
     }
 
     // Check for referral code (?ref=CODE)
@@ -81,6 +97,49 @@ class DeepLinkService {
       if (refCode != null && refCode.isNotEmpty) {
         _saveReferralCode(refCode);
       }
+    }
+  }
+
+  void _routeToVideoSmartly(String videoId) async {
+    try {
+      AppLogger.log('🔗 DeepLinkService: Fetching metadata for smart routing: $videoId');
+      
+      // We use a short timeout to prevent hanging the app if network is bad
+      final videoService = VideoService();
+      final video = await videoService.getVideoById(videoId).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => throw TimeoutException('Metadata fetch timed out'),
+      );
+
+      AppLogger.log('🔗 DeepLinkService: Metadata found. Type=${video.videoType}, AR=${video.aspectRatio}');
+
+      final context = AuthService.navigatorKey.currentContext;
+      if (context == null) return;
+
+      if (video.videoType == 'vayu' || video.aspectRatio > 1.2) {
+        AppLogger.log('🔗 DeepLinkService: Routing to VAYU (Landscape) Player');
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VayuLongFormPlayerScreen(video: video),
+            settings: const RouteSettings(name: '/vayu_video'),
+          ),
+        );
+      } else {
+        AppLogger.log('🔗 DeepLinkService: Routing to YUG (Vertical) Feed');
+        Navigator.pushNamed(
+          context,
+          '/video',
+          arguments: {'videoId': videoId},
+        );
+      }
+    } catch (e) {
+      AppLogger.log('🔗 DeepLinkService: Routing fallback due to error: $e');
+      // Fallback: Just push the standard /video route if fetch fails
+      AuthService.navigatorKey.currentState?.pushNamed(
+        '/video',
+        arguments: {'videoId': videoId},
+      );
     }
   }
 

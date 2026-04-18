@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:vayug/shared/services/file_picker_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +32,7 @@ import 'package:vayug/features/video/upload/presentation/widgets/upload_advanced
 import 'package:vayug/features/video/upload/presentation/screens/make_episode_screen.dart';
 import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
+import 'package:vayug/shared/constants/interests.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -60,6 +62,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   int _uploadStartTime = 0;
   final ValueNotifier<int> _elapsedSeconds = ValueNotifier<int>(0);
   double _lastUploadNetworkProgress = 0.0;
+  final GlobalKey _categoryKey = GlobalKey();
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
@@ -107,13 +110,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       _phaseDescription.value = '';
       _titleController.clear();
       _linkController.clear();
-      _selectedCategory.value = _defaultCategory;
+      _selectedCategory.value = null;
       _tags.value = [];
       _showAdvancedSettings.value = false;
       _selectedPlatforms.value = [];
       _tagInputController.clear();
       _crossPostStatusMap.value = {};
       _crossPostProgressMap.value = {};
+      _quizzes.value = [];
+      _videoDuration.value = 0.0;
 
       _stopUnifiedProgress();
       
@@ -177,6 +182,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final ValueNotifier<bool> _showAdvancedSettings = ValueNotifier<bool>(false);
   final TextEditingController _tagInputController = TextEditingController();
   final ValueNotifier<List<String>> _selectedPlatforms = ValueNotifier<List<String>>([]);
+  final ValueNotifier<List<QuizModel>> _quizzes = ValueNotifier<List<QuizModel>>([]);
+  final ValueNotifier<double> _videoDuration = ValueNotifier<double>(0.0);
 
   // **UNIFIED PROGRESS TRACKING METHODS**
 
@@ -239,7 +246,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           AppSpacing.vSpace4,
           Text(
             body,
-            style: AppTypography.bodySmall.copyWith(fontSize: 13),
+            style: AppTypography.bodySmall.copyWith(fontSize: 13, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -367,7 +374,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     _videoService = ref.read(videoServiceProvider);
     _authService = ref.read(authServiceProvider);
     _filePickerService = ref.read(filePickerServiceProvider);
-    _selectedCategory.value = _defaultCategory;
+    _selectedCategory.value = null;
     super.initState();
 
     // Listeners for activity recovery
@@ -485,7 +492,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     // Validate category selection before uploading
     if (_selectedCategory.value == null || _selectedCategory.value!.isEmpty) {
       _isUploading.value = false;
-      _errorMessage.value = AppText.get('upload_error_select_category');
+      _errorMessage.value = 'Please select a category for your video.';
+      
+      // Auto-scroll to category section for better UX
+      if (_categoryKey.currentContext != null) {
+        Scrollable.ensureVisible(
+          _categoryKey.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
       return;
     }
 
@@ -562,6 +578,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           },
           cancelToken: _uploadCancelToken,
           crossPostPlatforms: crossPostPlatforms,
+          quizzes: _quizzes.value,
         ),
         zoneValues: {
           'upload_metadata': {
@@ -1141,6 +1158,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               return;
             }
             final durationSeconds = controller.value.duration.inSeconds;
+            _videoDuration.value = durationSeconds.toDouble();
             await controller.dispose();
 
             if (durationSeconds < 8) {
@@ -1260,6 +1278,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     _isMinimizing.dispose();
     _crossPostStatusMap.dispose();
     _crossPostProgressMap.dispose();
+    _quizzes.dispose();
+    _videoDuration.dispose();
     super.dispose();
   }
 
@@ -1624,6 +1644,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
           const SizedBox(height: 32),
 
+          // MANDATORY CATEGORY SELECTION (Moved out of advanced settings)
+          _buildMandatoryCategorySelector(),
+
+          const SizedBox(height: 32),
+
           _buildCrossPostProgress(),
           
           const SizedBox(height: 32),
@@ -1633,15 +1658,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             isExpanded: _showAdvancedSettings,
             onToggle: _toggleAdvancedSettings,
             titleController: _titleController,
-            selectedCategory: _selectedCategory,
-            defaultCategory: _defaultCategory,
-            onCategoryChanged: (val) => _selectedCategory.value = val,
             linkController: _linkController,
             tagInputController: _tagInputController,
             tags: _tags,
             onAddTag: _handleAddTag,
             onRemoveTag: _handleRemoveTag,
             onMakeEpisode: _handleMakeEpisode,
+            quizzes: _quizzes,
+            videoDuration: _videoDuration.value,
           ),
 
           const SizedBox(height: 32),
@@ -1838,12 +1862,14 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                        if (!current.contains('youtube')) {
                          current.add('youtube');
                          _selectedPlatforms.value = current;
-                         ScaffoldMessenger.of(context).showSnackBar(
-                           SnackBar(
-                             content: Text(AppText.get('crosspost_youtube_success')),
-                             backgroundColor: AppColors.success,
-                           ),
-                         );
+                         if (mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             SnackBar(
+                               content: Text(AppText.get('crosspost_youtube_success')),
+                               backgroundColor: AppColors.success,
+                             ),
+                           );
+                         }
                        }
                     }
                   });
@@ -2067,5 +2093,99 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         return Icon(Icons.public, color: color, size: 18);
     }
   }
+
+  Widget _buildMandatoryCategorySelector() {
+    return Column(
+      key: _categoryKey,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.category_outlined,
+                color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Select Video Category',
+              style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 4),
+            const Text('*', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ValueListenableBuilder<String?>(
+          valueListenable: _selectedCategory,
+          builder: (context, currentValue, _) {
+            final options = [
+              ...kInterestOptions.where((c) => c != 'Custom Interest'),
+              if (!kInterestOptions.contains(_defaultCategory)) _defaultCategory,
+            ];
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: currentValue == null
+                      ? AppColors.error.withValues(alpha: 0.5)
+                      : AppColors.borderPrimary,
+                  width: currentValue == null ? 1.5 : 1,
+                ),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: currentValue,
+                  hint: Text(
+                    'Choose a category (Mandatory)',
+                    style: TextStyle(
+                      color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      fontSize: 14,
+                    ),
+                  ),
+                  isExpanded: true,
+                  items: options
+                      .map(
+                        (c) => DropdownMenuItem<String>(
+                          value: c,
+                          child: Text(c, style: const TextStyle(fontSize: 14)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) => _selectedCategory.value = val,
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        // Incentive Note
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.stars_rounded, color: AppColors.textSecondary, size: 18),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Making educational content can significantly increase your earning potential and platform reach.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
+
 

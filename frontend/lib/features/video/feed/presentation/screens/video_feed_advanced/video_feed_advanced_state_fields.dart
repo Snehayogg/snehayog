@@ -17,6 +17,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
     _currentIndexVN.value = value;
   }
   int _currentPage = 1;
+  String? _nextCursor; // **NEW: Cursor for the next page of videos**
 
   // final Set<String> _followingUsers = {}; // **REMOVED: Now using global UserProvider**
   final Set<String> _seenVideoKeys = <String>{};
@@ -111,8 +112,14 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   final Map<String, DateTime> _lastAccessedLocal = {};
   final Map<String, VoidCallback> _bufferingListeners = {};
   final Map<String, VoidCallback> _videoEndListeners = {};
+  // **NEW: Track Quiz Listeners**
+  final Map<String, VoidCallback> _quizListeners = {};
   // **NEW: Track Error Listeners explicitly for cleanup**
   final Map<String, VoidCallback> _errorListeners = {};
+
+  final ValueNotifier<QuizModel?> _activeQuizVN = ValueNotifier<QuizModel?>(null);
+  final Map<String, Set<int>> _shownQuizzesPerVideo = {};
+  final Map<String, List<QuizModel>> _quizHistoryPerVideo = {};
 
 
   // Resume tracking

@@ -20,6 +20,7 @@ import { serializeVideo, serializeVideos } from '../utils/serializers/videoSeria
 import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
 import { updateCreatorDailyStats } from '../utils/analyticsUtils.js';
 import RevenueService from '../services/adServices/revenueService.js';
+import { logger } from '../middleware/traceMiddleware.js';
 
 
 let hybridVideoService;
@@ -842,7 +843,7 @@ export const getUserVideos = async (req, res) => {
       if (rqUser) requestingUserObjectIdStr = rqUser._id.toString();
     }
 
-    const videosSerialized = serializeVideos(videosWithMetadata, req.apiVersion, requestingUserObjectIdStr);
+    const videosSerialized = serializeVideos(videosWithMetadata, req.apiVersion, requestingUserObjectIdStr, req.traceId);
     
     if (redisService.getConnectionStatus()) {
       await redisService.set(cacheKey, videosSerialized, 600);
@@ -955,7 +956,7 @@ export const getFeed = async (req, res) => {
       userId = userIdFromToken;
     }
 
-    const { videoType: queryVideoType, type: queryType, limit = 10, page = 1, clearSession } = req.query;
+    const { videoType: queryVideoType, type: queryType, limit = 10, page = 1, clearSession, cursor } = req.query;
     const videoType = queryVideoType || queryType;
     const limitNum = parseInt(limit) || 5;
     const pageNum = parseInt(page) || 1;
@@ -964,7 +965,7 @@ export const getFeed = async (req, res) => {
     
     const requestedType = (videoType || 'yog').toLowerCase();
     const type = requestedType; // Only 'yog' or 'vayu'
-    console.log('🔍 Video Feed Request - type:', type, 'videoType param:', videoType);
+    console.log('🔍 Video Feed Request - type:', type, 'videoType param:', videoType, 'cursor:', cursor);
     
     let finalVideos = [];
     let hasMore = false;
@@ -984,19 +985,30 @@ export const getFeed = async (req, res) => {
     
     // Fallback if queue is empty or something failed
     if (finalVideos.length === 0) {
-      console.log('⚠️ Queue empty, using fallback pagination');
-      const skip = (pageNum - 1) * limitNum;
+      console.log('⚠️ Queue empty, using fallback pagination with cursor:', cursor);
+      
       const query = { 
         videoType: type,
-        processingStatus: 'completed' // This already excludes 'removed'
+        processingStatus: 'completed'
       };
+
+      // **CURSOR OPTIMIZATION**: Use cursor (createdAt) to avoid skip-based duplicates and latency
+      if (cursor) {
+        query.createdAt = { $lt: new Date(cursor) };
+      }
       
-      finalVideos = await Video.find(query)
+      const videosQuery = Video.find(query)
         .populate('uploader', 'name profilePic googleId')
         .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean();
+        .limit(limitNum);
+      
+      // Only use skip if NO cursor is provided (backward compatibility)
+      if (!cursor && pageNum > 1) {
+        const skip = (pageNum - 1) * limitNum;
+        videosQuery.skip(skip);
+      }
+
+      finalVideos = await videosQuery.lean();
     }
 
     hasMore = finalVideos.length > 0;
@@ -1016,13 +1028,24 @@ export const getFeed = async (req, res) => {
       }
     }
 
-    const serializedVideos = serializeVideos(finalVideos, req.apiVersion, rqUserObjectIdStr);
+    const serializedVideos = serializeVideos(finalVideos, req.apiVersion, rqUserObjectIdStr, req.traceId);
+
+    // Calculate next cursor
+    let nextCursor = null;
+    if (finalVideos.length > 0) {
+      const lastVideo = finalVideos[finalVideos.length - 1];
+      nextCursor = lastVideo.createdAt || lastVideo.uploadedAt;
+      if (nextCursor instanceof Date) {
+        nextCursor = nextCursor.toISOString();
+      }
+    }
 
     res.json({
       videos: serializedVideos,
       hasMore: hasMore,
       total: total,
       currentPage: pageNum,
+      nextCursor: nextCursor, // **NEW: Cursor for the next page**
       totalPages: Math.ceil(total / limitNum),
       isPersonalized: !!userIdentifier
     });
@@ -1067,47 +1090,7 @@ export const getVideoById = async (req, res) => {
         : Promise.resolve(false)
     ]);
 
-    const transformedVideo = {
-      _id: videoObj._id?.toString(),
-      videoName: videoObj.videoName || 'Untitled Video',
-      videoUrl: normalizeUrl(videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || ''),
-      thumbnailUrl: normalizeUrl(videoObj.thumbnailUrl || ''),
-      description: videoObj.description || '',
-      likes: parseInt(videoObj.likes) || 0,
-      views: parseInt(videoObj.views) || 0,
-      shares: parseInt(videoObj.shares) || 0,
-      duration: parseInt(videoObj.duration) || 0,
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
-      videoType: videoObj.videoType || 'yog',
-      link: videoObj.link || null,
-      uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
-      processingStatus: videoObj.processingStatus || 'pending',
-      processingProgress: videoObj.processingProgress || 0,
-      processingError: videoObj.processingError || null,
-      uploader: {
-        id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
-        _id: videoObj.uploader?._id?.toString() || '',
-        googleId: videoObj.uploader?.googleId?.toString() || '',
-        name: videoObj.uploader?.name || 'Unknown User',
-        profilePic: videoObj.uploader?.profilePic || '',
-        earnings: (req.user?.googleId === videoObj.uploader?.googleId?.toString()) 
-          ? (parseFloat(videoObj.uploader?.earnings) || 0.0)
-          : 0.0,
-        rank: rank
-      },
-      hlsMasterPlaylistUrl: videoObj.hlsMasterPlaylistUrl || null,
-      hlsPlaylistUrl: videoObj.hlsPlaylistUrl || null,
-      isHLSEncoded: videoObj.isHLSEncoded || false,
-      seriesId: videoObj.seriesId || null,
-      episodeNumber: videoObj.episodeNumber || 0,
-      episodes: episodes,
-      likedBy: likedByGoogleIds,
-      isLiked: isLiked,
-      earnings: (req.user?.googleId === videoObj.uploader?.googleId?.toString())
-        ? (parseFloat(videoObj.earnings) || 0.0)
-        : 0.0,
-      dubbedUrls: dubbedUrls
-    };
+    const transformedVideo = serializeVideo(videoObj, req.apiVersion, rqUserObjectIdStr, req.traceId);
 
     res.json(transformedVideo);
   } catch (error) {
@@ -1123,7 +1106,7 @@ export const updateVideo = async (req, res) => {
   try {
     const videoId = req.params.id;
     const googleId = req.user.googleId;
-    const { videoName, link, tags, seriesId, episodeNumber } = req.body;
+    const { videoName, link, tags, seriesId, episodeNumber, quizzes } = req.body;
 
     if (!videoName || videoName.trim() === '') {
       return res.status(400).json({ error: 'Video name is required' });
@@ -1133,7 +1116,17 @@ export const updateVideo = async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const video = await Video.findById(videoId).populate('uploader', 'name profilePic googleId');
-    if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (!video) {
+      logger.warn(req.traceId, 'Video not found for update', { videoId });
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    logger.info(req.traceId, 'Updating video metadata', { 
+      videoId, 
+      videoName, 
+      hasQuizzes: Array.isArray(quizzes) && quizzes.length > 0,
+      quizCount: Array.isArray(quizzes) ? quizzes.length : 0
+    });
 
     // Verify ownership
     if (video.uploader._id.toString() !== user._id.toString()) {
@@ -1163,9 +1156,15 @@ export const updateVideo = async (req, res) => {
         video.tags = tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
       }
     }
+ 
+    if (quizzes !== undefined && Array.isArray(quizzes)) {
+      video.quizzes = quizzes;
+    }
 
     video.updatedAt = new Date();
     await video.save();
+    
+    logger.info(req.traceId, 'Video updated successfully in DB', { videoId });
 
     // Invalidate caches
     if (redisService.getConnectionStatus()) {
@@ -1209,33 +1208,7 @@ export const updateVideo = async (req, res) => {
     }
 
     const likedByGoogleIds = await convertLikedByToGoogleIds(videoObj.likedBy || []);
-    const transformedVideo = {
-      _id: videoObj._id?.toString(),
-      videoName: videoObj.videoName,
-      videoUrl: videoObj.videoUrl || videoObj.hlsMasterPlaylistUrl || videoObj.hlsPlaylistUrl || '',
-      thumbnailUrl: videoObj.thumbnailUrl || '',
-      description: videoObj.description || '',
-      likes: parseInt(videoObj.likes) || 0,
-      views: parseInt(videoObj.views) || 0,
-      shares: parseInt(videoObj.shares) || 0,
-      duration: parseInt(videoObj.duration) || 0,
-      aspectRatio: parseFloat(videoObj.aspectRatio) || 9 / 16,
-      videoType: videoObj.videoType || 'yog',
-      link: videoObj.link || null,
-      uploadedAt: videoObj.uploadedAt?.toISOString?.() || new Date().toISOString(),
-      uploader: {
-        id: videoObj.uploader?.googleId?.toString() || videoObj.uploader?._id?.toString() || '',
-        _id: videoObj.uploader?._id?.toString() || '',
-        name: videoObj.uploader?.name || 'Unknown',
-        profilePic: videoObj.uploader?.profilePic || '',
-      },
-      seriesId: videoObj.seriesId || null,
-      episodeNumber: videoObj.episodeNumber || 0,
-      episodes: episodes,
-      tags: videoObj.tags || [],
-      isLiked: videoObj.likedBy.some(id => id.toString() === user._id.toString()),
-      likedBy: likedByGoogleIds
-    };
+    const transformedVideo = serializeVideo(videoObj, req.apiVersion, user._id.toString(), req.traceId);
 
     res.json({ 
       success: true, 
@@ -1243,7 +1216,7 @@ export const updateVideo = async (req, res) => {
       video: transformedVideo
     });
   } catch (error) {
-    console.error('❌ Error updating video:', error);
+    logger.error(req.traceId, 'Error updating video', error, { videoId: req.params.id });
     res.status(500).json({ error: 'Failed to update video' });
   }
 };
@@ -1847,7 +1820,7 @@ export const getSavedVideos = async (req, res) => {
       .filter(v => v != null);
 
     const requestingUserObjectIdStr = user._id.toString();
-    const serializedVideos = serializeVideos(validSavedVideos, req.apiVersion, requestingUserObjectIdStr);
+    const serializedVideos = serializeVideos(validSavedVideos, req.apiVersion, requestingUserObjectIdStr, req.traceId);
 
     res.json(serializedVideos);
   } catch (error) {

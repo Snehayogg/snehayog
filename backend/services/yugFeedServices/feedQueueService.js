@@ -584,19 +584,20 @@ class FeedQueueService {
    * Internal helper for both on-demand fallback and queue smoothing.
    */
   async getFallbackIds(userId, videoType = 'yog', count = 10, excludedIds = []) {
-    // Normalize excluded IDs to strict strings for filtering
-    const excludeSet = new Set(excludedIds.map(id => id.toString()));
+    // **LATENCY FIX: Limit the size of the exclusion list.**
+    // MongoDB performance degrades exponentially with large $nin arrays.
+    // We take the last 200 excluded IDs to maintain freshness without choking the DB.
+    const limitedExcludes = excludedIds.slice(-200);
+    const excludeSet = new Set(limitedExcludes.map(id => id.toString()));
     const finalIds = [];
 
     // **STRATEGY 1: Fresh/Top Discovery (Recent & High Score)**
-    // Instead of purely random, prioritize content the user hasn't seen
-    // but is either very NEW or has a high DISCOVERY SCORE.
     let need = count - finalIds.length;
     if (need > 0) {
       try {
         const matchStage = { 
           processingStatus: 'completed',
-          'moderationResult.isFlagged': { $ne: true }, // Added filter
+          'moderationResult.isFlagged': { $ne: true },
           _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
               try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
           }).filter(Boolean) }
@@ -606,42 +607,36 @@ class FeedQueueService {
         else matchStage.videoType = 'yog';
 
         const discoveryVideos = await Video.find(matchStage)
-          .sort({ finalScore: -1, createdAt: -1 }) // Prioritize High Score (which includes Discovery Bonus) + Newest
+          .sort({ finalScore: -1, createdAt: -1 })
           .limit(need)
           .select('_id')
           .lean();
         
         if (discoveryVideos.length > 0) {
            finalIds.push(...discoveryVideos.map(v => v._id.toString()));
-        }
+         }
       } catch (err) {
          console.error('❌ FeedQueue: Discovery Fallback Error:', err.message);
       }
     }
 
     // **STRATEGY 2: Randomized Global LRU (Comprehensive Coverage)**
-    // If we couldn't find enough "New" videos, we re-surface the oldest seen ones.
     need = count - finalIds.length;
     if (need > 0 && userId && userId !== 'anon' && userId !== 'undefined') {
        try {
-          // 1. Fetch a large pool of the Oldest Seen videos (up to 1000)
           const lruOldestIds = await FeedHistory.getLRUVideos(userId, 1000);
           
           if (lruOldestIds.length > 0) {
-             // 2. Fetch basic data to filter by videoType
              const rawVideos = await Video.find({
                 _id: { $in: lruOldestIds }
              }).select('_id videoType processingStatus').lean();
              
              const candidates = rawVideos.filter(v => {
-                // **FIX: Use videoType field instead of duration calculation**
                 const typeMatch = v.videoType === videoType;
-                // Exclude what's already in finalIds for this request
                 return v.processingStatus === 'completed' && typeMatch && !finalIds.includes(v._id.toString());
              }).map(v => v._id.toString());
              
              if (candidates.length > 0) {
-                 // **3. RANDOMIZE THE POOL**: This ensures it doesn't feel cyclic
                  const shuffled = candidates.sort(() => 0.5 - Math.random());
                  finalIds.push(...shuffled.slice(0, need));
              }
@@ -652,13 +647,12 @@ class FeedQueueService {
     }
 
     // **STRATEGY 3: Random Discovery (Absolute Last Resort)**
-    // Only used if Strategy 1 & 2 both failed (rare)
     need = count - finalIds.length;
     if (need > 0) {
       try {
         const matchStage = { 
             processingStatus: 'completed',
-            'moderationResult.isFlagged': { $ne: true }, // Added filter
+            'moderationResult.isFlagged': { $ne: true },
             _id: { $nin: [...Array.from(excludeSet), ...finalIds].map(id => {
                 try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; }
             }).filter(Boolean) }
@@ -677,6 +671,26 @@ class FeedQueueService {
         }
       } catch (err) {
          console.error('❌ FeedQueue: Random Fallback Error:', err.message);
+      }
+    }
+
+    // **STRATEGY 4: EMERGENCY FALLBACK (Pool Exhaustion Fix)**
+    // If still empty, return ANY available videos (even if seen) to prevent feed from ending.
+    need = count - finalIds.length;
+    if (need > 0 && finalIds.length === 0) {
+      console.log('🚨 FeedQueue: Pool Exhausted! Emergency fallback triggered (ignoring excludes).');
+      try {
+        const emergencyVideos = await Video.find({ 
+          processingStatus: 'completed', 
+          videoType: videoType 
+        })
+          .sort({ views: -1 })
+          .limit(count)
+          .select('_id')
+          .lean();
+        finalIds.push(...emergencyVideos.map(v => v._id.toString()));
+      } catch (err) {
+        console.error('❌ FeedQueue: Emergency Fallback Error:', err.message);
       }
     }
     

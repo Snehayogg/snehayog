@@ -104,6 +104,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         limit: _videosPerPage,
         videoType: widget.videoType,
         clearSession: clearSession,
+        cursor: (page > 1) ? _nextCursor : null, // **NEW: Use cursor for pagination**
       );
 
       List<VideoModel> newVideos;
@@ -127,6 +128,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       final hasMore = response['hasMore'] as bool? ?? false;
       final currentPage = response['currentPage'] as int? ?? page;
+      final nextCursor = response['nextCursor'] as String?; // **NEW: Next entry point**
       final existingCurrentKey =
           (_currentIndex >= 0 && _currentIndex < _videos.length)
               ? videoIdentityKey(_videos[_currentIndex])
@@ -205,6 +207,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           }
           _errorMessage = null;
           _currentPage = currentPage;
+          _nextCursor = nextCursor; // Update cursor
           _hasMore = hasMore;
           _markCurrentVideoAsSeen();
         });
@@ -235,6 +238,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
           }
 
           _currentPage = currentPage;
+          _nextCursor = nextCursor; // Update cursor
           _hasMore = hasMore;
           _errorMessage = null;
           _markCurrentVideoAsSeen();
@@ -388,6 +392,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
         _errorMessage = null;
       }
       _currentPage = 1;
+      _nextCursor = null; // Reset cursor for fresh start
       await _loadVideos(
           page: 1, append: false, clearSession: true, forceResetIndex: true);
       if (mounted) {

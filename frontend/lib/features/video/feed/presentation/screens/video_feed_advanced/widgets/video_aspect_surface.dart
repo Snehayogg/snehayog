@@ -68,16 +68,16 @@ class VideoAspectSurface extends StatelessWidget {
             videoHeight = videoSize.width;
           }
           final double detectedAspectRatio = videoWidth / videoHeight;
-          final bool isPortrait =
-              detectedAspectRatio < 1.0 || _isPortraitVideo(detectedAspectRatio);
-          AppLogger.log(
-              '🔍 DETECTED aspect ratio: $detectedAspectRatio, isPortrait: $isPortrait');
+          // **CRITICAL: Prioritize detected aspect ratio from the video file itself**
+          // Model metadata may incorrectly label landscape videos as portrait in YT Shorts/Reels style feeds.
+          final double finalAspectRatio = detectedAspectRatio > 0 ? detectedAspectRatio : modelAspectRatio;
+          final bool isCurrentlyLandscape = finalAspectRatio >= 1.0;
 
-          if (modelAspectRatio < 1.0) {
-            // Portrait
+          if (!isCurrentlyLandscape) {
+            // Portrait: Edge-to-edge full screen for vertical videos
             return SizedBox.expand(
               child: FittedBox(
-                fit: BoxFit.cover, // **FIX: Edge-to-edge full screen for vertical videos**
+                fit: BoxFit.cover,
                 child: SizedBox(
                   width: videoWidth,
                   height: videoHeight,
@@ -86,13 +86,15 @@ class VideoAspectSurface extends StatelessWidget {
               ),
             );
           } else {
-            // Landscape
-            return FittedBox(
-              fit: BoxFit.contain,
-              child: SizedBox(
-                width: videoWidth,
-                height: videoHeight,
-                child: VideoPlayer(controller),
+            // Landscape: Fit strictly within boundaries without cropping (edge-to-edge width, letterboxed height)
+            return SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: videoWidth,
+                  height: videoHeight,
+                  child: VideoPlayer(controller),
+                ),
               ),
             );
           }

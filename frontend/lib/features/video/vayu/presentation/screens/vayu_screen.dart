@@ -9,6 +9,8 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
+import 'package:hugeicons/hugeicons.dart';
+import 'package:vayug/features/profile/core/presentation/screens/search_discovery_screen.dart';
 import 'package:vayug/shared/widgets/vayu_logo.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,12 +266,16 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search_rounded,
-                color: AppColors.textPrimary, size: 22),
+            icon: const HugeIcon(icon: HugeIcons.strokeRoundedSearch01,
+              color: Colors.white,
+              size: 20,
+            ),
             onPressed: () {
-              showSearch(
-                context: context,
-                delegate: VideoCreatorSearchDelegate(),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SearchDiscoveryScreen(),
+                ),
               );
             },
             tooltip: 'Search',
