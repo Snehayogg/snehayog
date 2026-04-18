@@ -692,12 +692,22 @@ class QuizModel {
   });
 
   factory QuizModel.fromJson(Map<String, dynamic> json) {
-    return QuizModel(
-      timestamp: (json['timestamp'] as num).toDouble(),
-      question: json['question'] as String,
-      options: List<String>.from(json['options'] as List),
-      correctIndex: json['correctIndex'] as int,
-    );
+    try {
+      return QuizModel(
+        timestamp: (json['timestamp'] as num?)?.toDouble() ?? 0.0,
+        question: json['question']?.toString() ?? '',
+        options: json['options'] != null ? List<String>.from(json['options'] as List) : [],
+        correctIndex: (json['correctIndex'] as num?)?.toInt() ?? 0,
+      );
+    } catch (e) {
+      // Return a dummy quiz instead of failing the whole thing
+      return QuizModel(
+        timestamp: 0.0,
+        question: 'Error loading question',
+        options: [],
+        correctIndex: 0,
+      );
+    }
   }
 
   Map<String, dynamic> toJson() {

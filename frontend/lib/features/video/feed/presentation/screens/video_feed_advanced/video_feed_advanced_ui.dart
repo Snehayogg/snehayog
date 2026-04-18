@@ -1994,6 +1994,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                         videoName: result['videoName'],
                         link: result['link'],
                         tags: result['tags'],
+                        quizzes: result['quizzes'],
                         seriesId: result['seriesId'],
                         episodes: result['episodes'] != null 
                           ? List<Map<String, dynamic>>.from(result['episodes']) 

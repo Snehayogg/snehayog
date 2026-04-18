@@ -182,7 +182,7 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
  */
 router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, res) => {
   try {
-    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber, thumbnailKey } = req.body;
+    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber, thumbnailKey, quizzes } = req.body;
     const userId = req.user.id;
 
     if (!key || !videoName) {
@@ -216,7 +216,8 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       likes: 0,
       isHLSEncoded: false,
       seriesId: seriesId || null,
-      episodeNumber: episodeNumber ? parseInt(episodeNumber) : 0
+      episodeNumber: episodeNumber ? parseInt(episodeNumber) : 0,
+      quizzes: Array.isArray(quizzes) ? quizzes : []
     });
 
     if (crossPostPlatforms && Array.isArray(crossPostPlatforms)) {
@@ -263,7 +264,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       return res.status(400).json({ error: 'No video file uploaded' });
     }
 
-    const { videoName, description, link, crossPostPlatforms, category, tags } = req.body;
+    const { videoName, description, link, crossPostPlatforms, category, tags, quizzes } = req.body;
     const userId = req.user.id;
     const videoPath = req.file.path;
 
@@ -367,7 +368,8 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       videoHash: videoHash, // **NEW: Save hash for duplicate detection**
       episodeNumber: req.body.episodeNumber ? parseInt(req.body.episodeNumber) : 0, // **NEW: Save episode number**
       category: category || 'others',
-      tags: Array.isArray(tags) ? tags : []
+      tags: Array.isArray(tags) ? tags : [],
+      quizzes: Array.isArray(quizzes) ? quizzes : []
     });
 
     if (crossPostPlatforms && Array.isArray(crossPostPlatforms)) {

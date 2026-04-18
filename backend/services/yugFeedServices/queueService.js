@@ -1,7 +1,5 @@
+import '../../config/env.js';
 import { Queue } from 'bullmq';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 // Initializing Redis connection options from URL or individual parts
 let redisOptions = {

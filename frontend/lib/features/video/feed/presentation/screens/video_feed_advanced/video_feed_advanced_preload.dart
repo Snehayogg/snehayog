@@ -588,13 +588,18 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
     // **LOCAL POOL CLEANUP**
     for (final videoId in _controllerPool.keys.toList()) {
-      int? index;
-      try {
-         index = _videos.indexWhere((v) => v.id == videoId);
-      } catch (_) {}
+      // Find ALL indices where this videoId appears
+      final List<int> allIndices = [];
+      for (int i = 0; i < _videos.length; i++) {
+        if (_videos[i].id == videoId) {
+          allIndices.add(i);
+        }
+      }
 
-      // Check range
-      if (index == null || index < start || index > end) {
+      // Keep if ANY index is within the safe range [start, end]
+      final bool isAnyInRange = allIndices.any((idx) => idx >= start && idx <= end);
+      
+      if (allIndices.isEmpty || !isAnyInRange) {
         controllersToRemove.add(videoId);
       }
     }
@@ -1151,7 +1156,14 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
     final video = _videos[index];
     final videoId = video.id;
 
-    if (video.quizzes == null || video.quizzes!.isEmpty) return;
+    AppLogger.log('🧪 YugFeed debug: _attachQuizListenerIfNeeded for video $videoId (index $index). Quiz count: ${video.quizzes?.length ?? 0}');
+
+    if (video.quizzes == null || video.quizzes!.isEmpty) {
+      if (video.quizzes == null) {
+        AppLogger.log('⚠️ YugFeed: Quizzes field is NULL for video $videoId');
+      }
+      return;
+    }
 
     final existingListener = _quizListeners[videoId];
     if (existingListener != null) {

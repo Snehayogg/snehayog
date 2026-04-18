@@ -12,7 +12,6 @@ import 'package:vayug/features/ads/presentation/widgets/create_ad/media_uploader
 import 'package:vayug/features/ads/presentation/widgets/create_ad/ad_details_form_widget.dart';
 import 'package:vayug/features/ads/presentation/widgets/create_ad/targeting_section_widget.dart';
 import 'package:vayug/features/ads/presentation/widgets/create_ad/campaign_preview_widget.dart';
-import 'package:vayug/features/ads/presentation/widgets/create_ad/ad_placement_preview_widget.dart';
 import 'package:vayug/features/ads/presentation/widgets/create_ad/payment_handler_widget.dart';
 import 'package:vayug/features/ads/data/services/ad_service.dart';
 import 'package:vayug/features/auth/data/services/logout_service.dart';
@@ -37,7 +36,6 @@ class CreateAdScreenRefactored extends ConsumerStatefulWidget {
 
 class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefactored>
     with WidgetsBindingObserver {
-  final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _linkController = TextEditingController();
@@ -90,14 +88,10 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
   bool _isTitleValid = true;
   bool _isDescriptionValid = true;
   bool _isLinkValid = true;
-  bool _isBudgetValid = true;
-  bool _isDateValid = true;
   bool _isMediaValid = true;
   String? _titleError;
   String? _descriptionError;
   String? _linkError;
-  String? _budgetError;
-  String? _dateError;
   String? _mediaError;
 
   // Services retrieved via ref.read(adServiceProvider) in methods
@@ -459,616 +453,328 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
   }
 
   Widget _buildCreateAdForm() {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: [
+              // Success/Error Messages
+              if (_successMessage != null) _buildSuccessMessage(),
+              if (_errorMessage != null) _buildErrorMessage(),
 
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(), // Ensure scrolling is always possible
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      controller: _scrollController,
-      padding: EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        16 + bottomPadding,
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Success/Error Messages
-            if (_successMessage != null) _buildSuccessMessage(),
-            if (_errorMessage != null) _buildErrorMessage(),
-
-            // Ad Type Selector
-            AdTypeSelectorWidget(
-              selectedAdType: _selectedAdType,
-              onAdTypeChanged: _handleAdTypeChanged,
-              onShowBenefits: () =>
-                  PaymentHandlerWidget.showAdvertisingBenefits(context),
-            ),
-            AppSpacing.vSpace16,
-
-            // Media Uploader
-            MediaUploaderWidget(
-              selectedAdType: _selectedAdType,
-              selectedImage: _selectedImage,
-              selectedVideo: _selectedVideo,
-              selectedImages: _selectedImages,
-              onImageSelected: (image) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  setState(() => _selectedImage = image);
-                  _validateField('media');
-                });
-              },
-              onVideoSelected: (video) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  setState(() => _selectedVideo = video);
-                  _validateField('media');
-                });
-              },
-              onImagesSelected: (images) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  setState(() {
-                    _selectedImages.clear();
-                    _selectedImages.addAll(images);
-                  });
-                  _validateField('media');
-                });
-              },
-              onError: (error) => setState(() => _errorMessage = error),
-              // **NEW: Pass validation states**
-              isMediaValid: _isMediaValid,
-              mediaError: _mediaError,
-            ),
-            AppSpacing.vSpace16,
-
-            // **ENHANCED: Ad Details Form with helpful tips**
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.edit, color: AppColors.primary),
-                        AppSpacing.hSpace8,
-                        Text(
-                          _selectedAdType == 'banner'
-                              ? AppText.get('ad_banner_details')
-                              : AppText.get('ad_details'),
-                          style: AppTypography.headlineSmall.copyWith(
-                            fontWeight: AppTypography.weightBold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // **NEW: Helpful tip for beginners**
-                    Container(
-                      margin: const EdgeInsets.only(top: 12, bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.backgroundSecondary,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.borderPrimary),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.tips_and_updates,
-                            size: 16,
-                            color: AppColors.primary,
-                          ),
-                          AppSpacing.hSpace8,
-                          Expanded(
-                            child: Text(
-                              _selectedAdType == 'banner'
-                                  ? AppText.get('ad_tip_banner')
-                                  : AppText.get('ad_tip_general'),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    AppSpacing.vSpace8,
-                    AdDetailsFormWidget(
-                      titleController: _titleController,
-                      descriptionController: _descriptionController,
-                      linkController: _linkController,
-                      adType: _selectedAdType,
-                      onClearErrors: _clearErrorMessages,
-                      onFieldChanged: _validateField,
-                      isTitleValid: _isTitleValid,
-                      isDescriptionValid: _isDescriptionValid,
-                      isLinkValid: _isLinkValid,
-                      titleError: _titleError,
-                      descriptionError: _descriptionError,
-                      linkError: _linkError,
-                    ),
-                  ],
-                ),
+              // 1. Ad Type Selection
+              _buildSettingRow(
+                icon: Icons.ads_click_rounded,
+                title: 'Ad Format',
+                subtitle: _selectedAdType.toUpperCase(),
+                trailing: const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: AppColors.textTertiary),
+                onTap: () => _showAdTypeSelector(),
               ),
-            ),
-            AppSpacing.vSpace16,
 
-            // **REMOVED: Campaign Settings moved to Budget & Duration section above**
-
-            // **NEW: Simple Budget & Duration Section (Beginner-friendly)**
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.attach_money,
-                            color: AppColors.success),
-                        AppSpacing.hSpace8,
-                        Text(
-                          AppText.get('ad_budget_duration'),
-                          style: AppTypography.headlineSmall.copyWith(
-                            fontWeight: AppTypography.weightBold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const Spacer(),
-                        // **NEW: Helpful tip icon**
-                        Tooltip(
-                          message: AppText.get('ad_budget_recommended'),
-                          child: const Icon(
-                            Icons.help_outline,
-                            size: 20,
-                            color: AppColors.textTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    AppSpacing.vSpace16,
-                    // Budget with recommended badge
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _budgetController,
-                            decoration: InputDecoration(
-                              labelText: AppText.get('ad_daily_budget'),
-                              hintText: AppText.get('ad_budget_hint'),
-                              prefixText: '₹',
-                              border: const OutlineInputBorder(),
-                              helperText: AppText.get('ad_budget_minimum'),
-                              suffixIcon: _budgetController.text == '300.00'
-                                  ? Container(
-                                      margin: const EdgeInsets.all(8),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.backgroundTertiary,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: AppColors.borderPrimary,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          AppText.get(
-                                              'ad_budget_recommended_badge'),
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            color: AppColors.success,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (value) {
-                              _validateField('budget');
-                              setState(() {}); // Update recommended badge
-                            },
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return AppText.get('ad_budget_required');
-                              }
-                              try {
-                                final budget = double.parse(value.trim());
-                                if (budget < 100) {
-                                  return AppText.get('ad_budget_minimum_error');
-                                }
-                              } catch (e) {
-                                return AppText.get('ad_budget_invalid');
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    // **NEW: Show budget error if any**
-                    if (!_isBudgetValid && _budgetError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 16,
-                              color: AppColors.error,
-                            ),
-                            AppSpacing.hSpace4,
-                            Expanded(
-                              child: Text(
-                                _budgetError!,
-                                style: const TextStyle(
-                                  color: AppColors.error,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    AppSpacing.vSpace16,
-                    // Quick duration picker
-                    Text(
-                      AppText.get('ad_campaign_duration'),
-                      style: const TextStyle(
-                          fontWeight: AppTypography.weightMedium),
-                    ),
-                    AppSpacing.vSpace8,
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final days in [7, 14, 30])
-                          ChoiceChip(
-                            label: Text('$days days'),
-                            selected: _endDate != null &&
-                                _startDate != null &&
-                                _endDate!.difference(_startDate!).inDays ==
-                                    days,
-                            onSelected: (_) {
-                              setState(() {
-                                _startDate = DateTime.now();
-                                _endDate = _startDate!.add(
-                                  Duration(days: days),
-                                );
-                              });
-                            },
-                          ),
-                        ChoiceChip(
-                          label: const Text('Custom'),
-                          selected: _endDate != null &&
-                              _startDate != null &&
-                              !([7, 14, 30].contains(
-                                _endDate!.difference(_startDate!).inDays,
-                              )),
-                          onSelected: (_) => _selectDateRange(),
-                        ),
-                      ],
-                    ),
-                    if (_startDate != null && _endDate != null) ...[
-                      AppSpacing.vSpace8,
-                      Text(
-                        '${_startDate!.day}/${_startDate!.month}/${_startDate!.year} - ${_endDate!.day}/${_endDate!.month}/${_endDate!.year}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ] else if (!_isDateValid && _dateError != null) ...[
-                      AppSpacing.vSpace8,
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            size: 16,
-                            color: AppColors.error,
-                          ),
-                          AppSpacing.hSpace4,
-                          Expanded(
-                            child: Text(
-                              _dateError!,
-                              style: const TextStyle(
-                                color: AppColors.error,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
+              // 2. Media Upload
+              _buildSettingRow(
+                icon: Icons.perm_media_rounded,
+                title: 'Campaign Media',
+                trailing: _buildMediaStatus(),
+                onTap: () => _showMediaUploader(),
               ),
-            ),
-            AppSpacing.vSpace16,
 
-            // **NEW: Advanced Settings Toggle (animation removed)**
-            Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.tune, color: AppColors.primary),
-                    title: Text(
-                      AppText.get('ad_advanced_settings'),
-                      style: AppTypography.headlineSmall.copyWith(
-                        fontSize: 16,
-                        fontWeight: AppTypography.weightBold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      AppText.get('ad_advanced_settings_desc'),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    trailing: Icon(
-                      _showAdvancedSettings
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                      color: AppColors.primary,
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _showAdvancedSettings = !_showAdvancedSettings;
-                      });
-                    },
+              // 3. Ad Content (Title, Description, Link)
+              _buildSettingRow(
+                icon: Icons.edit_note_rounded,
+                title: 'Ad Details',
+                subtitle: _titleController.text.isEmpty ? 'Set title & link' : _titleController.text,
+                trailing: _isTitleValid && _isLinkValid 
+                    ? const Icon(Icons.check_circle, color: AppColors.success, size: 18)
+                    : const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                onTap: () => _showAdDetailsEditor(),
+              ),
+
+              // 4. Budget & Duration
+              _buildSettingRow(
+                icon: Icons.payments_rounded,
+                title: 'Budget & Duration',
+                subtitle: '₹${_budgetController.text}/day for ${_endDate?.difference(_startDate ?? DateTime.now()).inDays ?? 0} days',
+                onTap: () => _showBudgetDurationEditor(),
+              ),
+
+              // 5. Targeting (Advanced)
+              _buildSettingRow(
+                icon: Icons.ads_click_rounded,
+                title: 'Targeting & Optimization',
+                subtitle: _selectedLocations.isEmpty ? 'Smart Targeting' : '${_selectedLocations.length} locations',
+                onTap: () => setState(() => _showAdvancedSettings = !_showAdvancedSettings),
+              ),
+
+              if (_showAdvancedSettings)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.backgroundSecondary.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
                   ),
-                  if (_showAdvancedSettings) const Divider(height: 1),
-                  if (_showAdvancedSettings)
-                    Container(
-                      constraints: const BoxConstraints(
-                        minHeight: 0,
-                        maxHeight: double.infinity,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppColors.primary.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.2)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.lightbulb_outline,
-                                    color: AppColors.primary,
-                                    size: 20,
-                                  ),
-                                  AppSpacing.hSpace8,
-                                  Expanded(
-                                    child: Text(
-                                      AppText.get('ad_smart_targeting'),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            AppSpacing.vSpace16,
-                            TargetingSectionWidget(
-                              minAge: _minAge,
-                              maxAge: _maxAge,
-                              selectedGender: _selectedGender,
-                              selectedLocations: _selectedLocations,
-                              selectedInterests: _selectedInterests,
-                              selectedPlatforms: _selectedPlatforms,
-                              // **NEW: Additional targeting parameters**
-                              deviceType: _deviceType,
-                              optimizationGoal: _optimizationGoal,
-                              frequencyCap: _frequencyCap,
-                              timeZone: _timeZone,
-                              dayParting: _dayParting,
-                              // **NEW: Advanced KPI parameters**
-                              bidType: _bidType,
-                              bidAmount: _bidAmount,
-                              pacing: _pacing,
-                              targetCPA: _targetCPA,
-                              targetROAS: _targetROAS,
-                              attributionWindow: _attributionWindow,
+                  child: TargetingSectionWidget(
+                    minAge: _minAge,
+                    maxAge: _maxAge,
+                    selectedGender: _selectedGender,
+                    selectedLocations: _selectedLocations,
+                    selectedInterests: _selectedInterests,
+                    selectedPlatforms: _selectedPlatforms,
+                    deviceType: _deviceType,
+                    optimizationGoal: _optimizationGoal,
+                    frequencyCap: _frequencyCap,
+                    timeZone: _timeZone,
+                    dayParting: _dayParting,
+                    bidType: _bidType,
+                    bidAmount: _bidAmount,
+                    pacing: _pacing,
+                    targetCPA: _targetCPA,
+                    targetROAS: _targetROAS,
+                    attributionWindow: _attributionWindow,
+                    onMinAgeChanged: (age) => setState(() => _minAge = age),
+                    onMaxAgeChanged: (age) => setState(() => _maxAge = age),
+                    onGenderChanged: (gender) => setState(() => _selectedGender = gender),
+                    onLocationsChanged: (locs) => setState(() { _selectedLocations.clear(); _selectedLocations.addAll(locs); }),
+                    onInterestsChanged: (ints) => setState(() { _selectedInterests.clear(); _selectedInterests.addAll(ints); }),
+                    onPlatformsChanged: (plats) => setState(() { _selectedPlatforms.clear(); _selectedPlatforms.addAll(plats); }),
+                    onDeviceTypeChanged: (dt) => setState(() => _deviceType = dt),
+                    onOptimizationGoalChanged: (goal) => setState(() => _optimizationGoal = goal),
+                    onFrequencyCapChanged: (cap) => setState(() => _frequencyCap = cap),
+                    onTimeZoneChanged: (tz) => setState(() => _timeZone = tz),
+                    onDayPartingChanged: (dp) => setState(() { _dayParting.clear(); _dayParting.addAll(dp); }),
+                    onBidTypeChanged: (bt) => setState(() => _bidType = bt),
+                    onBidAmountChanged: (ba) => setState(() => _bidAmount = ba),
+                    onPacingChanged: (p) => setState(() => _pacing = p),
+                    onTargetCPAChanged: (cpa) => setState(() => _targetCPA = cpa),
+                    onTargetROASChanged: (roas) => setState(() => _targetROAS = roas),
+                    onAttributionWindowChanged: (aw) => setState(() => _attributionWindow = aw),
+                  ),
+                ),
+              
+              const SizedBox(height: 16),
+              
+              // Preview & Legal
+              CampaignPreviewWidget(
+                startDate: _startDate,
+                endDate: _endDate,
+                budgetText: _budgetController.text,
+                selectedAdType: _selectedAdType,
+              ),
+              _buildLegalAgreement(),
+              _buildValidationSummary(),
+              const SizedBox(height: 100),
+            ],
+          ),
+        ),
 
-                              onMinAgeChanged: (age) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _minAge = age);
-                                });
-                              },
-                              onMaxAgeChanged: (age) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _maxAge = age);
-                                });
-                              },
-                              onGenderChanged: (gender) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _selectedGender = gender);
-                                });
-                              },
-                              onLocationsChanged: (locations) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() {
-                                    _selectedLocations.clear();
-                                    _selectedLocations.addAll(locations);
-                                  });
-                                });
-                              },
-                              onInterestsChanged: (interests) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() {
-                                    _selectedInterests.clear();
-                                    _selectedInterests.addAll(interests);
-                                  });
-                                });
-                              },
-                              onPlatformsChanged: (platforms) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() {
-                                    _selectedPlatforms.clear();
-                                    _selectedPlatforms.addAll(platforms);
-                                  });
-                                });
-                              },
-                              // **NEW: Additional targeting callbacks**
-                              onDeviceTypeChanged: (deviceType) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _deviceType = deviceType);
-                                });
-                              },
-                              onOptimizationGoalChanged: (goal) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _optimizationGoal = goal);
-                                });
-                              },
-                              onFrequencyCapChanged: (cap) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _frequencyCap = cap);
-                                });
-                              },
-                              onTimeZoneChanged: (timeZone) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _timeZone = timeZone);
-                                });
-                              },
-                              onDayPartingChanged: (dayParting) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() {
-                                    _dayParting.clear();
-                                    _dayParting.addAll(dayParting);
-                                  });
-                                });
-                              },
-                              // **NEW: Advanced KPI callbacks**
-                              onBidTypeChanged: (bidType) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _bidType = bidType);
-                                });
-                              },
-                              onBidAmountChanged: (amount) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _bidAmount = amount);
-                                });
-                              },
-                              onPacingChanged: (pacing) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _pacing = pacing);
-                                });
-                              },
-                              onTargetCPAChanged: (cpa) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _targetCPA = cpa);
-                                });
-                              },
-                              onTargetROASChanged: (roas) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _targetROAS = roas);
-                                });
-                              },
-                              onAttributionWindowChanged: (window) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  setState(() => _attributionWindow = window);
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+        // Bottom Fixed Submit Area
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundPrimary,
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
+          ),
+          child: AppButton(
+            onPressed: _isLoading ? null : _submitAd,
+            icon: const Icon(Icons.flash_on_rounded, color: Colors.white),
+            label: _isLoading ? AppText.get('btn_creating_ad') : AppText.get('btn_create_ad'),
+            variant: AppButtonVariant.primary,
+            isLoading: _isLoading,
+            isFullWidth: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingRow({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: AppColors.textPrimary, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  if (subtitle != null)
+                    Text(subtitle, style: const TextStyle(color: AppColors.textTertiary, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
-            AppSpacing.vSpace16,
+            if (trailing != null) ...[
+              trailing,
+            ] else 
+              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // Ad Placement Preview (visual mockup)
-            if ((_selectedAdType == 'banner' && _selectedImage != null) ||
-                (_selectedAdType == 'carousel' &&
-                    (_selectedImages.isNotEmpty || _selectedVideo != null)))
-              AdPlacementPreviewWidget(
+  Widget _buildMediaStatus() {
+    bool hasMedia = _selectedImage != null || _selectedVideo != null || _selectedImages.isNotEmpty;
+    return Text(
+      hasMedia ? 'Selected' : 'None',
+      style: TextStyle(
+        color: hasMedia ? AppColors.success : AppColors.textTertiary,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+    );
+  }
+
+  void _showAdTypeSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: AdTypeSelectorWidget(
+          selectedAdType: _selectedAdType,
+          onAdTypeChanged: (type) {
+            Navigator.pop(context);
+            _handleAdTypeChanged(type);
+          },
+          onShowBenefits: () => PaymentHandlerWidget.showAdvertisingBenefits(context),
+        ),
+      ),
+    );
+  }
+
+  void _showMediaUploader() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              MediaUploaderWidget(
                 selectedAdType: _selectedAdType,
                 selectedImage: _selectedImage,
                 selectedVideo: _selectedVideo,
                 selectedImages: _selectedImages,
+                onImageSelected: (image) { setState(() => _selectedImage = image); setModalState((){}); _validateField('media'); },
+                onVideoSelected: (video) { setState(() => _selectedVideo = video); setModalState((){}); _validateField('media'); },
+                onImagesSelected: (images) { setState(() { _selectedImages.clear(); _selectedImages.addAll(images); }); setModalState((){}); _validateField('media'); },
+                onError: (error) => setState(() => _errorMessage = error),
+                isMediaValid: _isMediaValid,
+                mediaError: _mediaError,
               ),
+              const SizedBox(height: 24),
+              AppButton(onPressed: () => Navigator.pop(context), label: 'Done', variant: AppButtonVariant.primary, isFullWidth: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            if ((_selectedAdType == 'banner' && _selectedImage != null) ||
-                (_selectedAdType == 'carousel' &&
-                    (_selectedImages.isNotEmpty || _selectedVideo != null)))
-              AppSpacing.vSpace16,
-
-            // Campaign Preview
-            CampaignPreviewWidget(
-              startDate: _startDate,
-              endDate: _endDate,
-              budgetText: _budgetController.text,
-              selectedAdType: _selectedAdType,
-            ),
-
-            // **NEW: Legal Agreement Section**
-            AppSpacing.vSpace16,
-            _buildLegalAgreement(),
-
-            // Validation Summary
-            _buildValidationSummary(),
-
-            // Submit Button
-            AppSpacing.vSpace24,
-            AppButton(
-              onPressed: _isLoading ? null : _submitAd,
-              icon: const Icon(Icons.create),
-              label: _isLoading
-                  ? AppText.get('btn_creating_ad')
-                  : AppText.get('btn_create_ad'),
-              variant: AppButtonVariant.primary,
-              isLoading: _isLoading,
-              isFullWidth: true,
-              size: AppButtonSize.large,
-            ),
-
-            // Progress indicator
-            if (_isLoading && _errorMessage != null)
-              const Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: LinearProgressIndicator(
-                  backgroundColor: AppColors.backgroundTertiary,
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.success),
-                ),
+  void _showAdDetailsEditor() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+        child: Form( // Local form for details
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Ad Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+              const SizedBox(height: 16),
+              AdDetailsFormWidget(
+                titleController: _titleController,
+                descriptionController: _descriptionController,
+                linkController: _linkController,
+                adType: _selectedAdType,
+                onClearErrors: _clearErrorMessages,
+                onFieldChanged: (f) { _validateField(f); setState((){}); },
+                isTitleValid: _isTitleValid,
+                isDescriptionValid: _isDescriptionValid,
+                isLinkValid: _isLinkValid,
+                titleError: _titleError,
+                descriptionError: _descriptionError,
+                linkError: _linkError,
               ),
-          ],
+              const SizedBox(height: 24),
+              AppButton(onPressed: () => Navigator.pop(context), label: 'Confirm Details', variant: AppButtonVariant.primary, isFullWidth: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showBudgetDurationEditor() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Budget & Duration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _budgetController,
+                decoration: InputDecoration(labelText: 'Daily Budget', prefixText: '₹', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                keyboardType: TextInputType.number,
+                onChanged: (v) { _validateField('budget'); setState((){}); setModalState((){}); },
+              ),
+              const SizedBox(height: 20),
+              const Text('Quick Duration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final days in [7, 14, 30])
+                    ChoiceChip(
+                      label: Text('$days days'),
+                      selected: _endDate?.difference(_startDate ?? DateTime.now()).inDays == days,
+                      onSelected: (_) => setModalState(() { _startDate = DateTime.now(); _endDate = _startDate!.add(Duration(days: days)); setState((){}); }),
+                    ),
+                  ChoiceChip(label: const Text('Custom'), selected: false, onSelected: (_) async { await _selectDateRange(); setModalState((){}); }),
+                ],
+              ),
+              const SizedBox(height: 24),
+              AppButton(onPressed: () => Navigator.pop(context), label: 'Save Budget', variant: AppButtonVariant.primary, isFullWidth: true),
+            ],
+          ),
         ),
       ),
     );
@@ -1346,14 +1052,10 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
         _isTitleValid = true;
         _isDescriptionValid = true;
         _isLinkValid = true;
-        _isBudgetValid = true;
-        _isDateValid = true;
         _isMediaValid = true;
         _titleError = null;
         _descriptionError = null;
         _linkError = null;
-        _budgetError = null;
-        _dateError = null;
         _mediaError = null;
       });
     });
@@ -1428,34 +1130,12 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
           break;
         case 'budget':
           if (_budgetController.text.trim().isEmpty) {
-            setState(() {
-              _isBudgetValid = false;
-              _budgetError = AppText.get('ad_budget_required');
-            });
+            // No action needed for local state
           } else {
             try {
-              final budget = double.parse(_budgetController.text.trim());
-              if (budget <= 0) {
-                setState(() {
-                  _isBudgetValid = false;
-                  _budgetError = AppText.get('ad_budget_positive');
-                });
-              } else if (budget < 100) {
-                setState(() {
-                  _isBudgetValid = false;
-                  _budgetError = AppText.get('ad_budget_minimum_error');
-                });
-              } else {
-                setState(() {
-                  _isBudgetValid = true;
-                  _budgetError = null;
-                });
-              }
+              // budget validation logic (can be added back if local state is needed)
             } catch (e) {
-              setState(() {
-                _isBudgetValid = false;
-                _budgetError = AppText.get('ad_budget_invalid');
-              });
+              // budget error logic
             }
           }
           break;
@@ -1705,14 +1385,16 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
         _notifyVideoFeedRefresh();
 
         // Then show payment options (doesn't depend on current form fields)
-        PaymentHandlerWidget.showPaymentOptions(
-          context,
-          AdModel.fromJson(result['ad']),
-          result['invoice'],
-          () {
-            // Payment completed – nothing extra to reset here
-          },
-        );
+        if (mounted) {
+          PaymentHandlerWidget.showPaymentOptions(
+            context,
+            AdModel.fromJson(result['ad']),
+            result['invoice'],
+            () {
+              // Payment completed – nothing extra to reset here
+            },
+          );
+        }
       } else {
         throw Exception(
           AppText.get('ad_error_failed',
@@ -1838,70 +1520,27 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
 
     // Check budget
     if (_budgetController.text.trim().isEmpty) {
-      setState(() {
-        _isBudgetValid = false;
-        _budgetError = AppText.get('ad_budget_required');
-        isValid = false;
-      });
+      isValid = false;
     } else {
       // Validate budget format
       try {
         final budget = double.parse(_budgetController.text.trim());
-        if (budget <= 0) {
-          setState(() {
-            _isBudgetValid = false;
-            _budgetError = AppText.get('ad_budget_positive');
-            isValid = false;
-          });
-        } else if (budget < 100) {
-          setState(() {
-            _isBudgetValid = false;
-            _budgetError = AppText.get('ad_budget_minimum_error');
-            isValid = false;
-          });
-        } else {
-          setState(() {
-            _isBudgetValid = true;
-            _budgetError = null;
-          });
+        if (budget < 100) {
+          isValid = false;
         }
       } catch (e) {
-        setState(() {
-          _isBudgetValid = false;
-          _budgetError = AppText.get('ad_budget_invalid');
-          isValid = false;
-        });
+        isValid = false;
       }
     }
 
     // Check date range
     if (_startDate == null || _endDate == null) {
-      setState(() {
-        _isDateValid = false;
-        _dateError = AppText.get('ad_dates_required');
-        isValid = false;
-      });
+      isValid = false;
     } else {
       // Check if end date is after start date
-      if (_endDate!.isBefore(_startDate!)) {
-        setState(() {
-          _isDateValid = false;
-          _dateError = AppText.get('ad_end_after_start');
-          isValid = false;
-        });
-      } else if (_startDate!.isBefore(
-        DateTime.now().subtract(const Duration(days: 1)),
-      )) {
-        setState(() {
-          _isDateValid = false;
-          _dateError = AppText.get('ad_start_not_past');
-          isValid = false;
-        });
-      } else {
-        setState(() {
-          _isDateValid = true;
-          _dateError = null;
-        });
+      if (_endDate!.isBefore(_startDate!) || 
+          _startDate!.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+        isValid = false;
       }
     }
 
@@ -1938,11 +1577,7 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
 
     // Check age range if specified
     if (_minAge != null && _maxAge != null && _minAge! > _maxAge!) {
-      setState(() {
-        _isDateValid = false;
-        _dateError = AppText.get('ad_age_range_invalid');
-        isValid = false;
-      });
+      isValid = false;
     }
 
     return isValid;
@@ -2060,14 +1695,10 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
       _isTitleValid = true;
       _isDescriptionValid = true;
       _isLinkValid = true;
-      _isBudgetValid = true;
-      _isDateValid = true;
       _isMediaValid = true;
       _titleError = null;
       _descriptionError = null;
       _linkError = null;
-      _budgetError = null;
-      _dateError = null;
       _mediaError = null;
     });
 

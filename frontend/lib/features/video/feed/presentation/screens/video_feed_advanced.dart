@@ -185,6 +185,8 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
   void _resumeCurrentVideo() {
     if (mounted && _shouldAutoplayForContext('MainController_Resume')) {
+      // **RECOVERY: Re-initialize if evicted/disposed while in the background**
+      _validateAndRestoreControllers();
       _tryAutoplayCurrent();
     }
   }

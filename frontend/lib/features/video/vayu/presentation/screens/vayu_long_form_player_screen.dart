@@ -135,7 +135,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   QuizModel? _activeQuiz;
   final Map<String, Set<int>> _shownQuizzesPerVideo = {};
   final List<QuizModel> _activeQuizHistory = []; // Stack for current video session
-  bool _isQuizListenerAttached = false;
+  StreamSubscription<String>? _poolDisposalSubscription;
+  final Map<int, VoidCallback> _errorListeners = {};
 
 
   @override
@@ -218,6 +219,33 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         _mainController?.forcePauseVideos();
       }
     });
+
+    // **NEW: Shared Pool Disposal Watchdog**
+    // If a controller we are using was evicted, remove it so we can re-init
+    _poolDisposalSubscription = SharedVideoControllerPool().disposalStream.listen((videoId) {
+      if (mounted) {
+         final index = _videos.indexWhere((v) => v.id == videoId);
+         if (index != -1 && _controllers.containsKey(index)) {
+           AppLogger.log('🧹 VayuPlayer: Cleaning up stale controller for $videoId (Evicted from SharedPool)');
+           
+           // Stop listening to this controller
+           final oldC = _controllers[index];
+           if (oldC != null) {
+              try { oldC.removeListener(_onPositionChanged); } catch (_) {}
+           }
+
+           setState(() {
+             _controllers.remove(index);
+             _chewieControllers.remove(index)?.dispose();
+           });
+           
+           // If this is the current video, re-init IMMEDIATELY
+           if (index == _currentIndex) {
+             _initializePlayer(index);
+           }
+         }
+      }
+    });
   }
 
   @override
@@ -291,6 +319,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _resumeCurrentVideo() {
     if (mounted && !_lifecyclePaused) {
+      // **RECOVERY: Ensure controller is valid before resuming (handles background eviction)**
+      _validateAndRestoreControllers();
+
       // **TAB-AWARE RESUME GUARD**
       if (widget.parentTabIndex != null) {
         final currentTabIndex = _mainController?.currentIndex ?? 0;
@@ -470,6 +501,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     controller.removeListener(_onPositionChanged); // Prevent double-attach
     controller.addListener(_onPositionChanged);
     
+    // **NEW: Error Listener (Grey Screen Fix)**
+    // If the video fails during playback or after orientation change, 
+    // we proactively try to restore it.
+    if (_errorListeners.containsKey(index)) {
+      controller.removeListener(_errorListeners[index]!);
+    }
+    _errorListeners[index] = () => _handleVideoError(index, controller);
+    controller.addListener(_errorListeners[index]!);
+    
     print('🔔 VayuPlayer: Listener attached for index $index (Video ID: ${_videos[index].id})');
     
     if (index == _currentIndex) {
@@ -487,6 +527,25 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         if (vol != null) _volumeValue = vol;
       } catch (_) {}
     }
+  }
+
+  void _handleVideoError(int index, VideoPlayerController controller) {
+    if (!mounted) return;
+    try {
+      if (SharedVideoControllerPool().isControllerDisposed(controller)) return;
+      
+      if (controller.value.hasError) {
+        final videoId = _videos[index].id;
+        final error = controller.value.errorDescription ?? 'Unknown error';
+        AppLogger.log('❌ VayuPlayer: Playback error for $videoId at index $index: $error');
+        
+        // **AUTO-RECOVERY**: If the current video fails, try to re-initialize it once
+        if (index == _currentIndex) {
+            AppLogger.log('🩹 VayuPlayer: Attempting auto-recovery for current video...');
+            _initializePlayer(index);
+        }
+      }
+    } catch (_) {}
   }
 
   void _onPositionChanged() {
@@ -580,6 +639,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _controlsTimer?.cancel(); // Changed from _hideControlsTimer
     _overlayTimer?.cancel();
     _stopViewTracking(_currentIndex);
+    _poolDisposalSubscription?.cancel();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     Future.microtask(() { if (context.mounted) ref.read(mainControllerProvider).setBottomNavVisibility(true); });
@@ -1133,15 +1193,16 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
                           if (result != null && mounted) {
                             setState(() {
-                              _videos[_currentIndex] = _videos[_currentIndex].copyWith(
-                                videoName: result['videoName'],
-                                link: result['link'],
-                                tags: result['tags'],
-                                seriesId: result['seriesId'],
-                                episodes: result['episodes'] != null 
-                                  ? List<Map<String, dynamic>>.from(result['episodes']) 
-                                  : null,
-                              );
+                                _videos[_currentIndex] = _videos[_currentIndex].copyWith(
+                                  videoName: result['videoName'],
+                                  link: result['link'],
+                                  tags: result['tags'],
+                                  quizzes: result['quizzes'],
+                                  seriesId: result['seriesId'],
+                                  episodes: result['episodes'] != null 
+                                    ? List<Map<String, dynamic>>.from(result['episodes']) 
+                                    : null,
+                                );
                             });
                           }
                         },
@@ -1268,13 +1329,38 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   void _validateAndRestoreControllers() {
-    if (_videos.isEmpty) return;
+    if (_videos.isEmpty || !mounted) return;
     
-    // Check if current controller is still valid
-    final video = _videos[_currentIndex];
-    if (!_controllers.containsKey(_currentIndex) || 
-        _controllerPool.getController(video.id) == null) {
-      _initializePlayer(_currentIndex);
+    // Check if current and neighbors are still valid
+    final indicesToCheck = {
+      _currentIndex,
+      if (_currentIndex + 1 < _videos.length) _currentIndex + 1,
+      if (_currentIndex - 1 >= 0) _currentIndex - 1
+    };
+
+    final sharedPool = SharedVideoControllerPool();
+
+    for (final idx in indicesToCheck) {
+      final video = _videos[idx];
+      bool needsInit = false;
+
+      if (_controllers.containsKey(idx)) {
+        final controller = _controllers[idx];
+        if (sharedPool.isControllerDisposed(controller)) {
+           AppLogger.log('🩹 VayuPlayer: Detected disposed controller at index $idx. Cleaning up.');
+           _controllers.remove(idx);
+           _chewieControllers.remove(idx)?.dispose();
+           needsInit = true;
+        }
+      } else {
+        // If it's the current video and missing, we must init
+        if (idx == _currentIndex) needsInit = true;
+      }
+
+      if (needsInit) {
+        AppLogger.log('🔄 VayuPlayer: Triggering restoration for index $idx');
+        _initializePlayer(idx);
+      }
     }
   }
 

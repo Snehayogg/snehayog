@@ -5,8 +5,9 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
-import 'package:vayug/features/video/upload/presentation/widgets/quiz_editor_widget.dart';
+
 import 'package:vayug/features/video/quiz/presentation/screens/create_quiz_screen.dart';
+import 'package:vayug/shared/widgets/app_button.dart';
 
 class EditVideoDetails extends StatefulWidget {
   final VideoModel video;
@@ -111,6 +112,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             'videoName': updatedMainVideo.videoName,
             'link': updatedMainVideo.link,
             'tags': updatedMainVideo.tags,
+            'quizzes': updatedMainVideo.quizzes,
             'episodes': seriesResult['episodes'], // Full list from backend
             'seriesId': seriesResult['seriesId'],
           });
@@ -139,6 +141,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             'videoName': finalVideo.videoName,
             'link': finalVideo.link,
             'tags': finalVideo.tags,
+            'quizzes': finalVideo.quizzes,
             'episodes': finalVideo.episodes,
             'seriesId': finalVideo.seriesId,
           });
@@ -207,138 +210,255 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader('Video Title', Icons.title_rounded),
-            AppSpacing.vSpace8,
-            _buildTextField(
-              controller: _titleController,
-              hintText: 'Give your video a catchy title',
-              maxLines: 2,
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.red, fontSize: 11),
-                ),
-              ),
-            
-            AppSpacing.vSpace24,
-            _buildSectionHeader('Link (CTA Button)', Icons.link_rounded),
-            AppSpacing.vSpace8,
-            _buildTextField(
-              controller: _linkController,
-              hintText: 'https://example.com',
-              keyboardType: TextInputType.url,
-            ),
-            
-            AppSpacing.vSpace24,
-            _buildSectionHeader('Tags', Icons.tag_rounded),
-            AppSpacing.vSpace8,
-            _buildTextField(
-              controller: _tagsController,
-              hintText: 'Add tags...',
-              maxLines: null,
-            ),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        children: [
+          // Video Main Info Section
+          _buildSettingRow(
+            icon: Icons.info_outline_rounded,
+            title: 'Basic Information',
+            subtitle: _titleController.text.isNotEmpty 
+                ? _titleController.text 
+                : 'Title, Link, and Tags',
+            onTap: _showDetailsEditor,
+          ),
+          
+          AppSpacing.vSpace8,
 
-            AppSpacing.vSpace24,
-            _buildSectionHeader('Episodes (Series)', Icons.layers_rounded),
-            AppSpacing.vSpace8,
-            _buildEpisodeManager(),
-            
-            AppSpacing.vSpace24,
-            InkWell(
-              onTap: () async {
-                final List<QuizModel>? result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CreateQuizScreen(
-                      initialQuizzes: _quizzes,
-                      videoDurationInSeconds: widget.video.duration.inSeconds.toDouble(),
-                    ),
+          // Series / Episodes Section
+          _buildSettingRow(
+            icon: Icons.layers_rounded,
+            title: 'Series & Episodes',
+            subtitle: _seriesId != null && _seriesId!.isNotEmpty
+                ? 'Part of a series • ${_episodes.length} episodes'
+                : 'Manage series and episodes',
+            onTap: _showSeriesEditor,
+          ),
+
+          AppSpacing.vSpace8,
+
+          // Quiz Management (Separate Screen as requested)
+          _buildSettingRow(
+            icon: Icons.add_task_rounded,
+            title: 'Interactive Quizzes',
+            subtitle: _quizzes.isEmpty 
+                ? 'Add questions to the video' 
+                : '${_quizzes.length} quizzes added',
+            onTap: () async {
+              final List<QuizModel>? result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CreateQuizScreen(
+                    initialQuizzes: _quizzes,
+                    videoDurationInSeconds: widget.video.duration.inSeconds.toDouble(),
                   ),
-                );
-                if (result != null) {
-                  setState(() {
-                    _quizzes = result;
-                  });
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundSecondary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.add_task_rounded, color: AppColors.primary, size: 20),
-                    ),
-                    AppSpacing.hSpace12,
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Manage Quizzes',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            _quizzes.isEmpty 
-                                ? 'Add questions to the video' 
-                                : '${_quizzes.length} quizzes added',
-                            style: TextStyle(
-                              fontSize: 12, 
-                              color: _quizzes.isEmpty ? AppColors.textSecondary : AppColors.primary,
-                              fontWeight: _quizzes.isEmpty ? FontWeight.normal : FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textTertiary),
-                  ],
-                ),
+              );
+              if (result != null) {
+                setState(() {
+                  _quizzes = result;
+                });
+              }
+            },
+          ),
+          
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 24.0, left: 4.0),
+              child: Text(
+                '⚠️ $_error',
+                style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
             
-            AppSpacing.vSpace32,
-          ],
+          AppSpacing.vSpace32,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: AppColors.textPrimary, size: 22),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(
+          fontSize: 13,
+          color: AppColors.textSecondary,
+          height: 1.4,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(
+        Icons.arrow_forward_ios_rounded,
+        size: 14,
+        color: AppColors.textTertiary,
+      ),
+      onTap: onTap,
+    );
+  }
+
+  void _showDetailsEditor() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.backgroundPrimary,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Basic Information',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              ),
+              AppSpacing.vSpace24,
+              _buildSectionHeader('Video Title', Icons.title_rounded),
+              AppSpacing.vSpace8,
+              _buildTextField(
+                controller: _titleController,
+                hintText: 'Give your video a catchy title',
+                maxLines: 2,
+                onChanged: (_) { setState(() {}); setModalState(() {}); },
+              ),
+              AppSpacing.vSpace24,
+              _buildSectionHeader('CTA Link', Icons.link_rounded),
+              AppSpacing.vSpace8,
+              _buildTextField(
+                controller: _linkController,
+                hintText: 'https://example.com',
+                keyboardType: TextInputType.url,
+                onChanged: (_) { setState(() {}); setModalState(() {}); },
+              ),
+              AppSpacing.vSpace24,
+              _buildSectionHeader('Tags', Icons.tag_rounded),
+              AppSpacing.vSpace8,
+              _buildTextField(
+                controller: _tagsController,
+                hintText: 'Add tags...',
+                maxLines: 3,
+                onChanged: (_) { setState(() {}); setModalState(() {}); },
+              ),
+              AppSpacing.vSpace24,
+              AppButton(
+                onPressed: () => Navigator.pop(context),
+                label: 'Done',
+                variant: AppButtonVariant.primary,
+                isFullWidth: true,
+                size: AppButtonSize.large,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildEpisodeManager() {
+  void _showSeriesEditor() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.backgroundPrimary,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Series & Episodes',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              ),
+              AppSpacing.vSpace12,
+              const Text(
+                'Manage how this video is linked with others in a series.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              AppSpacing.vSpace24,
+              _buildEpisodeManager(setModalState),
+              AppSpacing.vSpace24,
+              AppButton(
+                onPressed: () => Navigator.pop(context),
+                label: 'Save Series Flow',
+                variant: AppButtonVariant.primary,
+                isFullWidth: true,
+                size: AppButtonSize.large,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEpisodeManager([StateSetter? setModalState]) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.backgroundSecondary.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
+        color: AppColors.backgroundSecondary.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
       ),
       child: Column(
         children: [
           if (_episodes.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Text('No episodes linked.', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary)),
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                   const Icon(Icons.layers_clear_rounded, color: AppColors.textTertiary, size: 32),
+                  AppSpacing.vSpace8,
+                  Text('No episodes linked.', style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary)),
+                ],
+              ),
             )
           else
             ListView.builder(
               shrinkWrap: true,
+              padding: EdgeInsets.zero,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _episodes.length,
               itemBuilder: (context, index) {
@@ -347,23 +467,59 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
                 
                 return ListTile(
                   dense: true,
-                  leading: Text('${index + 1}', style: AppTypography.titleSmall.copyWith(color: isCurrent ? AppColors.primary : AppColors.textTertiary)),
-                  title: Text(ep['videoName'] ?? 'Untitled', style: AppTypography.bodySmall.copyWith(color: isCurrent ? AppColors.textPrimary : AppColors.textSecondary, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  leading: CircleAvatar(
+                    radius: 12,
+                    backgroundColor: isCurrent ? AppColors.primary : AppColors.backgroundTertiary,
+                    child: Text(
+                      '${index + 1}', 
+                      style: TextStyle(
+                        fontSize: 10, 
+                        color: isCurrent ? Colors.white : AppColors.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    ep['videoName'] ?? 'Untitled', 
+                    style: AppTypography.bodySmall.copyWith(
+                      color: isCurrent ? AppColors.textPrimary : AppColors.textSecondary, 
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                    ), 
+                    maxLines: 1, 
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   trailing: isCurrent 
-                    ? Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)), child: const Text('CURRENT', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold)))
-                    : IconButton(icon: const Icon(Icons.remove_circle_outline_rounded, size: 18, color: Colors.redAccent), onPressed: () => setState(() => _episodes.removeAt(index))),
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), 
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1), 
+                          borderRadius: BorderRadius.circular(6),
+                        ), 
+                        child: const Text(
+                          'CURRENT', 
+                          style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.redAccent), 
+                        onPressed: () {
+                          setState(() => _episodes.removeAt(index));
+                          if (setModalState != null) setModalState(() {});
+                        },
+                      ),
                 );
               },
             ),
           const Divider(height: 1, color: AppColors.divider),
           TextButton.icon(
-            onPressed: _showVideoPicker,
-            icon: const Icon(Icons.add_rounded, size: 18),
+            onPressed: () => _showVideoPicker(setModalState),
+            icon: const Icon(Icons.add_rounded, size: 20),
             label: const Text('Add Existing Video'),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              minimumSize: const Size(double.infinity, 44),
+              textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              minimumSize: const Size(double.infinity, 48),
             ),
           ),
         ],
@@ -371,13 +527,13 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
     );
   }
 
-  void _showVideoPicker() async {
+  void _showVideoPicker([StateSetter? setModalState]) async {
     // Show a bottom sheet to pick videos
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.backgroundPrimary,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) => _VideoPickerSheet(
         videoType: widget.video.videoType,
         videoService: _videoService,
@@ -394,6 +550,9 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
                });
             }
           });
+          if (setModalState != null) {
+            setModalState(() {});
+          }
         },
       ),
     );
@@ -402,14 +561,15 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.primary),
+        Icon(icon, size: 16, color: AppColors.primary),
         AppSpacing.hSpace8,
         Text(
           title,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppColors.textPrimary,
-            fontSize: AppTypography.fontSizeSM,
+            fontSize: 12,
             fontWeight: AppTypography.weightSemiBold,
+            letterSpacing: 0.5,
           ),
         ),
       ],
@@ -421,9 +581,11 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
     required String hintText,
     int? maxLines = 1,
     TextInputType? keyboardType,
+    Function(String)? onChanged,
   }) {
     return TextField(
       controller: controller,
+      onChanged: onChanged,
       style: TextStyle(
         color: AppColors.textPrimary,
         fontSize: AppTypography.fontSizeBase,
@@ -432,20 +594,20 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4)),
         filled: true,
-        fillColor: AppColors.backgroundSecondary.withValues(alpha: 0.3),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
       ),

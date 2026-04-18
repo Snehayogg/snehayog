@@ -102,7 +102,8 @@ class FeedQueueService {
           await redisService.expire(seenKey, 604800);
           
           // Only sync to DB history for authenticated users (Google IDs are long strings)
-          if (userId !== 'anon' && userId.length > 15) {
+          // Only sync to DB history for authenticated users or identified guest devices
+          if (userId !== 'anon' && userId !== 'undefined' && userId.length > 5) {
             FeedHistory.markAsSeen(userId, poppedIds).catch(e => {}); 
           }
        } catch (e) {
@@ -168,7 +169,7 @@ class FeedQueueService {
              await redisService.sAdd(seenKey, fallbackIds);
              
              // Only sync to DB history for authenticated users
-             if (userId !== 'anon' && userId.length > 15) {
+             if (userId !== 'anon' && userId !== 'undefined' && userId.length > 5) {
                 FeedHistory.markAsSeen(userId, fallbackIds).catch(e => {});
              }
           }

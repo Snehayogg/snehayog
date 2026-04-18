@@ -1047,7 +1047,7 @@ export const getFeed = async (req, res) => {
       currentPage: pageNum,
       nextCursor: nextCursor, // **NEW: Cursor for the next page**
       totalPages: Math.ceil(total / limitNum),
-      isPersonalized: !!userIdentifier
+      isPersonalized: userIdentifier !== 'anon'
     });
 
   } catch (error) {

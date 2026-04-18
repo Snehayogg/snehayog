@@ -149,7 +149,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Interactive quizzes appear at specific times to engage your audience. You can add up to 1 quiz per 5 seconds.',
+              'Add interactive quizzes at specific times to engage your audience.',
               style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary, fontSize: 11),
             ),
           ),
@@ -169,17 +169,12 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
               color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
               shape: BoxShape.circle,
             ),
-            child: HugeIcon(icon: HugeIcons.strokeRoundedHelpCircle, size: 64, color: AppColors.textTertiary),
+            child: const HugeIcon(icon: HugeIcons.strokeRoundedHelpCircle, size: 64, color: AppColors.textTertiary),
           ),
           const SizedBox(height: 16),
           Text(
             'No quizzes added yet',
             style: AppTypography.titleMedium.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Keep your viewers engaged with short questions.',
-            style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary),
           ),
         ],
       ),
@@ -192,44 +187,95 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       itemCount: _quizzes.length,
       itemBuilder: (context, index) {
-        return _QuizItemEditor(
-          key: ValueKey('quiz_$index'),
-          quiz: _quizzes[index],
-          index: index,
-          maxDuration: widget.videoDurationInSeconds,
-          onChanged: (updated) => _updateQuiz(index, updated),
-          onRemove: () => _removeQuiz(index),
-        );
+        final quiz = _quizzes[index];
+        return _buildQuizRow(index, quiz);
       },
+    );
+  }
+
+  Widget _buildQuizRow(int index, QuizModel quiz) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.3)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.quiz_rounded, color: AppColors.textPrimary, size: 20),
+        ),
+        title: Text(
+          quiz.question.isEmpty ? 'New Question' : quiz.question,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: quiz.question.isEmpty ? AppColors.textSecondary : AppColors.textPrimary,
+          ),
+        ),
+        subtitle: Text(
+          'Appears at ${quiz.timestamp.toStringAsFixed(1)}s • ${quiz.options.length} options',
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.edit_rounded, size: 18, color: AppColors.textTertiary),
+            AppSpacing.hSpace8,
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+              onPressed: () => _removeQuiz(index),
+            ),
+          ],
+        ),
+        onTap: () => _showQuizEditor(index),
+      ),
+    );
+  }
+
+  void _showQuizEditor(int index) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _QuizBottomSheetEditor(
+        quiz: _quizzes[index],
+        index: index,
+        maxDuration: widget.videoDurationInSeconds,
+        onChanged: (updated) => _updateQuiz(index, updated),
+      ),
     );
   }
 }
 
-class _QuizItemEditor extends StatefulWidget {
+class _QuizBottomSheetEditor extends StatefulWidget {
   final QuizModel quiz;
   final int index;
   final double maxDuration;
   final Function(QuizModel) onChanged;
-  final VoidCallback onRemove;
 
-  const _QuizItemEditor({
-    super.key,
+  const _QuizBottomSheetEditor({
     required this.quiz,
     required this.index,
     required this.maxDuration,
     required this.onChanged,
-    required this.onRemove,
   });
 
   @override
-  State<_QuizItemEditor> createState() => _QuizItemEditorState();
+  State<_QuizBottomSheetEditor> createState() => _QuizBottomSheetEditorState();
 }
 
-class _QuizItemEditorState extends State<_QuizItemEditor> {
+class _QuizBottomSheetEditorState extends State<_QuizBottomSheetEditor> {
   late TextEditingController _questionController;
   late TextEditingController _timeController;
   late List<TextEditingController> _optionControllers;
-  bool _isExpanded = true;
 
   @override
   void initState() {
@@ -239,11 +285,6 @@ class _QuizItemEditorState extends State<_QuizItemEditor> {
     _optionControllers = widget.quiz.options
         .map((opt) => TextEditingController(text: opt))
         .toList();
-    
-    // Auto-collapse if it's not the first one and has content
-    if (widget.index > 0 && widget.quiz.question.isNotEmpty) {
-      _isExpanded = false;
-    }
   }
 
   @override
@@ -261,7 +302,6 @@ class _QuizItemEditorState extends State<_QuizItemEditor> {
     if (val != null) {
       final clamped = val.clamp(0.0, widget.maxDuration);
       widget.onChanged(widget.quiz.copyWith(timestamp: clamped));
-      // Update text field if it was clamped
       if (clamped != val) {
         _timeController.text = clamped.toStringAsFixed(1);
       }
@@ -271,168 +311,177 @@ class _QuizItemEditorState extends State<_QuizItemEditor> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSecondary.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+      decoration: const BoxDecoration(
+        color: AppColors.backgroundPrimary,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-            child: Row(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        left: 24,
+        right: 24,
+        top: 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'QUIZ ${widget.index + 1}',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: AppColors.textTertiary,
-                    ),
-                  ],
+                Text(
+                  'Edit Quiz #${widget.index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 22),
-                  onPressed: widget.onRemove,
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
-          ),
-          if (_isExpanded) ...[
-            const SizedBox(height: 16),
-          
-          // Question Input
-          Text('Question', style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _questionController,
-            onChanged: (val) => widget.onChanged(widget.quiz.copyWith(question: val)),
-            decoration: InputDecoration(
-              hintText: 'e.g. What is the main message?',
-              filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.5),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            AppSpacing.vSpace24,
+            
+            // Question Field
+            const Text('Question', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
+            AppSpacing.vSpace8,
+            TextField(
+              controller: _questionController,
+              onChanged: (val) {
+                widget.onChanged(widget.quiz.copyWith(question: val));
+              },
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'What is the capital of India?',
+                filled: true,
+                fillColor: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.all(16),
+              ),
             ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Timestamp Section (Slider + Text)
-          Row(
-            children: [
-              Text('Show at (seconds)', style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.bold)),
-              const Spacer(),
-              SizedBox(
-                width: 60,
-                child: TextField(
-                  controller: _timeController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  onSubmitted: (_) => _updateTimeFromText(),
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            
+            AppSpacing.vSpace24,
+            
+            // Timestamp Control
+            Row(
+              children: [
+                const Icon(Icons.timer_outlined, size: 16, color: AppColors.primary),
+                const SizedBox(width: 8),
+                const Text('APPEARANCE TIME', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5)),
+                const Spacer(),
+                Container(
+                  width: 70,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: TextField(
+                    controller: _timeController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary),
+                    onSubmitted: (_) => _updateTimeFromText(),
+                    decoration: const InputDecoration(isDense: true, border: InputBorder.none, suffixText: 's'),
                   ),
                 ),
+              ],
+            ),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: AppColors.primary.withValues(alpha: 0.1),
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primary.withValues(alpha: 0.1),
               ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              activeTrackColor: AppColors.primary,
-              inactiveTrackColor: AppColors.primary.withValues(alpha: 0.1),
-              thumbColor: AppColors.primary,
-              overlayColor: AppColors.primary.withValues(alpha: 0.2),
+              child: Slider(
+                value: widget.quiz.timestamp.clamp(0.0, widget.maxDuration),
+                min: 0,
+                max: widget.maxDuration > 0 ? widget.maxDuration : 1.0,
+                onChanged: (val) {
+                  widget.onChanged(widget.quiz.copyWith(timestamp: val));
+                  _timeController.text = val.toStringAsFixed(1);
+                },
+              ),
             ),
-            child: Slider(
-              value: widget.quiz.timestamp.clamp(0.0, widget.maxDuration),
-              min: 0,
-              max: widget.maxDuration > 0 ? widget.maxDuration : 1.0,
-              onChanged: (val) {
-                widget.onChanged(widget.quiz.copyWith(timestamp: val));
-                _timeController.text = val.toStringAsFixed(1);
-              },
-            ),
-          ),
 
-          const SizedBox(height: 16),
-          
-          // Options
-          Text('Options (Select correct one)', style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          ...List.generate(widget.quiz.options.length, (optIndex) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  Radio<int>(
-                    value: optIndex,
-                    groupValue: widget.quiz.correctIndex,
-                    activeColor: AppColors.primary,
-                    onChanged: (val) {
-                      if (val != null) widget.onChanged(widget.quiz.copyWith(correctIndex: val));
-                    },
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _optionControllers[optIndex],
-                      onChanged: (val) {
-                        final newOptions = List<String>.from(widget.quiz.options);
-                        newOptions[optIndex] = val;
-                        widget.onChanged(widget.quiz.copyWith(options: newOptions));
+            AppSpacing.vSpace24,
+            
+            // Options List
+            const Text('OPTIONS & CORRECT ANSWER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.8)),
+            AppSpacing.vSpace16,
+            ...List.generate(widget.quiz.options.length, (optIndex) {
+              final isCorrect = widget.quiz.correctIndex == optIndex;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        widget.onChanged(widget.quiz.copyWith(correctIndex: optIndex));
+                        setState(() {});
                       },
-                      decoration: InputDecoration(
-                        hintText: 'Option ${optIndex + 1}',
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: isCorrect ? AppColors.primary : AppColors.backgroundSecondary,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isCorrect ? AppColors.primary : AppColors.borderPrimary.withValues(alpha: 0.5)),
+                        ),
+                        child: Icon(isCorrect ? Icons.check_circle_rounded : Icons.radio_button_off_rounded, color: isCorrect ? Colors.white : AppColors.textTertiary, size: 22),
                       ),
                     ),
-                  ),
-                  if (widget.quiz.options.length > 2)
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, size: 20, color: AppColors.textTertiary),
-                      onPressed: () {
-                        setState(() {
-                          _optionControllers.removeAt(optIndex);
-                        });
-                        final newOptions = List<String>.from(widget.quiz.options);
-                        newOptions.removeAt(optIndex);
-                        widget.onChanged(widget.quiz.copyWith(
-                          options: newOptions,
-                          correctIndex: widget.quiz.correctIndex >= newOptions.length ? 0 : widget.quiz.correctIndex,
-                        ));
-                      },
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _optionControllers[optIndex],
+                        onChanged: (val) {
+                          final newOptions = List<String>.from(widget.quiz.options);
+                          newOptions[optIndex] = val;
+                          widget.onChanged(widget.quiz.copyWith(options: newOptions));
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Option ${optIndex + 1}',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                          filled: true,
+                          fillColor: isCorrect ? AppColors.primary.withValues(alpha: 0.05) : AppColors.backgroundSecondary.withValues(alpha: 0.4),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14), 
+                            borderSide: BorderSide(color: isCorrect ? AppColors.primary : Colors.transparent, width: 1.5),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14), 
+                            borderSide: BorderSide(color: isCorrect ? AppColors.primary : Colors.transparent, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14), 
+                            borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                          ),
+                        ),
+                      ),
                     ),
-                ],
-              ),
-            );
-          }),
-          
+                    if (widget.quiz.options.length > 2)
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline, size: 22, color: Colors.redAccent),
+                        onPressed: () {
+                          setState(() {
+                            _optionControllers.removeAt(optIndex);
+                          });
+                          final newOptions = List<String>.from(widget.quiz.options);
+                          newOptions.removeAt(optIndex);
+                          widget.onChanged(widget.quiz.copyWith(
+                            options: newOptions,
+                            correctIndex: widget.quiz.correctIndex >= newOptions.length ? 0 : widget.quiz.correctIndex,
+                          ));
+                        },
+                      ),
+                  ],
+                ),
+              );
+            }),
+            
             TextButton.icon(
               onPressed: () {
                 setState(() {
@@ -441,12 +490,21 @@ class _QuizItemEditorState extends State<_QuizItemEditor> {
                 final newOptions = List<String>.from(widget.quiz.options)..add('');
                 widget.onChanged(widget.quiz.copyWith(options: newOptions));
               },
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-              label: const Text('Add Option', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+              label: const Text('Add Option', style: TextStyle(fontWeight: FontWeight.bold)),
               style: TextButton.styleFrom(foregroundColor: AppColors.primary),
             ),
+            
+            AppSpacing.vSpace32,
+            AppButton(
+              onPressed: () => Navigator.pop(context),
+              label: 'Done',
+              variant: AppButtonVariant.primary,
+              isFullWidth: true,
+              size: AppButtonSize.large,
+            ),
           ],
-        ],
+        ),
       ),
     );
   }

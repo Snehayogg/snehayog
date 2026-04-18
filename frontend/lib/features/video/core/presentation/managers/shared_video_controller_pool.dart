@@ -30,8 +30,8 @@ class SharedVideoControllerPool {
   // **LRU TRACKING**
   final Map<String, DateTime> _lastAccessed =
       {}; // Track when each video was last accessed
-  final Map<String, int> _videoIndices =
-      {}; // Track video indices for smart cleanup
+  final Map<String, Set<int>> _videoIndices =
+      {}; // Track all video indices where this video is present
   
   // **DYNAMIC CONFIG: Hard limit to prevent NO_MEMORY**
   // Android usually supports ~16 hardware decoders, but other apps/services might use them.
@@ -87,11 +87,21 @@ class SharedVideoControllerPool {
     }
 
     try {
-      // Accessing value throws if disposed
+      // Accessing value throws IF disposed.
+      // However, we want to be sure it's a disposal error and not just a 
+      // temporary platform channel lag during orientation change.
       final _ = controller.value;
       return false;
-    } catch (_) {
-      return true;
+    } catch (e) {
+      final errorStr = e.toString().toLowerCase();
+      // Only treat as disposed if the error message explicitly mentions it
+      if (errorStr.contains('disposed') || errorStr.contains('closed')) {
+        return true;
+      }
+      
+      // If it's some other error, it might be transient (e.g. during rotation)
+      // so we don't immediately treat it as dead.
+      return false;
     }
   }
 
@@ -250,9 +260,9 @@ class SharedVideoControllerPool {
     // **LRU: Update access time**
     _lastAccessed[videoId] = DateTime.now();
 
-    // **NEW: Track video index for smart cleanup**
+    // **NEW: Track all video indices for smart cleanup (handles duplicates)**
     if (index != null) {
-      _videoIndices[videoId] = index;
+      _videoIndices.putIfAbsent(videoId, () => {}).add(index);
     }
 
     // Dispose old controller if exists (unless we're explicitly replacing with the same controller)
@@ -290,11 +300,12 @@ class SharedVideoControllerPool {
 
     for (final entry in _videoIndices.entries) {
       final videoId = entry.key;
-      final index = entry.value;
+      final indexSet = entry.value;
 
-      // Keep only videos within the safe range [startRange, endRange]
+      // Keep only videos where AT LEAST ONE of its indices is within the safe range [startRange, endRange]
       // Also keep the current video explicitly
-      if (index != currentIndex && (index < startRange || index > endRange)) {
+      bool isAnyInSafeRange = indexSet.any((idx) => idx == currentIndex || (idx >= startRange && idx <= endRange));
+      if (!isAnyInSafeRange) {
         toRemove.add(videoId);
       }
     }
@@ -315,11 +326,11 @@ class SharedVideoControllerPool {
 
     for (final entry in _videoIndices.entries) {
       final videoId = entry.key;
-      final index = entry.value;
-      final distance = (index - currentIndex).abs();
+      final indexSet = entry.value;
 
-      // Remove controllers more than keepRange away
-      if (distance > keepRange) {
+      // Remove controllers where ALL indices are more than keepRange away
+      bool isAnyNear = indexSet.any((idx) => (idx - currentIndex).abs() <= keepRange);
+      if (!isAnyNear) {
         toRemove.add(videoId);
       }
     }

@@ -28,7 +28,7 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
-import 'package:vayug/features/video/upload/presentation/widgets/upload_advanced_settings_section.dart';
+import 'package:vayug/features/video/upload/presentation/screens/upload_advanced_settings_screen.dart';
 import 'package:vayug/features/video/upload/presentation/screens/make_episode_screen.dart';
 import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
@@ -1459,7 +1459,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               context: context,
               icon: Icons.video_library,
               title: AppText.get('upload_video'),
-              desc: AppText.get('upload_video_desc'),
               color: AppColors.primary,
               onTap: _pickVideo,
             ),
@@ -1471,7 +1470,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               context: context,
               icon: Icons.campaign,
               title: AppText.get('upload_create_ad'),
-              desc: AppText.get('upload_create_ad_desc'),
               color: AppColors.success,
               onTap: () {
                 Navigator.push(
@@ -1505,7 +1503,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     required BuildContext context,
     required IconData icon,
     required String title,
-    required String desc,
     required Color color,
     required VoidCallback onTap,
   }) {
@@ -1514,23 +1511,23 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       borderRadius: BorderRadius.circular(20),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withValues(alpha: 0.1), width: 1),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 32, color: color),
+              child: Icon(icon, size: 28, color: color),
             ),
-            const SizedBox(width: 20),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1539,12 +1536,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                     title,
                     style: AppTypography.headlineSmall
                         .copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    desc,
-                    style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -1558,9 +1549,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   Widget _buildUploadProgressDashboard(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         children: [
+          // **NEW: Incentive Note at the TOP for better visibility**
+          _buildIncentiveNote(),
+          const SizedBox(height: 12),
+
           // Visual Video Preview / Progress Ring
           Center(
             child: Stack(
@@ -1642,35 +1637,36 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             },
           ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
 
-          // MANDATORY CATEGORY SELECTION (Moved out of advanced settings)
+          // **PRIMARY TITLE FIELD**
+          _buildPrimaryTitleField(),
+
+          const SizedBox(height: 24),
+
+          // MANDATORY CATEGORY SELECTION
           _buildMandatoryCategorySelector(),
 
-          const SizedBox(height: 32),
-
-          _buildCrossPostProgress(),
-          
-          const SizedBox(height: 32),
-
-          // Advanced Settings Section (Integrated)
-          UploadAdvancedSettingsSection(
-            isExpanded: _showAdvancedSettings,
-            onToggle: _toggleAdvancedSettings,
-            titleController: _titleController,
-            linkController: _linkController,
-            tagInputController: _tagInputController,
-            tags: _tags,
-            onAddTag: _handleAddTag,
-            onRemoveTag: _handleRemoveTag,
-            onMakeEpisode: _handleMakeEpisode,
-            quizzes: _quizzes,
-            videoDuration: _videoDuration.value,
+          // Conditional spacing and progress info
+          ValueListenableBuilder<Map<String, String>>(
+            valueListenable: _crossPostStatusMap,
+            builder: (context, statusMap, _) {
+              if (statusMap.isEmpty && _selectedPlatforms.value.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                children: [
+                  const SizedBox(height: 24),
+                  _buildCrossPostProgress(),
+                ],
+              );
+            },
           ),
-
-          const SizedBox(height: 32),
           
-          _buildPlatformSelector(),
+          const SizedBox(height: 24),
+
+          // **NAVIGATION TO ADVANCED SETTINGS**
+          _buildAdvancedSettingsNavigation(),
 
           const SizedBox(height: 32),
 
@@ -1893,95 +1889,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     );
   }
 
-  Widget _buildPlatformSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          child: Text(
-            'Also Post To (Cross-Posting)',
-            style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 16),
-        ValueListenableBuilder<List<String>>(
-          valueListenable: _selectedPlatforms,
-          builder: (context, selected, _) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildPlatformToggle(
-                  platform: 'youtube',
-                  icon: HugeIcons.strokeRoundedYoutube,
-                  color: const Color(0xFFFF0000),
-                  isSelected: selected.contains('youtube'),
-                ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPlatformToggle({
-    required String platform,
-    required dynamic icon,
-    required Color color,
-    required bool isSelected,
-  }) {
-    return InkWell(
-      onTap: () {
-        if (platform == 'youtube') {
-          final stateManager = ref.read(profileStateManagerProvider);
-          final isConnected = stateManager.userData?['socialAccounts']?['youtube']?['connected'] ?? false;
-          if (!isConnected) {
-            _showYouTubeConnectBottomSheet();
-            return;
-          }
-        }
-
-        final current = List<String>.from(_selectedPlatforms.value);
-        if (current.contains(platform)) {
-          current.remove(platform);
-        } else {
-          current.add(platform);
-        }
-        _selectedPlatforms.value = current;
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? color : AppColors.borderPrimary,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          children: [
-            HugeIcon(
-              icon: icon,
-              color: isSelected ? color : AppColors.textSecondary,
-              size: 28,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              platform[0].toUpperCase() + platform.substring(1),
-              style: AppTypography.labelSmall.copyWith(
-                color: isSelected ? color : AppColors.textSecondary,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildCrossPostProgress() {
     return ValueListenableBuilder<Map<String, String>>(
@@ -1995,7 +1902,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         if (selectedPlatforms.isEmpty) return const SizedBox.shrink();
 
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: AppColors.backgroundSecondary,
             borderRadius: BorderRadius.circular(16),
@@ -2157,33 +2064,139 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             );
           },
         ),
-        const SizedBox(height: 12),
-        // Incentive Note
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+      ],
+    );
+  }
+
+  Widget _buildIncentiveNote() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.stars_rounded, color: AppColors.textSecondary, size: 18),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Making educational content can significantly increase your earning potential and platform reach.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
-          child: const Row(
-            children: [
-              Icon(Icons.stars_rounded, color: AppColors.textSecondary, size: 18),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Making educational content can significantly increase your earning potential and platform reach.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrimaryTitleField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.title_rounded, color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Video Title',
+              style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 4),
+            const Text('*', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ValueListenableBuilder<bool>(
+          valueListenable: _isUploading,
+          builder: (context, isUploading, _) {
+            return TextField(
+              controller: _titleController,
+              enabled: !isUploading,
+              maxLines: 2,
+              minLines: 1,
+              onTapOutside: (event) => FocusScope.of(context).unfocus(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              decoration: InputDecoration(
+                hintText: 'What is this video about?',
+                hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                filled: true,
+                fillColor: AppColors.backgroundSecondary.withValues(alpha: 0.3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.borderPrimary),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.borderPrimary),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppColors.borderPrimary.withValues(alpha: 0.5)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ],
+    );
+  }
+
+  Widget _buildAdvancedSettingsNavigation() {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UploadAdvancedSettingsScreen(
+              linkController: _linkController,
+              tagInputController: _tagInputController,
+              tags: _tags,
+              onAddTag: _handleAddTag,
+              onRemoveTag: _handleRemoveTag,
+              onMakeEpisode: _handleMakeEpisode,
+              quizzes: _quizzes,
+              selectedPlatforms: _selectedPlatforms,
+              videoDuration: _videoDuration.value,
+            ),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.tune_rounded, color: AppColors.primary, size: 24),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'More Options',
+                    style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tags, Links, Quizzes, and Cross-posting',
+                    style: AppTypography.labelSmall.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.textTertiary),
+          ],
+        ),
+      ),
     );
   }
 }

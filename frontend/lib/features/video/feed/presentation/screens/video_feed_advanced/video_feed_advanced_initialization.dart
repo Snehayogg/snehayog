@@ -44,6 +44,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
         _controllerPool.remove(videoId);
         _controllerStates.remove(videoId);
         _preloadedVideos.remove(videoId);
+        _loadingVideos.remove(videoId);
+        _initializingVideos.remove(videoId);
         
         // 2. Identify the index of this video in our current feed
         int videoIndex = -1;

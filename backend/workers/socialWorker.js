@@ -1,6 +1,6 @@
+import '../config/env.js';
 import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import Video from '../models/Video.js';
@@ -8,8 +8,6 @@ import User from '../models/User.js';
 import { redisOptions } from '../services/yugFeedServices/queueService.js';
 import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
 import youtubeService from '../services/platforms/youtubeService.js';
-
-dotenv.config();
 
 // Connect to MongoDB
 const connectDB = async () => {
