@@ -18,16 +18,17 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const userObjectIdCache = new Map();
 const ID_CACHE_TTL = 10 * 60 * 1000;
 
-const getMemoizedUserObjectId = async (googleId) => {
+const getMemoizedUserExtras = async (googleId) => {
     if (!googleId) return null;
     const cached = userObjectIdCache.get(googleId);
     if (cached && (Date.now() - cached.timestamp < ID_CACHE_TTL)) {
-        return cached.id;
+        return cached.data;
     }
-    const user = await User.findOne({ googleId }).select('_id').lean();
+    const user = await User.findOne({ googleId }).select('_id appVersion').lean();
     if (user) {
-        userObjectIdCache.set(googleId, { id: user._id.toString(), timestamp: Date.now() });
-        return user._id.toString();
+        const data = { _id: user._id.toString(), appVersion: user.appVersion || 'unknown' };
+        userObjectIdCache.set(googleId, { data, timestamp: Date.now() });
+        return data;
     }
     return null;
 };
@@ -128,10 +129,12 @@ export const verifyToken = async (req, res, next) => {
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
             
+            const userExtras = await getMemoizedUserExtras(decoded.id);
             req.user = {
                 ...decoded,
-                googleId: decoded.id, // Ensure googleId is set for JWT tokens
-                _id: await getMemoizedUserObjectId(decoded.id)
+                googleId: decoded.id, 
+                _id: userExtras?._id,
+                appVersion: userExtras?.appVersion
             };
             
             // **NEW: Track user activity**
@@ -161,10 +164,12 @@ export const verifyToken = async (req, res, next) => {
             
             if (response.ok) {
                 const userInfo = await response.json();
+                const userExtras = await getMemoizedUserExtras(userInfo.id);
                 req.user = { 
-                    id: userInfo.id, // Google user ID
-                    googleId: userInfo.id, // Also store as googleId for clarity
-                    _id: await getMemoizedUserObjectId(userInfo.id),
+                    id: userInfo.id,
+                    googleId: userInfo.id,
+                    _id: userExtras?._id,
+                    appVersion: userExtras?.appVersion,
                     email: userInfo.email,
                     name: userInfo.name
                 };
@@ -189,10 +194,12 @@ export const verifyToken = async (req, res, next) => {
             });
             
             const payload = ticket.getPayload();
+            const userExtras = await getMemoizedUserExtras(payload.sub);
             req.user = { 
-                id: payload.sub, // Google user ID
-                googleId: payload.sub, // Also store as googleId for clarity
-                _id: await getMemoizedUserObjectId(payload.sub),
+                id: payload.sub,
+                googleId: payload.sub,
+                _id: userExtras?._id,
+                appVersion: userExtras?.appVersion,
                 email: payload.email,
                 name: payload.name
             };
@@ -232,10 +239,12 @@ export const passiveVerifyToken = async (req, res, next) => {
         try {
             const JWT_SECRET = process.env.JWT_SECRET || config.auth.jwtSecret;
             const decoded = jwt.verify(token, JWT_SECRET);
+            const userExtras = await getMemoizedUserExtras(decoded.id);
             req.user = {
                 ...decoded,
                 googleId: decoded.id,
-                _id: await getMemoizedUserObjectId(decoded.id)
+                _id: userExtras?._id,
+                appVersion: userExtras?.appVersion
             };
             return next();
         } catch (e) { /* Fallback to Google */ }
@@ -245,10 +254,12 @@ export const passiveVerifyToken = async (req, res, next) => {
             const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${token}`);
             if (response.ok) {
                 const userInfo = await response.json();
+                const userExtras = await getMemoizedUserExtras(userInfo.id);
                 req.user = { 
                     id: userInfo.id,
                     googleId: userInfo.id,
-                    _id: await getMemoizedUserObjectId(userInfo.id),
+                    _id: userExtras?._id,
+                    appVersion: userExtras?.appVersion,
                     email: userInfo.email,
                     name: userInfo.name
                 };
@@ -263,10 +274,12 @@ export const passiveVerifyToken = async (req, res, next) => {
                 audience: GOOGLE_CLIENT_ID,
             });
             const payload = ticket.getPayload();
+            const userExtras = await getMemoizedUserExtras(payload.sub);
             req.user = { 
                 id: payload.sub,
                 googleId: payload.sub,
-                _id: await getMemoizedUserObjectId(payload.sub),
+                _id: userExtras?._id,
+                appVersion: userExtras?.appVersion,
                 email: payload.email,
                 name: payload.name
             };

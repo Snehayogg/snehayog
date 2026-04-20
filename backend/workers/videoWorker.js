@@ -7,12 +7,15 @@ import path from 'path';
 import hybridVideoService from '../services/uploadServices/hybridVideoService.js';
 import cloudflareR2Service from '../services/uploadServices/cloudflareR2Service.js';
 import queueService from '../services/yugFeedServices/queueService.js';
+import eventBus from '../utils/eventBus.js';
 import { redisOptions } from '../services/yugFeedServices/queueService.js'; 
 import User from '../models/User.js';
 import redisService from '../services/caching/redisService.js';
 import { invalidateCache, VideoCacheKeys } from '../middleware/cacheMiddleware.js';
 import recommendationService from '../services/yugFeedServices/recommendationService.js';
 import moderationService from '../services/uploadServices/localModerationService.js';
+import videoClippingService from '../services/uploadServices/videoClippingService.js';
+import * as notificationService from '../services/notificationServices/notificationService.js';
 
 // Connect to MongoDB (Worker needs its own connection)
 const connectDB = async () => {
@@ -165,8 +168,15 @@ async function handleVideoProcessing(job) {
     }
 
     // 8. Cleanup
-    // Delete raw video from R2 (optional, depends on policy)
-    // await cloudflareR2Service.deleteFile(rawVideoKey); 
+    // **COST OPTIMIZATION: Delete raw video from R2 after HLS success**
+    if (rawVideoKey && video.isHLSEncoded) {
+        try {
+            console.log(`🧹 Worker: Deleting original R2 source to save costs: ${rawVideoKey}`);
+            await cloudflareR2Service.deleteVideoFromR2(rawVideoKey);
+        } catch (e) {
+            console.warn('⚠️ Worker: Failed to delete R2 source (non-fatal):', e.message);
+        }
+    }
     
     // Always cleanup local temp file
     if (fs.existsSync(localRawPath)) {
@@ -183,6 +193,159 @@ async function handleVideoProcessing(job) {
         processingStatus: 'failed',
         processingError: error.message 
     });
+    throw error;
+  }
+}
+
+/**
+ * Handle generating a vertical clip from a long video
+ */
+async function handleClipGeneration(data) {
+  const { 
+    originalVideoId, 
+    sourceKey, 
+    startTime, 
+    duration, 
+    userId, 
+    videoName,
+    isEphemeral = false, 
+    targetVideoId 
+  } = data;
+
+  const tempDir = path.join(process.cwd(), 'temp_raw_downloads');
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+  const clipId = targetVideoId ? new mongoose.Types.ObjectId(targetVideoId) : new mongoose.Types.ObjectId();
+  const localRawPath = path.join(tempDir, `${clipId}_source.mp4`);
+  const localClipPath = path.join(tempDir, `${clipId}_clip.mp4`);
+  let finalSourceKey = sourceKey;
+
+  try {
+    let originalVideo = null;
+
+    if (originalVideoId) {
+      originalVideo = await Video.findById(originalVideoId);
+      if (originalVideo) {
+        finalSourceKey = originalVideo.canonicalMp4Key || originalVideo.rawVideoKey;
+      }
+    }
+
+    if (!finalSourceKey) throw new Error('No source video key found');
+    
+    // **ULTRA-FAST OPTIMIZATION: Use streaming instead of full download**
+    const sourceUrl = cloudflareR2Service.getPublicUrl(finalSourceKey);
+    console.log(`🌐 Streaming source for clipping from URL: ${sourceUrl}`);
+
+    // 2. Generate Blurry Vertical Clip
+    await videoClippingService.generateBlurryVerticalClip(sourceUrl, localClipPath, {
+        startTime,
+        duration
+    });
+
+    // 3. Upload Clip to R2
+    const clipKey = `videos/${userId}/clips/${clipId}.mp4`;
+    const uploadResult = await cloudflareR2Service.uploadFileToR2(localClipPath, clipKey, 'video/mp4');
+
+    // 4. Update or Create Video Record
+    let clipVideo;
+    if (targetVideoId) {
+      clipVideo = await Video.findById(targetVideoId);
+    }
+
+    const videoData = {
+      videoName: videoName || (originalVideo ? `${originalVideo.videoName} (Clip)` : 'My Clip'),
+      uploader: userId,
+      videoType: 'yog',
+      mediaType: 'video',
+      videoUrl: uploadResult.url,
+      thumbnailUrl: uploadResult.url, 
+      processingStatus: 'completed',
+      processingProgress: 100,
+      aspectRatio: 9/16,
+      duration: duration,
+      isHLSEncoded: false,
+      uploadedAt: new Date()
+    };
+
+    if (clipVideo) {
+      Object.assign(clipVideo, videoData);
+      await clipVideo.save();
+    } else {
+      clipVideo = new Video({
+        _id: clipId,
+        ...videoData
+      });
+      await clipVideo.save();
+    }
+
+    // 5. Cleanup local files
+    if (fs.existsSync(localRawPath)) fs.unlinkSync(localRawPath);
+    if (fs.existsSync(localClipPath)) fs.unlinkSync(localClipPath);
+
+    // **CRITICAL: Cleanup R2 Source to save costs**
+    if (isEphemeral && finalSourceKey) {
+      try {
+        console.log(`🧹 Cleaning up R2 source for ephemeral clipping: ${finalSourceKey}`);
+        await cloudflareR2Service.deleteVideoFromR2(finalSourceKey);
+      } catch (e) {
+        console.warn('⚠️ Failed to cleanup R2 source:', e.message);
+      }
+    }
+
+    console.log(`✅ Clip ${clipId} generated and saved! URL: ${uploadResult.url}`);
+    
+    // **PUSH NOTIFICATION: Notify user's mobile device**
+    try {
+        const user = await User.findById(userId);
+        if (user && user.googleId) {
+            await notificationService.sendNotificationToUser(user.googleId, {
+                title: "Shorts Generator ✨",
+                body: "Your shorts is ready tap to download 🥳",
+                data: {
+                    type: "clipping_complete",
+                    jobId: clipId.toString(),
+                    videoUrl: uploadResult.url
+                }
+            });
+        }
+    } catch (pushErr) {
+        console.warn('⚠️ Failed to send completion push notification:', pushErr.message);
+    }
+
+    return { status: 'completed', clipId: clipId.toString(), url: uploadResult.url };
+
+  } catch (error) {
+    console.error('❌ Clip generation failed:', error);
+    if (fs.existsSync(localRawPath)) fs.unlinkSync(localRawPath);
+    if (fs.existsSync(localClipPath)) fs.unlinkSync(localClipPath);
+    
+    const failedJobId = targetVideoId || clipId;
+
+    if (failedJobId) {
+       await Video.findByIdAndUpdate(failedJobId, { 
+         processingStatus: 'failed',
+         processingError: error.message 
+       });
+
+       // **PUSH NOTIFICATION: Notify user of failure**
+       try {
+           const user = await User.findById(userId);
+           if (user && user.googleId) {
+               await notificationService.sendNotificationToUser(user.googleId, {
+                   title: "Magician Error ❌",
+                   body: "Failed to generate your short. Please try again.",
+                   data: { type: "clipping_failed", jobId: failedJobId.toString() }
+               });
+           }
+       } catch (pushErr) {}
+
+       // **SSE NOTIFICATION: Notify EventBus of failure**
+       eventBus.emit('clipping-status', {
+           jobId: failedJobId.toString(),
+           status: 'failed',
+           error: error.message
+       });
+    }
     throw error;
   }
 }
@@ -207,6 +370,10 @@ const videoWorker = new Worker('video-processing', async (job) => {
         console.log('🏆 Worker: Recalculating global creator ranks...');
         await recommendationService._calculateAndCacheRanks();
         return { status: 'completed' };
+
+      case 'generate-clip':
+        console.log('🎬 Worker: Generating vertical clip...');
+        return await handleClipGeneration(job.data);
         
       default:
         console.warn(`⚠️ Worker: Unknown job type ${job.name}`);

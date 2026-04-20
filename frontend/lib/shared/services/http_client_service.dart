@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'dart:io';
 
 /// Centralized HTTP client service with Dio
 /// Provides automatic connection pooling, interceptors, retry logic, and better performance
@@ -41,6 +42,7 @@ class HttpClientService {
     // Create Dio instance with optimized configuration
     _dio = Dio(
       BaseOptions(
+        baseUrl: AppConfig.baseUrl,
         connectTimeout: AppConfig.apiTimeout,
         receiveTimeout: AppConfig.apiTimeout,
         sendTimeout: AppConfig.uploadTimeout,
@@ -603,6 +605,68 @@ class HttpClientService {
       _dio.close(force: true);
       _isInitialized = false;
       AppLogger.log('🔗 HttpClientService: Disposed and connections closed');
+    }
+  }
+
+  /// **NEW: Support for SSE (Server-Sent Events) streaming**
+  /// Returns a stream of events from the server.
+  /// Used for real-time updates like video processing status.
+  Stream<String> stream(String path, {Map<String, String>? headers}) async* {
+    final client = HttpClient();
+    // Set a longer timeout for streams
+    client.connectionTimeout = const Duration(seconds: 30);
+    
+    try {
+      final uri = Uri.parse(path.startsWith('http') ? path : '${AppConfig.baseUrl}$path');
+      AppLogger.log('📡 SSE: Opening stream to $uri');
+      
+      final request = await client.getUrl(uri);
+      
+      // Inject standard headers
+      request.headers.set('Accept', 'text/event-stream');
+      request.headers.set('Cache-Control', 'no-cache');
+      
+      // Inject custom headers
+      if (headers != null) {
+        headers.forEach((key, value) {
+          request.headers.set(key, value);
+        });
+      }
+      
+      // Inject Auth Token if missing
+      if (headers == null || !headers.containsKey('Authorization')) {
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('jwt_token');
+        if (token != null && token.isNotEmpty) {
+          request.headers.set('Authorization', 'Bearer $token');
+        }
+      }
+
+      final response = await request.close();
+      
+      if (response.statusCode == 200) {
+        AppLogger.log('✅ SSE: Stream connected for $path');
+        
+        // Transform the byte stream into lines of text
+        final lineStream = response
+            .transform(utf8.decoder)
+            .transform(const LineSplitter());
+            
+        await for (final line in lineStream) {
+          if (line.trim().isEmpty) continue;
+          yield line;
+        }
+      } else {
+        AppLogger.log('❌ SSE: Stream failed with status ${response.statusCode}');
+        throw Exception('Stream failed with status: ${response.statusCode}');
+      }
+    } catch (e) {
+      AppLogger.log('❌ SSE Error: $e');
+      rethrow;
+    } finally {
+      AppLogger.log('🔌 SSE: Stream closing for $path');
+      // For SSE, we don't close the client in a way that breaks the current response
+      // but the 'await for' loop finishing will naturally clean up the connection.
     }
   }
 

@@ -726,19 +726,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
               else
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 42, // Slightly wider for a better pill shape
-                  height: 32, // More pill-like height
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? Colors.white
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
                   child: HugeIcon(
                     icon: isSelected ? activeIcon : icon,
-                    size: isSelected ? 24.0 : 24.0, // Standardized size for cleaner look
+                    size: 26.0,
                     color: isSelected
-                        ? AppColors.backgroundPrimary // Dark icon on white pill
+                        ? Colors.white
                         : AppColors.textSecondary,
                   ),
                 ),

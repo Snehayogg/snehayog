@@ -354,7 +354,7 @@ class CloudflareR2Service {
         CacheControl: 'public, max-age=31536000, immutable, stale-while-revalidate=604800' 
       });
 
-      const url = await this.getSignedUrl(this.s3Client, command, { expiresIn });
+      const url = await this.getSignedUrl(this.s3Client, command, { expiresIn: typeof expiresIn === 'number' ? expiresIn : 3600 });
       
       console.log('✅ Presigned URL generated successfully');
       return url;
@@ -362,6 +362,14 @@ class CloudflareR2Service {
       console.error('❌ Error generating presigned URL:', error);
       throw error;
     }
+  }
+
+  /**
+   * Compatibility wrapper for getPresignedUploadUrl
+   */
+  async generatePresignedUrl(key, contentType, operation = 'put', expiresIn = 3600) {
+    // We only support 'put' for now via this service
+    return this.getPresignedUploadUrl(key, contentType, expiresIn);
   }
 }
 

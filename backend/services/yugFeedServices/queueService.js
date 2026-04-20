@@ -22,7 +22,6 @@ if (redisUrl) {
       port: parseInt(parsedUrl.port, 10),
       password: parsedUrl.password,
       username: parsedUrl.username,
-      family: 4,
       maxRetriesPerRequest: null,
       // **RE-ENABLED: TLS for public access**
       tls: (parsedUrl.protocol === 'rediss:') ? {
@@ -93,18 +92,35 @@ class FeedQueueService {
         try {
             console.log('📥 QueueService: Adding video job to queue:', data.videoId);
             await videoQueue.add('process-video', data, {
-                attempts: 3, // Retry 3 times on failure
-                backoff: {
-                    type: 'exponential',
-                    delay: 5000 // Start retry after 5s, then 10s, 20s...
-                },
-                removeOnComplete: true, // Keep queue clean
-                removeOnFail: false // Keep failed jobs for inspection
+                attempts: 3,
+                backoff: { type: 'exponential', delay: 5000 },
+                removeOnComplete: true,
+                removeOnFail: false
             });
             console.log('✅ QueueService: Job added successfully');
             return true;
         } catch (error) {
             console.error('❌ QueueService: Failed to add job:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Add a clip generation job to the queue
+     * @param {Object} data - { originalVideoId, startTime, duration, userId, videoName }
+     */
+    async addClipJob(data) {
+        try {
+            console.log('📥 QueueService: Adding clip job for video:', data.originalVideoId);
+            await videoQueue.add('generate-clip', data, {
+                attempts: 2,
+                backoff: { type: 'exponential', delay: 10000 },
+                removeOnComplete: true,
+                removeOnFail: false
+            });
+            return true;
+        } catch (error) {
+            console.error('❌ QueueService: Failed to add clip job:', error);
             throw error;
         }
     }

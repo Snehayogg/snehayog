@@ -1147,8 +1147,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   dragStartBehavior: DragStartBehavior.down,
                   controller: _tabController,
                   children: [
-                    YugGridTab(manager: manager),
-                    VayuGridTab(manager: manager),
+                    YugGridTab(manager: manager, onReferFriends: _handleReferFriends),
+                    VayuGridTab(manager: manager, onReferFriends: _handleReferFriends),
                     const AboutUserTab(),
                   ],
                 ),

@@ -21,7 +21,7 @@ export const googleSignIn = async (req, res) => {
 
     // Find or create user
     let user = await User.findOne({ googleId: userData.sub })
-      .select('googleId name email profilePic videos');
+      .select('googleId name email profilePic videos appVersion');
     
     let isNewUser = false;
 
@@ -59,8 +59,8 @@ export const googleSignIn = async (req, res) => {
       console.log('✅ Found existing user:', user.email);
     }
 
-    // Generate Access Token (JWT, 1 hour)
-    const accessToken = generateJWT(user.googleId, '1h');
+    // Generate Access Token (JWT, 30 days)
+    const accessToken = generateJWT(user.googleId, '30d');
 
     // Generate Device-Bound Refresh Token (stored in MongoDB)
     const refreshToken = await RefreshToken.createForDevice(
@@ -142,8 +142,8 @@ export const refreshAccessToken = async (req, res) => {
 
     const { newToken: newRefreshToken, user } = result;
 
-    // Generate new Access Token
-    const accessToken = generateJWT(user.googleId, '1h');
+    // Generate new Access Token (30 days)
+    const accessToken = generateJWT(user.googleId, '30d');
 
     console.log('✅ Token refreshed for:', user.email);
 

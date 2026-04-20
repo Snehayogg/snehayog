@@ -6,7 +6,7 @@ import SavedVideo from '../models/SavedVideo.js';
 import { verifyToken, passiveVerifyToken } from '../utils/verifytoken.js'; // Added passiveVerifyToken
 import jwt from 'jsonwebtoken'; // Added for token info endpoint
 import redisService from '../services/caching/redisService.js';
-import { getGlobalLeaderboard } from '../controllers/videoController.js';
+import { getGlobalLeaderboard } from '../controllers/video/videoFeedController.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 import Notice from '../models/Notice.js';
 

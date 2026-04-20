@@ -29,9 +29,10 @@ export const versionTracking = async (req, res, next) => {
     // Priority: Real version header > Mapped date header > Literal date header
     let finalVersion = appVersionRaw || versionMap[apiVersionDate] || apiVersionDate;
 
-    // 5. Update database if version has changed
-    // We do this asynchronously to not block the request
+    // 5. Update database only if version has changed
     if (finalVersion && req.user.appVersion !== finalVersion) {
+      console.log(`📱 Version Tracking: Updating ${req.user.googleId} version from [${req.user.appVersion || 'unknown'}] to [${finalVersion}]`);
+      
       // Use setImmediate to run this outside the current request cycle
       setImmediate(async () => {
         try {
@@ -40,6 +41,9 @@ export const versionTracking = async (req, res, next) => {
             appVersion: finalVersion,
             lastActive: new Date() // Also update activity timestamp
           });
+          
+          // **CRITICAL: Also update the local req.user object for subsequent middlewares if any**
+          req.user.appVersion = finalVersion;
         } catch (err) {
           // Log error but don't crash requested operation
           console.error('⚠️ VersionTracking Error:', err.message);

@@ -17,11 +17,11 @@ class VayuVideoProgressBar extends StatefulWidget {
   const VayuVideoProgressBar({
     super.key,
     required this.controller,
-    this.height = 20.0, // **YUG MATCH: Tightened hit target**
+    this.height = 20.0,
     this.barCenterOffset,
-    this.barHeight = 2.0, // **YUG MATCH: Thinner default**
-    this.activeBarHeight = 6.0,
-    this.thumbRadius = 5.0, // **YUG MATCH: Smaller default thumb**
+    this.barHeight = 2.0, // Ultra-thin idle state
+    this.activeBarHeight = 8.0, // Substantial interaction state
+    this.thumbRadius = 6.0,
     this.onDragStart,
     this.onDragEnd,
     this.onProgressUpdate,
@@ -287,7 +287,23 @@ class _ProgressBarPainter extends CustomPainter {
       }
     }
 
-    // Played bar
+    // Played bar (with glow effect during interaction)
+    if (expansion > 0.05) {
+      final glowPaint = Paint()
+        ..color = primaryColor.withValues(alpha: 0.3 * expansion)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          0,
+          centerY - (currentBarHeight + 2 * expansion) / 2,
+          size.width * relative,
+          centerY + (currentBarHeight + 2 * expansion) / 2,
+          Radius.circular(currentBarHeight / 2),
+        ),
+        glowPaint,
+      );
+    }
+
     canvas.drawRRect(
       RRect.fromLTRBR(
         0,

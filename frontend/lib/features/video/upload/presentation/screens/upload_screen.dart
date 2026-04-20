@@ -31,8 +31,10 @@ import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/upload/presentation/screens/upload_advanced_settings_screen.dart';
 import 'package:vayug/features/video/upload/presentation/screens/make_episode_screen.dart';
 import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
+import 'package:vayug/features/video/upload/presentation/screens/shorts_generator_screen.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 import 'package:vayug/shared/constants/interests.dart';
+import 'package:vayug/features/video/upload/presentation/widgets/short_video_creator_dialog.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded; // Add callback for video upload success
@@ -1256,6 +1258,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     }
   }
 
+  void _showShortsGenerator() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const ShortVideoCreatorDialog(),
+    );
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -1476,6 +1487,22 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   context,
                   MaterialPageRoute(
                       builder: (context) => const CreateAdScreenRefactored()),
+                );
+              },
+            ),
+
+            const SizedBox(height: 24),
+
+            // Visual Choice: Shorts Generator
+            _buildChoiceCard(
+              context: context,
+              icon: Icons.auto_awesome,
+              title: "Shorts Generator",
+              color: Colors.amber,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ShortsGeneratorScreen()),
                 );
               },
             ),

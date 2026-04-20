@@ -1,0 +1,81 @@
+import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/core/design/colors.dart';
+import 'package:vayug/core/design/spacing.dart';
+import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/shared/widgets/follow_button_widget.dart';
+import 'package:vayug/shared/widgets/interactive_scale_button.dart';
+import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
+
+class VayuChannelInfo extends StatelessWidget {
+  final VideoModel video;
+  final bool isPortrait;
+
+  const VayuChannelInfo({
+    super.key,
+    required this.video,
+    this.isPortrait = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing3),
+      child: Row(
+        children: [
+          InteractiveScaleButton(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (c) => ProfileScreen(userId: video.uploader.id),
+              ),
+            ),
+            child: CircleAvatar(
+              radius: 18,
+              backgroundImage: video.uploader.profilePic.isNotEmpty
+                  ? CachedNetworkImageProvider(video.uploader.profilePic)
+                  : null,
+              backgroundColor: AppColors.backgroundSecondary,
+              child: video.uploader.profilePic.isEmpty
+                  ? const Icon(Icons.person_rounded, color: Colors.white, size: 21)
+                  : null,
+            ),
+          ),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  video.uploader.name,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.textPrimary
+                        : Colors.black87,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                ),
+                if (video.uploader.totalVideos != null)
+                  Text(
+                    '${video.uploader.totalVideos} videos',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.textSecondary
+                          : Colors.black54,
+                      fontSize: 10,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          FollowButtonWidget(
+            uploaderId: video.uploader.id,
+            uploaderName: video.uploader.name,
+          ),
+        ],
+      ),
+    );
+  }
+}

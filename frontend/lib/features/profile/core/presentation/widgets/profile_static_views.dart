@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:vayug/core/design/colors.dart';
-import 'package:vayug/core/design/radius.dart';
 import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/shared/utils/responsive_helper.dart';
 import 'package:vayug/shared/widgets/app_button.dart';

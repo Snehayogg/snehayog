@@ -4,8 +4,9 @@ import 'package:vayug/features/profile/core/presentation/widgets/profile_videos_
 
 class VayuGridTab extends StatelessWidget {
   final ProfileStateManager manager;
+  final VoidCallback? onReferFriends;
 
-  const VayuGridTab({super.key, required this.manager});
+  const VayuGridTab({super.key, required this.manager, this.onReferFriends});
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +32,7 @@ class VayuGridTab extends StatelessWidget {
             filterVideoType: 'vayu',
             showHeader: false,
             isSliver: true,
+            onReferFriends: onReferFriends,
           ),
           if (manager.isFetchingMore)
             SliverToBoxAdapter(

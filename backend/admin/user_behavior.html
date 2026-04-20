@@ -320,6 +320,10 @@
                 <h2 class="section-title">🔥 Content Interest (By Category)</h2>
                 <canvas id="interestChart"></canvas>
             </div>
+            <div class="chart-section">
+                <h2 class="section-title">📱 App Version Distribution</h2>
+                <canvas id="versionChart"></canvas>
+            </div>
         </div>
 
         <div class="data-table-section">
@@ -333,8 +337,9 @@
                     <thead>
                         <tr>
                             <th>User Details</th>
-                            <th>Total Watch Time</th>
-                            <th>Videos Watched</th>
+                            <th>Watch Time</th>
+                            <th>Videos</th>
+                            <th>App Version</th>
                             <th>Last Active</th>
                             <th>Engagement Level</th>
                         </tr>
@@ -367,7 +372,7 @@
 
         const API_BASE = detectApiBase();
         let userData = [];
-        let skipChart, interestChart;
+        let skipChart, interestChart, versionChart;
 
         async function authorizedFetch(url, options = {}) {
             const key = getAdminKey();
@@ -484,6 +489,36 @@
                     }
                 }
             });
+
+            // Version Distribution Chart
+            const versionCtx = document.getElementById('versionChart').getContext('2d');
+            const versionCounts = {};
+            data.userTable.forEach(u => {
+                const v = u.appVersion || 'unknown';
+                versionCounts[v] = (versionCounts[v] || 0) + 1;
+            });
+            
+            const verLabels = Object.keys(versionCounts);
+            const verValues = Object.values(versionCounts);
+
+            if (versionChart) versionChart.destroy();
+            versionChart = new Chart(versionCtx, {
+                type: 'pie',
+                data: {
+                    labels: verLabels,
+                    datasets: [{
+                        data: verValues,
+                        backgroundColor: ['#4bc0c0', '#ff6384', '#36a2eb', '#ffce56', '#9966ff'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#ccc' } }
+                    }
+                }
+            });
         }
 
         function renderUserTable(users) {
@@ -499,6 +534,7 @@
                     </td>
                     <td style="font-weight: 600;">${formatDuration(u.totalWatchTime)}</td>
                     <td>${u.videoCount}</td>
+                    <td><span class="status-badge badge-info" style="font-family: monospace;">v${u.appVersion}</span></td>
                     <td>${new Date(u.lastActivity).toLocaleDateString()}</td>
                     <td>${getEngagementBadge(u.totalWatchTime)}</td>
                 `;

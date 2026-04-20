@@ -129,9 +129,11 @@ class VideoService {
     String? videoType,
     bool clearSession = false,
     String? cursor,
+    bool random = false,
   }) async {
     try {
       String url = '${NetworkHelper.apiBaseUrl}/videos?page=$page&limit=$limit';
+      if (random) url += '&random=true';
       final normalizedType = videoType?.toLowerCase();
       String? apiVideoType = normalizedType;
       if (normalizedType == 'yog' || normalizedType == 'vayu') {
@@ -174,7 +176,7 @@ class VideoService {
       final response = await httpClientService.get(
         Uri.parse(url),
         headers: headers,
-        timeout: const Duration(seconds: 15),
+        timeout: const Duration(seconds: 45), // Increased timeout
       );
 
       if (response.statusCode == 200) {
@@ -843,6 +845,38 @@ class VideoService {
       if (e is TimeoutException) {
         throw Exception('Request timed out. Please try again.');
       }
+      rethrow;
+    }
+  }
+
+  /// **Generate a vertical clip from an existing horizontal video**
+  Future<Map<String, dynamic>> generateClip({
+    required String videoId,
+    required double startTime,
+    required double duration,
+  }) async {
+    try {
+      final baseUrl = await getBaseUrlWithFallback();
+      final url = '$baseUrl/api/videos/generate-clip';
+
+      final response = await httpClientService.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'videoId': videoId,
+          'startTime': startTime,
+          'duration': duration,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Failed to generate clip');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error generating clip: $e');
       rethrow;
     }
   }

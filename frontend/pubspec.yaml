@@ -108,6 +108,7 @@ dependencies:
   flutter_tts: ^4.2.5
   ffmpeg_kit_flutter_new: ^4.1.0
   google_generative_ai: ^0.4.7
+  gal: ^2.3.2
 
 
 dev_dependencies:

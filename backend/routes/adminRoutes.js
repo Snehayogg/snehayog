@@ -228,7 +228,7 @@ router.get('/feedback/export', requireAdminDashboardKey, async (req, res) => {
 router.get('/creators', requireAdminDashboardKey, async (req, res) => {
   try {
     const [creators, videoStats, adStats, payoutStats, earningsStats] = await Promise.all([
-      User.find({}, 'name email preferredPaymentMethod paymentDetails country payoutCount createdAt googleId lastActive isAppUninstalled lastInstallCheck fcmToken').lean(),
+      User.find({}, 'name email preferredPaymentMethod paymentDetails country payoutCount createdAt googleId lastActive isAppUninstalled lastInstallCheck fcmToken appVersion').lean(),
       Video.aggregate([
         {
           $group: {
@@ -486,6 +486,7 @@ router.get('/creators', requireAdminDashboardKey, async (req, res) => {
         lastActive: creator.lastActive || null, // **NEW: Track last active time**
         isAppUninstalled: creator.isAppUninstalled || false, // **NEW: Uninstall tracker**
         lastInstallCheck: creator.lastInstallCheck || null,   // **NEW: Uninstall tracker**
+        appVersion: creator.appVersion || 'unknown',          // **NEW: App Version Tracker**
         lastPayoutAt: payouts.lastPayoutAt,
         // **NEW: Include videos for frontend revenue calculation**
         videos: [] // Will be populated separately if needed (empty for now to save bandwidth)
@@ -759,7 +760,7 @@ router.get('/user-behavior/stats', requireAdminDashboardKey, async (req, res) =>
         { googleId: { $in: userIds } },
         { _id: { $in: userIds.filter(id => mongoose.Types.ObjectId.isValid(id)) } }
       ]
-    }).select('name email googleId').lean();
+    }).select('name email googleId appVersion').lean();
 
     const userMap = new Map();
     users.forEach(u => {
@@ -772,7 +773,8 @@ router.get('/user-behavior/stats', requireAdminDashboardKey, async (req, res) =>
         ...u,
         name: userData.name,
         email: userData.email,
-        googleId: userData.googleId || u._id
+        googleId: userData.googleId || u._id,
+        appVersion: userData.appVersion || 'unknown'
       };
     });
 

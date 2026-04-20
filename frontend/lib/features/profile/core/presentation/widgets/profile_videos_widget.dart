@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:vayug/features/video/core/presentation/managers/main_controller.dart';
 import 'package:provider/provider.dart' as provider;
+import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
@@ -24,6 +26,7 @@ class ProfileVideosWidget extends StatelessWidget {
   final bool showHeader;
   final bool isSliver;
   final String? filterVideoType;
+  final VoidCallback? onReferFriends;
 
   const ProfileVideosWidget({
     super.key,
@@ -34,6 +37,7 @@ class ProfileVideosWidget extends StatelessWidget {
     this.showHeader = true,
     this.isSliver = false,
     this.filterVideoType,
+    this.onReferFriends,
   });
 
   void _preloadVideoThumbnails(BuildContext context, List<VideoModel> videos) {
@@ -254,6 +258,41 @@ class ProfileVideosWidget extends StatelessWidget {
                     ),
                     textAlign: TextAlign.center,
                   ),
+                  if (onReferFriends != null && manager.isOwner) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: onReferFriends,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.borderPrimary),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const HugeIcon(
+                              icon: HugeIcons.strokeRoundedShare01,
+                              color: AppColors.textPrimary,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              AppText.get('btn_refer_friends'),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -4,8 +4,9 @@ import 'package:vayug/features/profile/core/presentation/widgets/profile_videos_
 
 class YugGridTab extends StatelessWidget {
   final ProfileStateManager manager;
+  final VoidCallback? onReferFriends;
 
-  const YugGridTab({super.key, required this.manager});
+  const YugGridTab({super.key, required this.manager, this.onReferFriends});
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +32,7 @@ class YugGridTab extends StatelessWidget {
             filterVideoType: 'yog', // 'yog' is the internal identifier for Yug
             showHeader: false,
             isSliver: true,
+            onReferFriends: onReferFriends,
           ),
           if (manager.isFetchingMore)
             SliverToBoxAdapter(
