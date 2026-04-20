@@ -78,11 +78,12 @@ class FeedQueueService {
         try {
             await videoQueue.add('recalculate-ranks', {}, {
                 repeat: {
-                    every: 2 * 60 * 60 * 1000
+                    every: 12 * 60 * 60 * 1000 // Every 12 hours instead of 2
                 },
-                removeOnComplete: true
+                removeOnComplete: true,
+                priority: 10 // Low priority (Videos are priority 1)
             });
-            console.log('✅ QueueService: Rank calculation scheduled');
+            console.log('✅ QueueService: Rank calculation scheduled (every 12h)');
         } catch (error) {
             console.error('❌ QueueService: Failed to schedule rank calculation:', error);
         }
@@ -103,7 +104,8 @@ class FeedQueueService {
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 5000 },
                 removeOnComplete: true,
-                removeOnFail: false
+                removeOnFail: false,
+                priority: 1 // High Priority
             });
             console.log('✅ QueueService: Job added successfully');
             return true;
@@ -124,7 +126,8 @@ class FeedQueueService {
                 attempts: 2,
                 backoff: { type: 'exponential', delay: 10000 },
                 removeOnComplete: true,
-                removeOnFail: false
+                removeOnFail: false,
+                priority: 1 // High Priority
             });
             return true;
         } catch (error) {
