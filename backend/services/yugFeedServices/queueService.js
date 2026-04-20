@@ -7,41 +7,49 @@ export let redisOptions = {
   port: process.env.REDISPORT || process.env.REDIS_PORT || 6379,
   password: process.env.REDISPASSWORD || process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null, // Required by BullMQ
+  // Default to IPv4 for local, but Fly.io internal needs IPv6
+  family: process.env.FLY_APP_NAME ? 6 : 4,
 };
 
 // **FIX: Prioritize REDIS_URL for internal Fly.io networking**
 const redisUrl = process.env.REDIS_URL || process.env.REDIS_PUBLIC_URL;
 if (redisUrl) {
   try {
-    // Determine if we need TLS based on the protocol
-    const isRedisSecure = redisUrl.startsWith('rediss://');
     const parsedUrl = new URL(redisUrl);
+    const isRedisSecure = redisUrl.startsWith('rediss://');
     
+    // Determine if this is an internal Fly address (they don't support TLS on port 6379)
+    const isInternalFly = parsedUrl.hostname.includes('.internal') || 
+                         (parsedUrl.hostname.includes('upstash.io') && parsedUrl.port === '6379');
+
     redisOptions = {
       host: parsedUrl.hostname,
       port: parseInt(parsedUrl.port, 10),
       password: parsedUrl.password,
       username: parsedUrl.username,
       maxRetriesPerRequest: null,
-      connectTimeout: 20000, // 20s to connect
-      commandTimeout: 15000,  // 15s to execute command (Prevents 'Command timed out' in Fly.io background)
-      keepAlive: 1000,      // Send keep-alive every 1s
-      enableReadyCheck: false, // Skip ready check for faster proxy handshake
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 200, 5000);
-        return delay;
-      },
-      // **TLS for secure Upstash connection (Highly Recommended)**
-      tls: isRedisSecure ? {
-        rejectUnauthorized: false
-      } : undefined,
+      connectTimeout: 60000,   // 60s (Increased for Fly.io cold starts)
+      commandTimeout: 30000,   // 30s
+      keepAlive: 2000,        // Every 2s
+      enableReadyCheck: false,
+      // **CRITICAL: IPv6 (family 6) is MANDATORY for Fly.io internal networking**
+      family: (process.env.FLY_APP_NAME || isInternalFly) ? 6 : undefined,
+      retryStrategy: (times) => Math.min(times * 200, 5000),
+      // **FIX: Explicitly disable TLS if using standard redis:// to prevent wrong version errors**
+      tls: isRedisSecure ? { rejectUnauthorized: false } : false,
     };
-    console.log(`✅ QueueService: Configured for Redis (${isRedisSecure ? 'Secure' : 'Standard'})`);
+
+    console.log(`📡 QueueService: Redis Configured → ${parsedUrl.hostname}:${parsedUrl.port}`);
+    console.log(`🔒 Security: ${isRedisSecure ? 'TLS Enabled' : 'Plaintext (Internal)'} | 🌐 Network: IPv${redisOptions.family || 4}`);
+    
+    if (isRedisSecure && isInternalFly) {
+      console.warn('⚠️ WARNING: Using rediss:// on an internal Fly address may cause SSL version errors.');
+    }
   } catch (err) {
-    console.error('❌ QueueService: Error parsing REDIS_URL:', err.message);
+    console.error('❌ QueueService: URL Parse failed:', err.message);
   }
 } else {
-  console.log(`🔧 QueueService: Configured using individual environment variables`);
+  console.log(`🔧 QueueService: Using individual env variables | 🌐 Network: IPv${redisOptions.family}`);
 }
 
 // Create the video processing queue

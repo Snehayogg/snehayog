@@ -161,18 +161,6 @@ export const uploadVideo = async (req, res) => {
       uploadedAt: new Date()
     });
 
-    // **NEW: Generate initial vector embedding for instant discovery**
-    let initialEmbedding = null;
-    const embeddingText = `${videoName || ''} ${description || ''}`.trim();
-    if (embeddingText) {
-      try {
-        const { default: aiSemanticService } = await import('../../services/yugFeedServices/aiSemanticService.js');
-        initialEmbedding = await aiSemanticService.getEmbedding(embeddingText);
-      } catch (e) {
-        console.warn('⚠️ Could not generate initial embedding:', e.message);
-      }
-    }
-
     const video = new Video({
       videoName: videoName,
       description: description || '',
@@ -193,33 +181,49 @@ export const uploadVideo = async (req, res) => {
       tags: Array.isArray(tags) ? tags : [],
       seriesId: req.body.seriesId || null,
       episodeNumber: parseInt(req.body.episodeNumber) || 0,
-      finalScore: initialScore,
-      vectorEmbedding: initialEmbedding,
-      embeddingVersion: initialEmbedding ? 'v1_minilm' : undefined
+      finalScore: initialScore
     });
 
     await video.save();
     user.videos.push(video._id);
     await user.save();
 
-    // 8. Invalidate cache
-    if (redisService.getConnectionStatus()) {
-      await invalidateCache([
-        'videos:feed:*',
-        `user:feed:${user.googleId}:*`,
-        `videos:user:${user.googleId}`,
-        VideoCacheKeys.all()
-      ]);
-    }
-
     // 9. Background Processing - Respond immediately to user for better speed
     const rawVideoKey = `temp_raw/${user._id}/${Date.now()}_${path.basename(req.file.path)}`;
     const tempFilePath = req.file.path;
     const tempMimeType = req.file.mimetype;
+    const embeddingText = `${videoName || ''} ${description || ''}`.trim();
 
     // We do NOT await this block - it runs in background
     (async () => {
       try {
+        // **NEW: Invalidate cache in background to avoid blocking the response**
+        if (redisService.getConnectionStatus()) {
+          invalidateCache([
+            'videos:feed:*',
+            `user:feed:${user.googleId}:*`,
+            `videos:user:${user.googleId}`,
+            VideoCacheKeys.all()
+          ]).catch(err => console.error('⚠️ Upload: Cache invalidation failed:', err.message));
+        }
+
+        // **NEW: Generate AI embedding in background (prevents 20s timeouts during model loading)**
+        if (embeddingText) {
+          try {
+            const { default: aiSemanticService } = await import('../../services/yugFeedServices/aiSemanticService.js');
+            const embedding = await aiSemanticService.getEmbedding(embeddingText);
+            if (embedding) {
+               await Video.findByIdAndUpdate(video._id, { 
+                 vectorEmbedding: embedding,
+                 embeddingVersion: 'v1_minilm'
+               });
+               console.log(`🤖 Upload: AI Embedding generated and saved for video ${video._id}`);
+            }
+          } catch (e) {
+            console.warn('⚠️ Upload: Background embedding failed:', e.message);
+          }
+        }
+
         await cloudflareR2Service.uploadFileToR2(tempFilePath, rawVideoKey, tempMimeType);
         
         await queueService.addVideoJob({
@@ -229,7 +233,7 @@ export const uploadVideo = async (req, res) => {
             userId: user._id.toString()
         });
 
-        console.log(`✅ Upload: Background processing complete for video ${video._id}`);
+        console.log(`✅ Upload: Background processing started for video ${video._id}`);
       } catch (bgError) {
         console.error(`❌ Upload: Background processing failed for video ${video._id}:`, bgError);
       } finally {
@@ -325,15 +329,6 @@ export const registerUpload = async (req, res) => {
       uploadedAt: new Date()
     });
 
-    let initialEmbedding = null;
-    const embeddingText = `${videoName || ''} ${description || ''}`.trim();
-    if (embeddingText) {
-       try {
-         const { default: aiSemanticService } = await import('../../services/yugFeedServices/aiSemanticService.js');
-         initialEmbedding = await aiSemanticService.getEmbedding(embeddingText);
-       } catch(e) {}
-    }
-
     const video = new Video({
       videoName: videoName || 'Untitled Video',
       description: description || '',
@@ -352,29 +347,47 @@ export const registerUpload = async (req, res) => {
       uploadedAt: new Date(),
       category: category || 'others',
       tags: Array.isArray(tags) ? tags : [],
-      finalScore: initialScore,
-      vectorEmbedding: initialEmbedding,
-      embeddingVersion: initialEmbedding ? 'v1_minilm' : undefined
+      finalScore: initialScore
     });
 
     await video.save();
     user.videos.push(video._id);
     await user.save();
 
-    // Non-blocking: Add to queue in background to eliminate latency
-    queueService.addVideoJob({
-      videoId: video._id,
-      rawVideoKey: r2Key,
-      videoName: video.videoName,
-      userId: user._id.toString()
-    }).catch(err => console.error('❌ Background Queue Error:', err));
+    // Non-blocking: Add to queue and generate embedding in background
+    const embeddingText = `${videoName || ''} ${description || ''}`.trim();
+    (async () => {
+       try {
+         // Generate embedding in background
+         if (embeddingText) {
+           const { default: aiSemanticService } = await import('../../services/yugFeedServices/aiSemanticService.js');
+           const embedding = await aiSemanticService.getEmbedding(embeddingText);
+           if (embedding) {
+               await Video.findByIdAndUpdate(video._id, { 
+                 vectorEmbedding: embedding,
+                 embeddingVersion: 'v1_minilm'
+               });
+           }
+         }
 
+         await queueService.addVideoJob({
+            videoId: video._id,
+            rawVideoKey: r2Key,
+            videoName: video.videoName,
+            userId: user._id.toString()
+         });
+       } catch (err) {
+         console.error('❌ RegisterUpload Background Error:', err);
+       }
+    })();
+
+    // Non-blocking: Invalidate cache in background
     if (redisService.getConnectionStatus()) {
-      await invalidateCache([
+      invalidateCache([
         'videos:feed:*',
         `user:feed:${user.googleId}:*`,
         VideoCacheKeys.all()
-      ]);
+      ]).catch(err => console.error('⚠️ RegisterUpload: Cache invalidation failed:', err.message));
     }
 
     return res.status(201).json({
