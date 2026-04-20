@@ -2,7 +2,7 @@ import '../../config/env.js';
 import { Queue } from 'bullmq';
 
 // Initializing Redis connection options from URL or individual parts
-let redisOptions = {
+export let redisOptions = {
   host: process.env.REDISHOST || process.env.REDIS_HOST || 'localhost',
   port: process.env.REDISPORT || process.env.REDIS_PORT || 6379,
   password: process.env.REDISPASSWORD || process.env.REDIS_PASSWORD,
