@@ -1494,6 +1494,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             const SizedBox(height: 24),
 
             // Visual Choice: Shorts Generator
+            /* 
             _buildChoiceCard(
               context: context,
               icon: Icons.auto_awesome,
@@ -1506,6 +1507,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 );
               },
             ),
+            */
 
             const SizedBox(height: 40),
 
@@ -2145,7 +2147,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             return TextField(
               controller: _titleController,
               enabled: !isUploading,
-              maxLines: 2,
+              maxLines: 5, // Dynamic height expansion with 5-line limit
               minLines: 1,
               onTapOutside: (event) => FocusScope.of(context).unfocus(),
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),

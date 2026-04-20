@@ -35,3 +35,9 @@ variable "upstash_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "redis_url" {
+  description = "Primary Redis connection URL (Fly.io Managed)"
+  type        = string
+  sensitive   = true
+}

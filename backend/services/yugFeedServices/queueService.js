@@ -23,6 +23,14 @@ if (redisUrl) {
       password: parsedUrl.password,
       username: parsedUrl.username,
       maxRetriesPerRequest: null,
+      connectTimeout: 10000, // 10s to connect
+      commandTimeout: 5000,  // 5s to execute command (don't hang!)
+      keepAlive: 1000,      // Send keep-alive every 1s
+      enableReadyCheck: false, // Skip ready check for faster proxy handshake
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
       // **RE-ENABLED: TLS for public access**
       tls: (parsedUrl.protocol === 'rediss:') ? {
         rejectUnauthorized: false

@@ -361,12 +361,13 @@ export const registerUpload = async (req, res) => {
     user.videos.push(video._id);
     await user.save();
 
-    await queueService.addVideoJob({
+    // Non-blocking: Add to queue in background to eliminate latency
+    queueService.addVideoJob({
       videoId: video._id,
       rawVideoKey: r2Key,
       videoName: video.videoName,
       userId: user._id.toString()
-    });
+    }).catch(err => console.error('❌ Background Queue Error:', err));
 
     if (redisService.getConnectionStatus()) {
       await invalidateCache([
@@ -510,13 +511,14 @@ export const generateClip = async (req, res) => {
     const originalVideo = await Video.findById(videoId);
     if (!originalVideo) return res.status(404).json({ error: 'Original video not found' });
 
-    await queueService.addClipJob({
+    // Non-blocking background job addition
+    queueService.addClipJob({
       originalVideoId: videoId,
       startTime,
       duration,
       userId: userId.toString(),
       videoName: videoName || originalVideo.videoName
-    });
+    }).catch(err => console.error('❌ Background Clip Job Error:', err));
 
     res.json({
       success: true,
@@ -578,15 +580,16 @@ export const processClippingTask = async (req, res) => {
     
     await video.save();
     
-    await queueService.addClipJob({
+    // Non-blocking background clipping task
+    queueService.addClipJob({
       targetVideoId: video._id,
       sourceKey: tempKey,
       startTime: startTime || 'random',
       duration: duration || 40,
       userId: user._id.toString(),
       videoName: video.videoName,
-      isEphemeral: true // Flag for worker to delete source after processing
-    });
+      isEphemeral: true
+    }).catch(err => console.error('❌ Background Clipping Task Error:', err));
     
     res.json({
       jobId: video._id,
