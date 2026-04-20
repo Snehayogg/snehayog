@@ -148,4 +148,4 @@ class FeedQueueService {
 }
 
 export default new FeedQueueService();
-export { videoQueue, redisOptions };
+export { videoQueue };
