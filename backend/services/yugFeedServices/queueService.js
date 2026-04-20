@@ -9,13 +9,13 @@ let redisOptions = {
   maxRetriesPerRequest: null, // Required by BullMQ
 };
 
-// **FIX: Parse REDIS_PUBLIC_URL if available**
-const redisUrl = process.env.REDIS_PUBLIC_URL || process.env.REDIS_URL;
+// **FIX: Prioritize REDIS_URL for internal Fly.io networking**
+const redisUrl = process.env.REDIS_URL || process.env.REDIS_PUBLIC_URL;
 if (redisUrl) {
   try {
-    // Force rediss:// for TLS if not already present
-    const secureUrl = redisUrl.startsWith('redis://') ? redisUrl.replace('redis://', 'rediss://') : redisUrl;
-    const parsedUrl = new URL(secureUrl);
+    // Determine if we need TLS based on the protocol
+    const isRedisSecure = redisUrl.startsWith('rediss://');
+    const parsedUrl = new URL(redisUrl);
     
     redisOptions = {
       host: parsedUrl.hostname,
@@ -32,7 +32,7 @@ if (redisUrl) {
         return delay;
       },
       // **RE-ENABLED: TLS for public access**
-      tls: (parsedUrl.protocol === 'rediss:') ? {
+      tls: isRedisSecure ? {
         rejectUnauthorized: false
       } : undefined,
     };
