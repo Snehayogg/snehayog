@@ -11,9 +11,10 @@ import redisService from '../services/caching/redisService.js';
 
 // Helper to create a store linked to our existing Redis service
 const getStore = (prefix) => {
-  // If Redis is not connected, fallback to MemoryStore (automatic in express-rate-limit)
+  // If Redis is not connected yet (common at startup), we return undefined.
+  // express-rate-limit will then use the default MemoryStore.
+  // We've improved the startup sequence in loaders/index.js to minimize this.
   if (!redisService.getConnectionStatus()) {
-    console.warn(`⚠️ RateLimiter: Redis not connected, falling back to MemoryStore for ${prefix}`);
     return undefined;
   }
 
