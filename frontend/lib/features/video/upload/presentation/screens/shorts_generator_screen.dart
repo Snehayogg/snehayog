@@ -13,8 +13,12 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/core/design/typography.dart';
+import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
+import 'package:vayug/core/providers/navigation_providers.dart';
 
 class ShortsGeneratorScreen extends ConsumerStatefulWidget {
   const ShortsGeneratorScreen({super.key});
@@ -101,7 +105,9 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
       await prefs.remove('magician_job_id');
       await prefs.remove('magician_status');
       await prefs.remove('magician_clip_url');
-    } catch (e) {}
+    } catch (e) {
+      AppLogger.log("⚠️ Error clearing magician state: $e");
+    }
   }
 
   Future<void> _pickVideo() async {
@@ -135,13 +141,27 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
       final dio = HttpClientService.instance.dioClient;
       
       // 1. Get Presigned URL
+      // Fix: Use a platform-agnostic way to get the filename (handles both / and \)
+      final fileName = _selectedFile!.path.split(RegExp(r'[/\\]')).last;
+      
       final presignedRes = await dio.post('/api/videos/clipping/presigned', data: {
-        'fileName': _selectedFile!.path.split('/').last,
-        'fileType': 'video/mp4', // Simplification
+        'fileName': fileName,
+        'fileType': 'video/mp4',
       });
+      
+      // Robust null checking for backend response
+      if (presignedRes.data == null) {
+        throw "Server returned an empty response";
+      }
       
       final uploadUrl = presignedRes.data['uploadUrl'];
       final tempKey = presignedRes.data['key'];
+
+      if (uploadUrl == null || tempKey == null) {
+        // Try to capture the specific error message from the server if available
+        final serverError = presignedRes.data['error'] ?? presignedRes.data['message'];
+        throw serverError ?? "Failed to get upload authorization. Please try again.";
+      }
 
       // 2. Upload to R2
       final r2Dio = Dio();
@@ -196,11 +216,18 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
   void _listenToSSE() {
     if (_jobId == null) return;
     
+    Timer? backupPolling;
     final sseStream = HttpClientService.instance.stream('/api/videos/clipping/stream/$_jobId');
     
-    // Safety timer: if we don't get an update from SSE in 10s, start backup polling
-    Timer? backupPolling;
-    
+    // Safety timer: if we don't get an update from SSE in 15s, start backup polling
+    backupPolling = Timer.periodic(const Duration(seconds: 15), (timer) {
+      if (_status == 'processing') {
+        _checkStatusOneTime();
+      } else {
+        timer.cancel();
+      }
+    });
+
     sseStream.listen((line) {
       if (!mounted) return;
       
@@ -212,10 +239,8 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
           
           AppLogger.log("📡 SSE Update: Status = $status");
 
-          // Stop backup polling if SSE is working
-          backupPolling?.cancel();
-
           if (status == 'completed') {
+            backupPolling?.cancel();
             setState(() {
               _status = 'completed';
               _isProcessing = false;
@@ -224,6 +249,7 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
             _saveState(); // Save completion state
             VayuSnackBar.showSuccess(context, "Magic Short is ready! ✨");
           } else if (status == 'failed') {
+            backupPolling?.cancel();
             setState(() {
               _status = 'failed';
               _isProcessing = false;
@@ -237,8 +263,10 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
       }
     }, onError: (error) {
       AppLogger.log("❌ SSE Stream Error: $error");
-      backupPolling?.cancel();
-      _checkStatusOneTime();
+      // Don't cancel polling on error, let it retry
+    }, onDone: () {
+      AppLogger.log("🔌 SSE Stream Closed");
+      // If it closed but not completed, polling will catch it
     });
 
     // Start 10s safety delay for backup polling
@@ -294,6 +322,7 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
       await Dio().download(_clipUrl!, path);
       
       await Gal.putVideo(path);
+      if (!mounted) return;
       VayuSnackBar.showSuccess(context, "Video saved to Gallery! ✅");
     } catch (e) {
       if (!mounted) return;
@@ -308,7 +337,7 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text("Shorts Magician ✨", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Shorts Generator", style: TextStyle(fontWeight: FontWeight.bold)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -559,28 +588,169 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
     );
   }
 
+  void _openPreview() {
+    if (_clipUrl == null) return;
+
+    try {
+      // Pause background videos
+      ref.read(mainControllerProvider).forcePauseVideos();
+
+      // Create a temporary VideoModel for the preview
+      final mockVideo = VideoModel(
+        id: "preview_${DateTime.now().millisecondsSinceEpoch}",
+        videoName: "AI Generated Short ✨",
+        videoUrl: _clipUrl!,
+        thumbnailUrl: "", // Handled by player
+        likes: 0,
+        views: 0,
+        shares: 0,
+        uploader: Uploader(
+          id: "system",
+          name: "Shorts Magician",
+          profilePic: "",
+        ),
+        uploadedAt: DateTime.now(),
+        likedBy: [],
+        videoType: "yog", // Short form
+        aspectRatio: 9 / 16,
+        duration: Duration.zero,
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoScreen(
+            initialVideos: [mockVideo],
+            initialVideoId: mockVideo.id,
+            parentTabIndex: 2, // Upload tab
+          ),
+        ),
+      );
+    } catch (e) {
+      AppLogger.log("❌ Error opening preview: $e");
+      VayuSnackBar.showError(context, "Could not open preview: $e");
+    }
+  }
+
   Widget _buildResultView() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.success.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-      ),
+    return Center(
       child: Column(
         children: [
-          const Icon(Icons.auto_awesome, size: 48, color: AppColors.success),
-          const SizedBox(height: 16),
-          const Text("Your Short is Ready!", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 24),
-          AppButton(
-            onPressed: _downloadClip,
-            label: "Download to Gallery",
-            variant: AppButtonVariant.primary,
-            icon: const Icon(Icons.download),
-            isFullWidth: true,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.auto_awesome, color: AppColors.primary, size: 24),
+                const SizedBox(width: 12),
+                Text(
+                  "Your Short is Ready!",
+                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 24),
+          // Premium Video Card (Resized for consistency with Yug profile grid)
+          GestureDetector(
+            onTap: _openPreview,
+            child: Container(
+              width: 160,
+              height: 320, // Aspect ratio 0.5 matching YugGrid
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  // Video Placeholder/Background
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
+                        ),
+                      ),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded, size: 40, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Download Button in Corner (Secondary focus styling)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: GestureDetector(
+                      onTap: _downloadClip,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF333333).withValues(alpha: 0.8),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
+                        ),
+                        child: const Icon(
+                          Icons.download_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Overlay Text
+                  Positioned(
+                    bottom: 24,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+                        ),
+                        child: Text(
+                          "Tap to Preview",
+                          style: AppTypography.labelSmall.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 40),
           TextButton(
             onPressed: () {
               setState(() {
@@ -591,8 +761,21 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
               });
               _clearState();
             },
-            child: const Text("Create Another Short", style: TextStyle(color: AppColors.primary)),
+            child: Column(
+              children: [
+                const Icon(Icons.refresh_rounded, color: AppColors.primary, size: 20),
+                const SizedBox(height: 4),
+                Text(
+                  "Create Another Short",
+                  style: AppTypography.labelLarge.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );

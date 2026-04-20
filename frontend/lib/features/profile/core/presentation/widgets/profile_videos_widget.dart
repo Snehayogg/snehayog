@@ -224,40 +224,10 @@ class ProfileVideosWidget extends StatelessWidget {
         if (manager.userVideos.isEmpty || filteredVideos.isEmpty) {
           final emptyWidget = RepaintBoundary(
             child: Container(
-              padding: const EdgeInsets.all(48),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
               child: Column(
                 children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.video_library_outlined,
-                      size: 40,
-                      color: Color(0xFF9CA3AF),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    _emptyTitle(),
-                    style: const TextStyle(
-                      color: Color(0xFF374151),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _emptySubtitle(),
-                    style: const TextStyle(
-                      color: Color(0xFF9CA3AF),
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                   // Icon and text section removed for minimalist empty state
                   if (onReferFriends != null && manager.isOwner) ...[
                     const SizedBox(height: 24),
                     SizedBox(

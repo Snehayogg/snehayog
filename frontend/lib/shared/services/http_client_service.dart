@@ -155,7 +155,9 @@ class HttpClientService {
             final metric = response.requestOptions.extra['performance_metric'] as HttpMetric?;
             if (metric != null) {
               metric.httpResponseCode = response.statusCode;
-              metric.responsePayloadSize = response.data?.toString().length;
+              // Safely handle null data by checking for length only if data is not null
+              final dataStr = response.data?.toString();
+              metric.responsePayloadSize = dataStr?.length ?? 0;
               await metric.stop();
             }
           } catch (e) {

@@ -358,7 +358,7 @@ class ProfileHeaderWidget extends ConsumerWidget {
                     ),
                   ),
           ),
-        if (!stateManager.isEditing) ...[
+        if (!stateManager.isEditing && stateManager.totalVideoCount > 0) ...[
           if (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock)
             const SizedBox(width: 12),
           Expanded(

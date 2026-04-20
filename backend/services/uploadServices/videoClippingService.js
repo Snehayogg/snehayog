@@ -10,7 +10,9 @@ class VideoClippingService {
      * @param {Object} options - { startTime, duration, width, height }
      */
     async generateBlurryVerticalClip(inputPath, outputPath, options = {}) {
-        let { startTime = 0, duration = 30, width = 1080, height = 1920 } = options;
+        // Optimized for low-RAM servers (like Fly.io 256MB/512MB)
+        // 480p is much faster and more stable than 1080p for cloud processing
+        let { startTime = 0, duration = 30, width = 480, height = 854 } = options;
 
         // **FIX: Handle special characters in URLs (like Hindi script)**
         const normalizedInput = inputPath.startsWith('http') ? encodeURI(inputPath) : inputPath;
