@@ -169,7 +169,7 @@ async function handleVideoProcessing(job) {
 
     // 8. Cleanup
     // **COST OPTIMIZATION: Delete raw video from R2 after HLS success**
-    if (rawVideoKey && video.isHLSEncoded) {
+    if (rawVideoKey && video && video.isHLSEncoded) {
         try {
             console.log(`🧹 Worker: Deleting original R2 source to save costs: ${rawVideoKey}`);
             await cloudflareR2Service.deleteVideoFromR2(rawVideoKey);
@@ -177,7 +177,7 @@ async function handleVideoProcessing(job) {
             console.warn('⚠️ Worker: Failed to delete R2 source (non-fatal):', e.message);
         }
     }
-    
+
     // Always cleanup local temp file
     if (fs.existsSync(localRawPath)) {
         fs.unlinkSync(localRawPath);

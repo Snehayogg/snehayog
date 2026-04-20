@@ -92,7 +92,7 @@ const syncUserCounters = async (userId) => {
     // 3. Invalidate relevant caches
     await invalidateProfileCache(userId);
     
-    return { followerCount, followingCount, savedVideosCount, videoCount: videos.length };
+    return { followerCount, followingCount, savedVideosCount, videoCount: videoIds.length };
   } catch (err) {
     console.error(`❌ syncUserCounters Error for ${userId}:`, err.message);
     throw err;
