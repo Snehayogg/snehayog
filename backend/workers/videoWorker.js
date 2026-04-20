@@ -17,22 +17,27 @@ import moderationService from '../services/uploadServices/localModerationService
 import videoClippingService from '../services/uploadServices/videoClippingService.js';
 import * as notificationService from '../services/notificationServices/notificationService.js';
 
-// Connect to MongoDB (Worker needs its own connection)
-const connectDB = async () => {
+// Connect to MongoDB & Redis (If not already connected)
+const initializeWorkerConnections = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('📦 Worker MongoDB Connected');
+    if (mongoose.connection.readyState !== 1) {
+      await mongoose.connect(process.env.MONGO_URI);
+      console.log('📦 Worker MongoDB Connected');
+    }
     
     // Connect to Redis for cache invalidation
-    await redisService.connect();
-    console.log('📦 Worker Redis Connected');
+    if (!redisService.getConnectionStatus || !redisService.getConnectionStatus()) {
+      await redisService.connect();
+      console.log('📦 Worker Redis Connected');
+    }
   } catch (error) {
-    console.error('❌ Worker MongoDB Connection Error:', error);
-    process.exit(1);
+    console.error('❌ Worker Connection Error:', error);
+    // Don't exit if it's integrated, just log
+    if (!process.env.FLY_APP_NAME) process.exit(1);
   }
 };
 
-connectDB();
+initializeWorkerConnections();
 
 async function handleVideoProcessing(job) {
   const { videoId, rawVideoKey, videoName, userId, crossPostPlatforms, thumbnailKey } = job.data;

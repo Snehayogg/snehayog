@@ -107,7 +107,15 @@ const startServer = async () => {
 
 // Start the application
 if (process.env.NODE_ENV !== 'test') {
-  startServer();
+  startServer().then(() => {
+    // Start background video worker in same process for better reliability on Fly.io
+    if (process.env.FLY_APP_NAME || process.env.NODE_ENV === 'production') {
+      console.log('🎬 Starting integrated Video Worker...');
+      import('./workers/videoWorker.js').catch(err => {
+        console.error('❌ Failed to start integrated Video Worker:', err);
+      });
+    }
+  });
 }
 
 export default app;

@@ -21,8 +21,5 @@ RUN mkdir -p logs temp uploads
 ENV PORT=8080
 EXPOSE 8080
 
-# Make start script executable
-RUN chmod +x start.sh
-
 # Start the application
-CMD ["./start.sh"]
+CMD ["npm", "start"]
