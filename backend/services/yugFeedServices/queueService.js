@@ -34,8 +34,9 @@ if (redisUrl) {
       // **CRITICAL: IPv6 (family 6) is ONLY mandatory for internal Fly.io networking**
       family: process.env.FLY_APP_NAME ? 6 : undefined, 
       retryStrategy: (times) => Math.min(times * 200, 5000),
-      // **FIX: Explicitly disable TLS if using standard redis:// to prevent wrong version errors**
-      tls: isRedisSecure ? { rejectUnauthorized: false } : false,
+      // **FIX: Explicitly disable TLS on Fly.io to prevent ERR_SSL_WRONG_VERSION_NUMBER**
+      // On Fly.io, internal/IPv6 routes usually prefer plaintext on port 6379.
+      tls: (isRedisSecure && !process.env.FLY_APP_NAME) ? { rejectUnauthorized: false } : false,
     };
 
     console.log(`📡 QueueService: Redis Configured → ${parsedUrl.hostname}:${parsedUrl.port}`);
