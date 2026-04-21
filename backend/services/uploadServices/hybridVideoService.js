@@ -425,9 +425,10 @@ class HybridVideoService {
           fs.mkdirSync(tempDir, { recursive: true });
         }
           
-        // **FIX: Use unique filename to avoid conflicts**
+        // **FIX: Use unique filename to avoid conflicts and SANITIZE**
         const uniqueId = `${userId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        const thumbnailPath = path.join(tempDir, `${videoName}_thumb_${uniqueId}.jpg`);
+        const sanitizedVideoName = cloudflareR2Service.sanitizeKey(videoName);
+        const thumbnailPath = path.join(tempDir, `${sanitizedVideoName}_thumb_${uniqueId}.jpg`);
         const thumbnailFilename = path.basename(thumbnailPath);
         
         console.log(`🎬 FFmpeg taking screenshot of: ${absoluteVideoPath}`);
@@ -479,7 +480,8 @@ class HybridVideoService {
    */
   async uploadThumbnailImageToR2(thumbnailPath, videoName, userId) {
     try {
-      const key = `thumbnails/${userId}/${videoName}_thumb_${Date.now()}.jpg`;
+      const sanitizedName = cloudflareR2Service.sanitizeKey(videoName);
+      const key = `thumbnails/${userId}/${sanitizedName}_thumb_${Date.now()}.jpg`;
       
       const result = await cloudflareR2Service.uploadFileToR2(
         thumbnailPath,

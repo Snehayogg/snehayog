@@ -19,8 +19,7 @@ if (redisUrl) {
     const isRedisSecure = redisUrl.startsWith('rediss://');
     
     // Determine if this is an internal Fly address (they don't support TLS on port 6379)
-    const isInternalFly = parsedUrl.hostname.includes('.internal') || 
-                         (parsedUrl.hostname.includes('upstash.io') && parsedUrl.port === '6379');
+    const isInternalFly = parsedUrl.hostname.includes('.internal');
 
     redisOptions = {
       host: parsedUrl.hostname,
@@ -32,8 +31,8 @@ if (redisUrl) {
       commandTimeout: 30000,   // 30s
       keepAlive: 2000,        // Every 2s
       enableReadyCheck: false,
-      // **CRITICAL: IPv6 (family 6) is MANDATORY for Fly.io internal networking**
-      family: (process.env.FLY_APP_NAME || isInternalFly) ? 6 : undefined,
+      // **CRITICAL: IPv6 (family 6) is ONLY mandatory for internal Fly.io networking**
+      family: process.env.FLY_APP_NAME ? 6 : undefined, 
       retryStrategy: (times) => Math.min(times * 200, 5000),
       // **FIX: Explicitly disable TLS if using standard redis:// to prevent wrong version errors**
       tls: isRedisSecure ? { rejectUnauthorized: false } : false,

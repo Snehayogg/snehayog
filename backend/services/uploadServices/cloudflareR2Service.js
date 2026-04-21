@@ -29,6 +29,16 @@ class CloudflareR2Service {
   }
 
   /**
+   * Sanitize strings for use in R2 Keys (Removes spaces and special characters)
+   */
+  sanitizeKey(key) {
+    if (!key) return '';
+    // Replace characters that break URLs (like #, ?, whitespace) with underscores
+    // We allow letters, numbers, dots, slashes, underscores, and hyphens
+    return key.replace(/[^a-zA-Z0-9.\/_-]/g, '_');
+  }
+
+  /**
    * Download a file from R2 to local path
    * @param {string} key - R2 file key
    * @param {string} localPath - Destination local path
@@ -87,18 +97,19 @@ class CloudflareR2Service {
     if (!key) return '';
     if (key.startsWith('http')) return key;
 
-    // **FIX: Normalize key path to use forward slashes**
+    // **FIX: Normalize key path and ENCODE each segment for URL safety**
     const normalizedKey = key.startsWith('/') ? key.substring(1).replace(/\\/g, '/') : key.replace(/\\/g, '/');
+    const encodedKey = normalizedKey.split('/').map(segment => encodeURIComponent(segment)).join('/');
     
     if (this.publicDomain) {
       // Use custom domain with HTTPS
       const cleanDomain = this.publicDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const url = `https://${cleanDomain}/${normalizedKey}`;
+      const url = `https://${cleanDomain}/${encodedKey}`;
       return url;
     }
 
     // Fallback to direct R2 URL if custom domain not set
-    const directR2Url = `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${normalizedKey}`;
+    const directR2Url = `https://${this.bucketName}.${this.accountId}.r2.cloudflarestorage.com/${encodedKey}`;
     return directR2Url;
   }
 
@@ -106,7 +117,8 @@ class CloudflareR2Service {
   async uploadVideoToR2(filePath, fileName, userId) {
     try {
       const fileContent = fs.readFileSync(filePath);
-      const key = `videos/${userId}/${fileName}_480p_${Date.now()}.mp4`;
+      const sanitizedName = this.sanitizeKey(fileName);
+      const key = `videos/${userId}/${sanitizedName}_480p_${Date.now()}.mp4`;
       
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
@@ -156,7 +168,8 @@ class CloudflareR2Service {
         responseType: 'arraybuffer'
       });
       
-      const key = `thumbnails/${userId}/${fileName}_thumb_${Date.now()}.jpg`;
+      const sanitizedName = this.sanitizeKey(fileName);
+      const key = `thumbnails/${userId}/${sanitizedName}_thumb_${Date.now()}.jpg`;
       
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
@@ -245,21 +258,22 @@ class CloudflareR2Service {
    */
   async uploadFileToR2(filePath, key, contentType = 'application/octet-stream') {
     try {
+      const sanitizedKey = this.sanitizeKey(key);
       const fileContent = fs.readFileSync(filePath);
 
       // Determine cache directives based on file type
-      let cacheControl = 'public, max-age=86400, stale-while-revalidate=86400'; // Default: 1 day + SWR
-      if (/\.m3u8$/i.test(key)) {
+      let cacheControl = 'public, max-age=86400, stale-while-revalidate=86400';
+      if (/\.m3u8$/i.test(sanitizedKey)) {
         cacheControl = 'public, max-age=60, stale-while-revalidate=300';
-      } else if (/\.(ts|mp4|m4s)$/i.test(key)) {
+      } else if (/\.(ts|mp4|m4s)$/i.test(sanitizedKey)) {
         cacheControl = 'public, max-age=31536000, immutable, stale-while-revalidate=604800';
-      } else if (/\.(jpg|jpeg|png|webp)$/i.test(key)) {
+      } else if (/\.(jpg|jpeg|png|webp)$/i.test(sanitizedKey)) {
         cacheControl = 'public, max-age=604800, stale-while-revalidate=604800';
       }
       
       const command = new PutObjectCommand({
         Bucket: this.bucketName,
-        Key: key,
+        Key: sanitizedKey,
         Body: fileContent,
         ContentType: contentType,
         CacheControl: cacheControl,
@@ -267,13 +281,12 @@ class CloudflareR2Service {
   
       await this.s3Client.send(command);
       
-      // **USE CUSTOM DOMAIN** (cdn.snehayog.com) for public URL
-      const publicUrl = this.getPublicUrl(key);
-      console.log(`✅ File uploaded to R2: ${key}`);
+      const publicUrl = this.getPublicUrl(sanitizedKey);
+      console.log(`✅ File uploaded to R2: ${sanitizedKey}`);
       
       return {
         url: publicUrl,
-        key: key,
+        key: sanitizedKey,
         size: fileContent.length,
       };
       
@@ -293,10 +306,11 @@ class CloudflareR2Service {
       const files = fs.readdirSync(hlsDir);
       const uploadPromises = [];
       let playlistKey = null;
+      const sanitizedVideoName = this.sanitizeKey(videoName);
       
       for (const file of files) {
         const filePath = path.join(hlsDir, file);
-        const key = `hls/${userId}/${videoName}/${file}`;
+        const key = `hls/${userId}/${sanitizedVideoName}/${file}`;
         
         if (file.endsWith('.m3u8')) {
           // Upload playlist file

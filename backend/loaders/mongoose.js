@@ -18,7 +18,7 @@ export default async () => {
     const connection = databaseManager.connect();
     
     connection.then(() => {
-      console.log('✅ Database connected successfully');
+      // Success logged in database.js
     }).catch((error) => {
       console.error('❌ Database connection failed:', error.message);
       console.log('⚠️ Database will retry connection automatically');

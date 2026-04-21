@@ -157,7 +157,8 @@ async function handleVideoProcessing(job) {
 
         // 7. Cache Invalidation
         try {
-            const user = await User.findById(userId);
+            // **FIX: Search by googleId for cache invalidation**
+            const user = await User.findOne({ googleId: userId });
             if (user && user.googleId) {
                 await invalidateCache([
                     'user:feed:*',
@@ -168,10 +169,11 @@ async function handleVideoProcessing(job) {
                 console.log('🧹 Worker: Cache invalidated for user feed.');
             }
         } catch (cacheError) {
-            console.error('❌ Worker: Cache invalidation failed:', cacheError);
+            console.error('❌ Worker: Cache invalidation failed:', cacheError.message);
         }
     }
 
+    // Moved Cleanup AFTER Moderation and Cache logic
     // 8. Cleanup
     // **COST OPTIMIZATION: Delete raw video from R2 after HLS success**
     if (rawVideoKey && video && video.isHLSEncoded) {

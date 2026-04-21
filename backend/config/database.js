@@ -7,32 +7,26 @@ class DatabaseManager {
 
   async connect() {
     if (this.isConnected) return;
-    try {
-      console.log('🔌 Connecting to MongoDB...');
-      
-      // Register error listener BEFORE connecting to catch initial connection errors
-      mongoose.connection.on('error', (err) => {
-        console.error('❌ MongoDB connection error event:', err.message);
-        this.isConnected = false;
-      });
-
-      await mongoose.connect(process.env.MONGO_URI, {
-        serverSelectionTimeoutMS: 30000,
-        socketTimeoutMS: 45000,
-        connectTimeoutMS: 30000,
-      });
-      
-      this.isConnected = true;
-      console.log("✅ MongoDB connected successfully");
-      
-      mongoose.connection.on('disconnected', this.handleDisconnect.bind(this));
-      
-    } catch (error) {
-      console.error('❌ MongoDB connection failed:', error.message);
+    
+    console.log('🔌 Connecting to MongoDB...');
+    
+    // Register error listener
+    mongoose.connection.on('error', (err) => {
+      console.error('❌ MongoDB connection error event:', err.message);
       this.isConnected = false;
-      // Do not rethrow - let the server continue so healthcheck/other features work
-      // server.js already handles the non-blocking nature
-    }
+    });
+
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      family: 4, // Force IPv4 to avoid similar DNS issues as Redis
+    });
+    
+    this.isConnected = true;
+    console.log("✅ MongoDB connected successfully");
+    
+    mongoose.connection.on('disconnected', this.handleDisconnect.bind(this));
   }
 
   async disconnect() {
