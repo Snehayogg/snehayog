@@ -95,19 +95,19 @@ class FeedQueueService {
       console.error(`⚠️ FeedQueue: Redis lPop failed:`, e.message);
     }
 
-    // 3. Mark popped videos as "Seen" IMMEDIATELY to prevent refill duplication
+    // 3. Mark popped videos as "Seen" IMMEDIATELY using Bloom Filter (Memory Efficient)
     if (poppedIds.length > 0 && userId !== 'undefined') {
        try {
-          await redisService.sAdd(seenKey, poppedIds);
-          await redisService.expire(seenKey, 604800);
+          const bfSeenKey = `user:bf_seen:${userId}`;
+          await redisService.bfMAdd(bfSeenKey, poppedIds);
+          await redisService.expire(bfSeenKey, 604800);
           
-          // Only sync to DB history for authenticated users (Google IDs are long strings)
-          // Only sync to DB history for authenticated users or identified guest devices
+          // Only sync to DB history for authenticated users
           if (userId !== 'anon' && userId !== 'undefined' && userId.length > 5) {
             FeedHistory.markAsSeen(userId, poppedIds).catch(e => {}); 
           }
        } catch (e) {
-          console.error('⚠️ FeedQueue: Error marking popped videos as seen:', e.message);
+          console.error('⚠️ FeedQueue: Error marking popped videos as seen in Bloom Filter:', e.message);
        }
     }
 
@@ -337,29 +337,37 @@ class FeedQueueService {
       const recentCreatorIds = await this.getRecentCreators(userId);
       const recentCreatorSet = new Set(recentCreatorIds);
 
-      // D. Sync from DB if Cold Start
-      const seenKey = `user:seen_all:${userId}`;
-      const hashKey = `user:seen_hashes:${userId}`;
+      // D. Long-term Context (Sync from DB if needed) using Bloom Filter
+      const bfSeenKey = `user:bf_seen:${userId}`;
+      const bfHashKey = `user:bf_hashes:${userId}`;
+      const seededKey = `user:bf_seeded:${userId}`;
       
-      // **FIX: Fetch Seen IDs from Redis immediately to prevent duplication in this batch**
-      const redisSeenIds = await redisService.getSetMembers(seenKey);
-      redisSeenIds.forEach(id => seenVideoIds.add(id));
-
-      if (userId !== 'anon' && userId !== 'undefined' && FeedHistory && !(await redisService.exists(seenKey))) {
+      // Warm Start: If the Bloom Filter hasn't been seeded in this 24h window, load history from DB.
+      if (userId !== 'anon' && userId !== 'undefined' && FeedHistory && !(await redisService.exists(seededKey))) {
           try {
-             const history = await FeedHistory.find({ userId }).select('videoId videoHash').lean();
+             console.log(`🔄 FeedQueue: Seeding Bloom Filter from history for user ${userId}...`);
+             // Increase history limit to 1000 for better long-term deduplication
+             const history = await FeedHistory.find({ userId }).sort({ seenAt: -1 }).limit(1000).select('videoId videoHash').lean();
+             
              if (history.length > 0) {
                  const historyIds = history.map(h => h.videoId.toString());
-                 await redisService.sAdd(seenKey, historyIds);
-                 historyIds.forEach(id => seenVideoIds.add(id));
-
-                 const hashes = history.map(h => h.videoHash).filter(Boolean);
-                 if (hashes.length > 0) await redisService.sAdd(hashKey, hashes);
+                 await redisService.bfMAdd(bfSeenKey, historyIds);
                  
-                 await redisService.expire(seenKey, 604800);
-                 await redisService.expire(hashKey, 604800);
+                 const hashes = history.map(h => h.videoHash).filter(Boolean);
+                 if (hashes.length > 0) await redisService.bfMAdd(bfHashKey, hashes);
+                 
+                 // Mark as seeded for 24 hours
+                 await redisService.set(seededKey, 'true', 86400); 
+                 
+                 await redisService.expire(bfSeenKey, 1296000); // 15 days
+                 await redisService.expire(bfHashKey, 1296000); // 15 days
+             } else {
+                 // Even if no history, mark as seeded to prevent redundant DB checks
+                 await redisService.set(seededKey, 'true', 86400);
              }
-          } catch(e) {/* ignore */}
+          } catch(e) {
+             console.error('⚠️ FeedQueue: Bloom Filter seeding failed:', e.message);
+          }
       }
 
       // **NEW: E. Skip History (Filter out what they didn't like)**
@@ -369,9 +377,6 @@ class FeedQueueService {
           skipHistory.forEach(h => seenVideoIds.add(h.videoId.toString()));
         }
       } catch (e) { /* ignore */ }
-
-      // Fetch Hashes from Redis for O(1) in-memory Filtering
-      const seenHashesSet = await redisService.getSetMembers(hashKey);
 
       // 2. Iterative Batch Search ("Discovery Aware")
 
@@ -405,66 +410,65 @@ class FeedQueueService {
 
       // **STEP A: Fetch Recent Videos (Strictly Fresh)**
       try {
-          // Only fetch Recent for Yug (short videos) generally, or if specific constraint allows
-          const recentQuery = { processingStatus: 'completed' };
-          // **FIX: Use videoType field directly instead of duration**
-          recentQuery.videoType = videoType;
+          const recentQuery = { processingStatus: 'completed', videoType };
+          if (uploaderObjectId) recentQuery.uploader = { $ne: uploaderObjectId };
           
-          // **FIX: Use ObjectId for uploader exclusion to prevent CastError**
-          if (uploaderObjectId) {
-              recentQuery.uploader = { $ne: uploaderObjectId };
-          }
-          
-          // Get videos from last 7 days only for "Recent" bucket transparency
           const sevenDaysAgo = new Date();
           sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
           recentQuery.createdAt = { $gte: sevenDaysAgo };
 
           const recentCandidates = await Video.find(recentQuery)
-             .sort({ createdAt: -1 }) // STRICT TIME SORT
-             .limit(50) // Fetch top 50 recent to filter from
+             .sort({ createdAt: -1 })
+             .limit(50)
              .select('_id uploader createdAt score finalScore videoType seriesId episodeNumber views videoHash')
              .lean();
              
-          // Filter Seen & Hashes
-          let recentToCheck = recentCandidates.filter(v => !seenVideoIds.has(v._id.toString()));
-          if (recentToCheck.length > 0) {
-              recentToCheck = recentToCheck.filter(v => !seenHashesSet.has(v.videoHash));
+          if (recentCandidates.length > 0) {
+              // 1. Memory Filter (In-flight/Queue)
+              const memFiltered = recentCandidates.filter(v => !seenVideoIds.has(v._id.toString()));
+              
+              if (memFiltered.length > 0) {
+                  // 2. Bloom Filter Check (Batch)
+                  const candidateIds = memFiltered.map(v => v._id.toString());
+                  const candidateHashes = memFiltered.map(v => v.videoHash).filter(Boolean);
+                  
+                  const [seenFlags, hashFlags] = await Promise.all([
+                      redisService.bfMExists(`user:bf_seen:${userId}`, candidateIds),
+                      candidateHashes.length > 0 ? redisService.bfMExists(`user:bf_hashes:${userId}`, candidateHashes) : Promise.resolve([])
+                  ]);
+                  
+                  const hashFlagsMap = new Map(candidateHashes.map((h, i) => [h, hashFlags[i]]));
+
+                  for (let i = 0; i < memFiltered.length; i++) {
+                      if (recentVideos.length >= RECENT_TARGET) break;
+                      const video = memFiltered[i];
+                      const isSeenInBF = seenFlags[i];
+                      const isHashSeenInBF = video.videoHash ? hashFlagsMap.get(video.videoHash) : false;
+                      
+                      if (!isSeenInBF && !isHashSeenInBF) {
+                          const uploaderId = video.uploader?.toString() || 'unknown';
+                          const cc = creatorCounts.get(uploaderId) || 0;
+                          if (cc < STANDARD_CAP) {
+                              recentVideos.push(video);
+                              creatorCounts.set(uploaderId, cc + 1);
+                              seenVideoIds.add(video._id.toString());
+                          }
+                      }
+                  }
+              }
           }
-          
-          for (const video of recentToCheck) {
-             if (recentVideos.length >= RECENT_TARGET) break;
-             // **FIX: Normalize uploader ID correctly (handles ObjectId and plain string)**
-             const uploaderId = video.uploader
-               ? (typeof video.uploader === 'object'
-                   ? (video.uploader._id || video.uploader).toString()
-                   : video.uploader.toString())
-               : 'unknown';
-             
-             // Check generic cap
-             const cc = creatorCounts.get(uploaderId) || 0;
-             if (cc < STANDARD_CAP) {
-                recentVideos.push(video);
-                creatorCounts.set(uploaderId, cc + 1);
-                seenVideoIds.add(video._id.toString()); // Mark as picked so Popular/Discovery don't pick again
-                if (video.videoHash) seenHashesSet.add(video.videoHash);
-             }
-          }
-          console.log(`🆕 FeedQueue: Found ${recentVideos.length} recent videos.`);
+          console.log(`🆕 FeedQueue: Found ${recentVideos.length} recent videos via Bloom Filter.`);
       } catch (e) {
-         console.error('⚠️ FeedQueue: Error fetching recent bucket:', e.message);
+          console.error('⚠️ FeedQueue: Error fetching recent bucket:', e.message);
       }
 
       // **STEP B: Pagination Loop for Popular, Discovery & Semantic**
       while ((freshVideos.length < POPULAR_TARGET || discoveryVideos.length < DISCOVERY_TARGET || semanticVideos.length < SEMANTIC_TARGET) && pageCount < MAX_PAGES) {
-          const candidateQuery = { processingStatus: 'completed' };
-          candidateQuery.videoType = videoType;
-                
-          if (uploaderObjectId) {
-              candidateQuery.uploader = { $ne: uploaderObjectId };
-          }
-
-          const candidates = await Video.find(candidateQuery)
+          const candidates = await Video.find({ 
+              processingStatus: 'completed', 
+              videoType,
+              uploader: uploaderObjectId ? { $ne: uploaderObjectId } : { $exists: true }
+          })
             .sort({ finalScore: -1, createdAt: -1 })
             .skip(skip)
             .limit(BATCH_SIZE_QUERY)
@@ -473,64 +477,55 @@ class FeedQueueService {
 
           if (candidates.length === 0) break; 
 
-          // Filter by Video ID (Redis) & Hash
-          let candidatesToCheck = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
-          // Fatigue Filter
-          candidatesToCheck = candidatesToCheck.filter(v => !seenHashesSet.has(v.videoHash));
+          // 1. Memory Filter
+          const memFiltered = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
           
-          for (const video of candidatesToCheck) {
-             const uploaderId = video.uploader
-               ? (typeof video.uploader === 'object'
-                   ? (video.uploader._id || video.uploader).toString()
-                   : video.uploader.toString())
-               : 'unknown';
-             const isDiscovery = (video.views || 0) < 1000;
-             const videoIdStr = video._id.toString();
-             
-             let currentCap = recentCreatorSet.has(uploaderId) ? THROTTLED_CAP : STANDARD_CAP;
-             if (pageCount > 2 && (freshVideos.length + discoveryVideos.length + semanticVideos.length < 5)) {
-                 currentCap = Math.max(currentCap, 2); 
-             }
+          if (memFiltered.length > 0) {
+              // 2. Bloom Filter Check (Batch)
+              const cIds = memFiltered.map(v => v._id.toString());
+              const cHashes = memFiltered.map(v => v.videoHash).filter(Boolean);
+              
+              const [sFlags, hFlags] = await Promise.all([
+                  redisService.bfMExists(`user:bf_seen:${userId}`, cIds),
+                  cHashes.length > 0 ? redisService.bfMExists(`user:bf_hashes:${userId}`, cHashes) : Promise.resolve([])
+              ]);
+              
+              const hFlagsMap = new Map(cHashes.map((h, i) => [h, hFlags[i]]));
 
-             const currentCount = creatorCounts.get(uploaderId) || 0;
-             if (currentCount < currentCap) {
-                // **NEW: Echo Chamber Check (Vector Diversity)**
-                const isTooSimilar = this.checkBatchDiversity(video, [
-                   ...semanticVideos, ...freshVideos, ...recentVideos, ...discoveryVideos
-                ]);
+              for (let i = 0; i < memFiltered.length; i++) {
+                  const video = memFiltered[i];
+                  if (sFlags[i] || (video.videoHash && hFlagsMap.get(video.videoHash))) continue;
 
-                if (!isTooSimilar) {
-                    // 1. Try to fill Semantic bucket (Personalization)
-                    if (interestVector && video.vectorEmbedding && video.vectorEmbedding.length > 0 && semanticVideos.length < SEMANTIC_TARGET) {
-                        const sim = RecommendationService.calculateCosineSimilarity(interestVector, video.vectorEmbedding);
-                        if (sim > 0.45) { // 0.45 = Strong semantic match
-                            semanticVideos.push(video);
-                            creatorCounts.set(uploaderId, currentCount + 1);
-                            seenVideoIds.add(videoIdStr);
-                            if (video.videoHash) seenHashesSet.add(video.videoHash);
-                            continue; // Move to next video
-                        }
-                    }
+                  const uploaderId = video.uploader?.toString() || 'unknown';
+                  const isDiscovery = (video.views || 0) < 1000;
+                  const currentCap = recentCreatorSet.has(uploaderId) ? THROTTLED_CAP : STANDARD_CAP;
+                  const cc = creatorCounts.get(uploaderId) || 0;
 
-                    // 2. Fill Discovery or Popular buckets
-                    if (isDiscovery && discoveryVideos.length < DISCOVERY_TARGET) {
-                        discoveryVideos.push(video);
-                        creatorCounts.set(uploaderId, currentCount + 1);
-                        seenVideoIds.add(videoIdStr);
-                        if (video.videoHash) seenHashesSet.add(video.videoHash);
-                    } else if (!isDiscovery && freshVideos.length < POPULAR_TARGET) {
-                        freshVideos.push(video);
-                        creatorCounts.set(uploaderId, currentCount + 1);
-                        seenVideoIds.add(videoIdStr);
-                        if (video.videoHash) seenHashesSet.add(video.videoHash);
-                    }
-                }
-                
-                if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET && semanticVideos.length >= SEMANTIC_TARGET) break;
-             }
+                  if (cc < currentCap) {
+                      const isTooSimilar = this.checkBatchDiversity(video, [...semanticVideos, ...freshVideos, ...recentVideos, ...discoveryVideos]);
+                      if (!isTooSimilar) {
+                          if (interestVector && video.vectorEmbedding && video.vectorEmbedding.length > 0 && semanticVideos.length < SEMANTIC_TARGET) {
+                              if (RecommendationService.calculateCosineSimilarity(interestVector, video.vectorEmbedding) > 0.45) {
+                                  semanticVideos.push(video);
+                                  creatorCounts.set(uploaderId, cc + 1);
+                                  seenVideoIds.add(video._id.toString());
+                                  continue;
+                              }
+                          }
+                          if (isDiscovery && discoveryVideos.length < DISCOVERY_TARGET) {
+                              discoveryVideos.push(video);
+                              creatorCounts.set(uploaderId, cc + 1);
+                              seenVideoIds.add(video._id.toString());
+                          } else if (!isDiscovery && freshVideos.length < POPULAR_TARGET) {
+                              freshVideos.push(video);
+                              creatorCounts.set(uploaderId, cc + 1);
+                              seenVideoIds.add(video._id.toString());
+                          }
+                      }
+                  }
+                  if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET && semanticVideos.length >= SEMANTIC_TARGET) break;
+              }
           }
-          
-          if (freshVideos.length >= POPULAR_TARGET && discoveryVideos.length >= DISCOVERY_TARGET && semanticVideos.length >= SEMANTIC_TARGET) break;
           
           skip += BATCH_SIZE_QUERY;
           pageCount++;
@@ -564,10 +559,15 @@ class FeedQueueService {
           await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
           await redisService.expire(queueKey, 3600);
           
+          // **NEW: Mark as seen in Bloom Filter immediately**
+          await redisService.bfMAdd(`user:bf_seen:${userId}`, toPushIds);
+          const toPushHashes = orderedVideos.map(v => v.videoHash).filter(Boolean);
+          if (toPushHashes.length > 0) await redisService.bfMAdd(`user:bf_hashes:${userId}`, toPushHashes);
+
           const newCreators = orderedVideos.map(v => v.uploader ? (v.uploader._id || v.uploader).toString() : null).filter(Boolean);
           await this.addRecentCreators(userId, [...new Set(newCreators)]);
           
-          console.log(`✅ FeedQueue: Refilled ${toPushIds.length} videos (including discovery).`);
+          console.log(`✅ FeedQueue: Refilled ${toPushIds.length} videos via Bloom Filter.`);
       }
 
       return toPushIds.length;
@@ -586,9 +586,9 @@ class FeedQueueService {
    */
   async getFallbackIds(userId, videoType = 'yog', count = 10, excludedIds = []) {
     // **LATENCY FIX: Limit the size of the exclusion list.**
-    // MongoDB performance degrades exponentially with large $nin arrays.
-    // We take the last 200 excluded IDs to maintain freshness without choking the DB.
-    const limitedExcludes = excludedIds.slice(-200);
+    // MongoDB performance degrades with large $nin arrays.
+    // Increased from 200 to 1000 to better support users with larger history (like 2k videos).
+    const limitedExcludes = excludedIds.slice(-1000);
     const excludeSet = new Set(limitedExcludes.map(id => id.toString()));
     const finalIds = [];
 
@@ -625,7 +625,9 @@ class FeedQueueService {
     need = count - finalIds.length;
     if (need > 0 && userId && userId !== 'anon' && userId !== 'undefined') {
        try {
-          const lruOldestIds = await FeedHistory.getLRUVideos(userId, 1000);
+          // **NEW: Using 48-hour cooldown window** - content seen today will NOT be repeated 
+          // unless all other content sources are exhausted.
+          const lruOldestIds = await FeedHistory.getLRUVideos(userId, 1000, [], 48);
           
           if (lruOldestIds.length > 0) {
              const rawVideos = await Video.find({

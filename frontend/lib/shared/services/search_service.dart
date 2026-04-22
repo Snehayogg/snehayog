@@ -122,6 +122,9 @@ class SearchService {
       AppLogger.log(
         '✅ SearchService: searchCreators found ${list.length} creators',
       );
+      if (list.isNotEmpty) {
+         AppLogger.log('📡 SearchService: First creator name: ${list[0]['name']}');
+      }
 
       return list
           .map(

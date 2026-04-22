@@ -116,12 +116,20 @@ FeedHistorySchema.statics.getSeenContentHashes = async function (userId) {
 /**
  * Get LRU (Least Recently Used) videos for fallback
  * Returns videoIds sorted by seenAt ASC (Oldest seen first)
+ * @param {String} userId - User ID
+ * @param {Number} limit - Number of videos to fetch
+ * @param {Array} excludeIds - IDs to skip entirely
+ * @param {Number} cooldownHours - Skip videos seen within this window (Default: 48)
  */
-FeedHistorySchema.statics.getLRUVideos = async function (userId, limit = 10, excludeIds = []) {
+FeedHistorySchema.statics.getLRUVideos = async function (userId, limit = 10, excludeIds = [], cooldownHours = 48) {
     try {
+        const cooldownDate = new Date();
+        cooldownDate.setHours(cooldownDate.getHours() - cooldownHours);
+
         const docs = await this.find({
             userId,
-            videoId: { $nin: excludeIds }
+            videoId: { $nin: excludeIds },
+            seenAt: { $lt: cooldownDate } // Only pick videos NOT seen in the last 'cooldownHours'
         })
             .sort({ seenAt: 1 }) // Oldest first
             .limit(limit)

@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis';
+import crypto from 'crypto';
 
 /**
  * Redis Service for caching and performance optimization
@@ -533,14 +534,88 @@ class RedisService {
     if (!this.client) return null;
     try {
       const cmd = command.toLowerCase();
+      // Try direct method first (e.g. client.get, client.sadd)
       if (typeof this.client[cmd] === 'function') {
         return await this.client[cmd](...args);
       }
-      console.warn(`⚠️ Redis: Command "${command}" not found on Upstash client`);
-      return null;
+      // Fallback to raw execution for commands not explicitly in the SDK (like BF.*)
+      return await this.client.execute([command, ...args]);
     } catch (error) {
       console.error(`❌ Redis: Error in call (${command}):`, error.message);
       return null;
+    }
+  }
+
+  /**
+   * INTERNAL: Generate bit positions for a Bloom Filter item
+   * Uses SHA-256 to derive 4 bit positions for a 1MB bitset (8,388,608 bits)
+   */
+  _getBitPositions(item) {
+    const hash = crypto.createHash('sha256').update(String(item)).digest();
+    const positions = [];
+    const bitsetSize = 8388608; // 1MB = 8,388,608 bits
+    for (let i = 0; i < 4; i++) {
+      // Use 4 bytes for each position
+      positions.push(hash.readUInt32BE(i * 4) % bitsetSize);
+    }
+    return positions;
+  }
+
+  /**
+   * MANUAL BLOOM FILTER: Add multiple items
+   * Uses Redis Bitmaps and a Lua script for atomicity and 15-day expiry
+   */
+  async bfMAdd(key, items) {
+    if (!this.client || !items || items.length === 0) return false;
+    try {
+      const allPositions = items.flatMap(item => this._getBitPositions(item));
+      
+      const script = `
+        for i, pos in ipairs(ARGV) do
+          redis.call('SETBIT', KEYS[1], pos, 1)
+        end
+        redis.call('EXPIRE', KEYS[1], 1296000)
+        return true
+      `;
+
+      await this.client.eval(script, [key], allPositions);
+      return true;
+    } catch (error) {
+      console.error(`❌ Redis: Manual BF.MADD error for key ${key}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * MANUAL BLOOM FILTER: Check if multiple items exist
+   * Returns array of booleans [true, false, ...]
+   */
+  async bfMExists(key, items) {
+    if (!this.client || !items || items.length === 0) return items.map(() => false);
+    try {
+      const allPositions = items.flatMap(item => this._getBitPositions(item));
+      
+      const script = `
+        local results = {}
+        local key = KEYS[1]
+        for i=1, #ARGV, 4 do
+          local isPresent = 1
+          if redis.call('GETBIT', key, ARGV[i]) == 0 then isPresent = 0
+          elseif redis.call('GETBIT', key, ARGV[i+1]) == 0 then isPresent = 0
+          elseif redis.call('GETBIT', key, ARGV[i+2]) == 0 then isPresent = 0
+          elseif redis.call('GETBIT', key, ARGV[i+3]) == 0 then isPresent = 0
+          end
+          table.insert(results, isPresent)
+        end
+        return results
+      `;
+
+      const results = await this.client.eval(script, [key], allPositions);
+      if (!Array.isArray(results)) return items.map(() => false);
+      return results.map(r => r === 1);
+    } catch (error) {
+      console.error(`❌ Redis: Manual BF.MEXISTS error for key ${key}:`, error.message);
+      return items.map(() => false);
     }
   }
 

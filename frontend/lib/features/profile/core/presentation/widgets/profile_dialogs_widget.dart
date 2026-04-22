@@ -344,7 +344,7 @@ class ProfileDialogsWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Everything you need to know about Vayug',
+            'Vayug ke baare mein sab kuch jo aapko jaanna chahiye',
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 16),
@@ -368,7 +368,7 @@ class ProfileDialogsWidget {
             isFullWidth: true,
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.check_circle_outline),
-            label: 'Got it, thanks!',
+            label: 'Theek hai, dhanyavad!',
             variant: AppButtonVariant.primary,
           ),
         ],
@@ -559,7 +559,7 @@ class ProfileDialogsWidget {
 
     await VayuBottomSheet.show(
       context: context,
-      title: 'Creator Rewards Info',
+      title: 'Creator Rewards ki Jankari',
       icon: Icons.monetization_on_outlined,
       isScrollControlled: true,
       padding: EdgeInsets.zero,
@@ -583,14 +583,14 @@ class ProfileDialogsWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildHowToEarnPoint(
-                      title: 'Reward distribution',
+                      title: 'Rewards kaise milenge?',
                       body:
-                          'Rewards are validated and updated on the 1st of every month in your profile after verification.',
+                          'Rewards har mahine ki 1st date ko aapki profile mein reset kiye jaate hain.',
                     ),
                     _buildHowToEarnPoint(
-                      title: 'Secure Identity Verification',
+                      title: 'Identity Verification kyun zaroori hai?',
                       body:
-                          'To maintain a fair and secure platform, we use a Billing Alias (UPI ID) for identity verification. This prevents duplicate accounts and ensures that rewards are distributed correctly to verified, unique creators.',
+                          'Platform ko safe aur genuine rakhne ke liye hum UPI ID ka use identity verification ke liye karte hain. Isse duplicate accounts nahi bante aur rewards seedha sahi creators tak pahunchte hain.',
                     ),
                     if (!showUpiField && currentUpi.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -633,7 +633,7 @@ class ProfileDialogsWidget {
                               upiController.text = currentUpi;
                             });
                           },
-                          label: 'Update UPI ID',
+                          label: 'UPI ID Update karein',
                           variant: AppButtonVariant.text,
                         ),
                       ),
@@ -643,7 +643,7 @@ class ProfileDialogsWidget {
                       TextField(
                         controller: upiController,
                         decoration: const InputDecoration(
-                          labelText: 'Enter your UPI ID',
+                          labelText: 'Apna UPI ID enter karein',
                           hintText: 'example@bank',
                           border: OutlineInputBorder(),
                         ),
@@ -697,7 +697,7 @@ class ProfileDialogsWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Billing info updated successfully. Scores will be updated on the 1st of every month.',
+                                  'Billing info update ho gayi hai. Har mahine ki 1st date ko scores update honge.',
                                 ),
                                 duration: Duration(seconds: 3),
                               ),
@@ -707,7 +707,7 @@ class ProfileDialogsWidget {
                             isSaving = false;
                             showUpiField = false;
                             validationMessage =
-                                'Information saved successfully! Your rewards will update on the 1st.';
+                                'Information save ho gayi hai! Aapke rewards 1st date ko update honge.';
                           });
                         } catch (e) {
                           setState(() {
@@ -718,10 +718,10 @@ class ProfileDialogsWidget {
                         }
                       },
                       label: isSaving
-                          ? 'Saving...'
+                          ? 'Save ho raha hai...'
                           : showUpiField
-                              ? 'Verify & Save'
-                              : 'Done',
+                              ? 'Verify aur Save karein'
+                              : 'Ho gaya',
                       variant: AppButtonVariant.primary,
                     ),
                   ],
