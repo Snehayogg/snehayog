@@ -6,7 +6,6 @@ import RecommendationService from '../../services/yugFeedServices/recommendation
 import FeedQueueService from '../../services/yugFeedServices/feedQueueService.js';
 import redisService from '../../services/caching/redisService.js';
 import { invalidateCache, VideoCacheKeys } from '../../middleware/cacheMiddleware.js';
-import { convertLikedByToGoogleIds } from '../../utils/videoUtils.js';
 import { serializeVideo, serializeVideos } from '../../utils/serializers/videoSerializer.js';
 import RevenueService from '../../services/adServices/revenueService.js';
 

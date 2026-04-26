@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✉️ Email Blast & Marketing - Vayug Admin</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #ff7e5f;
+            --accent: #feb47b;
+            --bg: #1a1c2c;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #1a1c2c 0%, #4a1942 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 30px;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; }
+
+        .header {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, var(--secondary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .panel-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .form-group { margin-bottom: 25px; }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--glass-border);
+            padding: 15px;
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(to right, var(--primary), #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            color: white;
+            margin-top: 15px;
+            text-decoration: none;
+        }
+
+        .preview-area {
+            background: white;
+            color: #333;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 400px;
+            overflow-y: auto;
+        }
+
+        .status-msg {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .success { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #2ecc71; }
+        .error { background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid #e74c3c; }
+
+        .template-tags {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            background: rgba(255,255,255,0.1);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tag:hover { background: var(--primary); }
+
+        @media (max-width: 768px) {
+            .panel-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✉️ Email Blast & Newsletter</h1>
+            <p>Communicate with your users at scale using Brevo</p>
+        </div>
+
+        <div class="panel-grid">
+            <!-- Composer -->
+            <div class="card">
+                <form id="emailForm">
+                    <div class="form-group">
+                        <label>Target Audience</label>
+                        <select id="target" onchange="toggleTarget()">
+                            <option value="individual">Single User (Specific Email)</option>
+                            <option value="all">Every Registered User</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="emailGroup">
+                        <label>Recipient Email</label>
+                        <input type="email" id="customEmail" placeholder="user@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Email Subject</label>
+                        <input type="text" id="subject" placeholder="What's happening on Vayug?" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>HTML Content</label>
+                        <textarea id="htmlContent" rows="12" placeholder="<h1>Hello!</h1> <p>Your message here...</p>" onkeyup="updatePreview()" required></textarea>
+                        <div class="template-tags">
+                            <span class="tag" onclick="loadTemplate('welcome')">Welcome</span>
+                            <span class="tag" onclick="loadTemplate('update')">New Update</span>
+                            <span class="tag" onclick="loadTemplate('payout')">Payout Success</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="sendBtn">
+                        🚀 Send Email Blast
+                    </button>
+                    
+                    <a href="admin_dashboard.html" class="btn btn-outline">🏠 Back to Dashboard</a>
+                </form>
+
+                <div id="status" class="status-msg"></div>
+            </div>
+
+            <!-- Preview -->
+            <div class="card">
+                <label>Live Preview</label>
+                <div class="preview-area" id="previewPane">
+                    <p style="color: #999; text-align: center; margin-top: 50%;">Your email preview will appear here...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_KEY_STORAGE_KEY = 'vayu_admin_dashboard_key';
+
+        function detectApiBase() {
+            const params = new URLSearchParams(window.location.search);
+            const override = params.get('apiBase');
+            if (override) return override.replace(/\/$/, '');
+            const { protocol, hostname, port } = window.location;
+            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.')) {
+                return `${protocol}//${hostname}:${port || '5001'}/api`;
+            }
+            return 'https://snehayog.site/api';
+        }
+
+        const API_BASE = detectApiBase();
+
+        function toggleTarget() {
+            const target = document.getElementById('target').value;
+            document.getElementById('emailGroup').style.display = target === 'all' ? 'none' : 'block';
+        }
+
+        function updatePreview() {
+            const content = document.getElementById('htmlContent').value;
+            const preview = document.getElementById('previewPane');
+            if (content.trim()) {
+                preview.innerHTML = content;
+            } else {
+                preview.innerHTML = '<p style="color: #999; text-align: center; margin-top: 50%;">Your email preview will appear here...</p>';
+            }
+        }
+
+        function loadTemplate(type) {
+            const templates = {
+                welcome: `<h1>Welcome to Vayug! 🎉</h1><p>We are thrilled to have you here. Exploring premium ad-free videos has never been easier.</p><br><p>Best,<br>The Vayug Team</p>`,
+                update: `<h2>New Features are Here! 🚀</h2><p>Check out our latest app update featuring improved recommendation algorithms and smoother playback.</p><br><a href="#" style="background:#667eea; color:white; padding:10px 20px; border-radius:5px; text-decoration:none;">Update Now</a>`,
+                payout: `<h3>Your Payout is on the way! 💸</h3><p>Congratulations! Your creator earnings for this month have been successfully processed and sent to your account.</p>`
+            };
+            document.getElementById('htmlContent').value = templates[type];
+            updatePreview();
+        }
+
+        document.getElementById('emailForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('sendBtn');
+            const status = document.getElementById('status');
+            
+            const payload = {
+                target: document.getElementById('target').value,
+                customEmail: document.getElementById('customEmail').value,
+                subject: document.getElementById('subject').value,
+                htmlContent: document.getElementById('htmlContent').value
+            };
+
+            const adminKey = localStorage.getItem(ADMIN_KEY_STORAGE_KEY);
+            if (!adminKey) {
+                alert('Admin unauthorized. Please login from the dashboard.');
+                return;
+            }
+
+            if (payload.target === 'all' && !confirm('Are you SURE? This will send a real email to EVERY user in your database.')) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏱️ Processing Blast...';
+            status.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/email/blast`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-admin-key': adminKey
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                status.style.display = 'block';
+
+                if (result.success) {
+                    status.className = 'status-msg success';
+                    status.textContent = result.message;
+                } else {
+                    status.className = 'status-msg error';
+                    status.textContent = '❌ Error: ' + (result.error || 'Failed to send');
+                }
+            } catch (err) {
+                status.className = 'status-msg error';
+                status.textContent = '❌ Network Error: ' + err.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Send Email Blast';
+            }
+        };
+    </script>
+</body>
+</html>

@@ -39,7 +39,7 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId, traceI
     videoType: videoObj.videoType || 'yog',
     mediaType: videoObj.mediaType || 'video',
     link: videoObj.link || null,
-    uploadedAt: videoObj.uploadedAt?.toISOString ? videoObj.uploadedAt.toISOString() : videoObj.uploadedAt,
+    uploadedAt: (videoObj.uploadedAt || videoObj.createdAt)?.toISOString ? (videoObj.uploadedAt || videoObj.createdAt).toISOString() : (videoObj.uploadedAt || videoObj.createdAt),
     isLiked: isLiked,
     earnings: parseFloat(videoObj.earnings) || 0.0,
     hlsPlaylistUrl: cloudflareR2Service.getPublicUrl(videoObj.hlsPlaylistUrl || ''),

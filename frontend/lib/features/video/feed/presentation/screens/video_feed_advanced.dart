@@ -862,6 +862,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     // 3. Update local state
     setState(() {
       _currentIndex = index;
+      _activeQuizVN.value = null;
     });
 
     // 4. Handle preloading and resource protection (debounced)

@@ -9,6 +9,36 @@ class RedisService {
   constructor() {
     this.client = null;
     this.isConnected = false;
+    this.disabledUntil = 0;
+    this.circuitCooldownMs = 10 * 60 * 1000; // 10 minutes
+    this.lastCircuitLogAt = 0;
+  }
+
+  _isMaxRequestLimitError(error) {
+    const message = error?.message || '';
+    return typeof message === 'string' && message.toLowerCase().includes('max requests limit exceeded');
+  }
+
+  _canUseRedis() {
+    if (!this.client || !this.isConnected) return false;
+    if (this.disabledUntil && Date.now() < this.disabledUntil) return false;
+    if (this.disabledUntil && Date.now() >= this.disabledUntil) {
+      this.disabledUntil = 0;
+    }
+    return true;
+  }
+
+  _handleRedisError(error, context = 'operation') {
+    if (this._isMaxRequestLimitError(error)) {
+      const now = Date.now();
+      this.disabledUntil = now + this.circuitCooldownMs;
+      if (now - this.lastCircuitLogAt > 60000) {
+        this.lastCircuitLogAt = now;
+        console.error(`⚠️ Redis: Rate limit reached. Disabling Redis usage for ${Math.round(this.circuitCooldownMs / 60000)} minutes.`);
+      }
+      return;
+    }
+    console.error(`❌ Redis: Error during ${context}:`, error.message);
   }
 
   /**
@@ -25,16 +55,38 @@ class RedisService {
       }
 
       console.log('🔄 Redis: Initializing Upstash REST client...');
-      this.client = new Redis({
+      const baseClient = new Redis({
         url: url,
         token: token,
       });
+      this.client = new Proxy(baseClient, {
+        get: (target, prop, receiver) => {
+          const value = Reflect.get(target, prop, receiver);
+          if (typeof value !== 'function') return value;
+          return async (...args) => {
+            try {
+              return await value.apply(target, args);
+            } catch (error) {
+              this._handleRedisError(error, `client.${String(prop)}`);
+              throw error;
+            }
+          };
+        }
+      });
 
-      // Verify connection with a simple ping
-      await this.client.ping();
-      
-      console.log('✅ Redis: Upstash REST client ready');
-      this.isConnected = true;
+      // Verify connection with a simple ping (5s timeout to prevent server hanging)
+      try {
+        await Promise.race([
+          this.client.ping(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Upstash connection timeout')), 5000))
+        ]);
+        console.log('✅ Redis: Upstash REST client ready');
+        this.isConnected = true;
+        this.disabledUntil = 0;
+      } catch (pingError) {
+        console.warn('⚠️ Redis: Connection verification timed out or failed. Continuing without Redis cache.');
+        this.isConnected = false;
+      }
       return true;
     } catch (error) {
       console.error('❌ Redis: Initialization failed:', error.message);
@@ -47,7 +99,7 @@ class RedisService {
    * Get value from cache
    */
   async get(key) {
-    if (!this.client) return null;
+    if (!this._canUseRedis()) return null;
     try {
       return await this.client.get(key);
     } catch (error) {
@@ -60,7 +112,7 @@ class RedisService {
    * Set value in cache
    */
   async set(key, value, expirySeconds = null) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       const options = expirySeconds ? { ex: expirySeconds } : {};
       await this.client.set(key, value, options);
@@ -75,7 +127,7 @@ class RedisService {
    * Set key only if it doesn't exist (Locking Pattern)
    */
   async setLock(key, value, expirySeconds) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       // Upstash Redis 'set' returns 'OK' or null/nil if NX fails
       const result = await this.client.set(key, value, { nx: true, ex: expirySeconds });
@@ -90,7 +142,7 @@ class RedisService {
    * Delete a key from cache
    */
   async del(key) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       await this.client.del(key);
       return true;
@@ -106,7 +158,7 @@ class RedisService {
    * We'll use the SCAN command iteratively.
    */
   async clearPattern(pattern) {
-    if (!this.client) return 0;
+    if (!this._canUseRedis()) return 0;
     try {
       let count = 0;
       let cursor = "0";
@@ -134,7 +186,7 @@ class RedisService {
    * Check if key exists
    */
   async exists(key) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       const result = await this.client.exists(key);
       return result === 1;
@@ -148,7 +200,7 @@ class RedisService {
    * Get remaining TTL
    */
   async ttl(key) {
-    if (!this.client) return -2;
+    if (!this._canUseRedis()) return -2;
     try {
       return await this.client.ttl(key);
     } catch (error) {
@@ -161,7 +213,7 @@ class RedisService {
    * Increment a numeric value
    */
   async increment(key, increment = 1) {
-    if (!this.client) return null;
+    if (!this._canUseRedis()) return null;
     try {
       return await this.client.incrby(key, increment);
     } catch (error) {
@@ -183,14 +235,14 @@ class RedisService {
    * Get connection status
    */
   getConnectionStatus() {
-    return this.isConnected && this.client !== null;
+    return this._canUseRedis();
   }
 
   /**
    * Get multiple keys at once
    */
   async mget(keys) {
-    if (!this.client || keys.length === 0) return keys.map(() => null);
+    if (!this._canUseRedis() || keys.length === 0) return keys.map(() => null);
     try {
       return await this.client.mget(...keys);
     } catch (error) {
@@ -203,7 +255,7 @@ class RedisService {
    * Set multiple key-value pairs at once
    */
   async mset(keyValuePairs, expirySeconds = null) {
-    if (!this.client || keyValuePairs.length === 0) return false;
+    if (!this._canUseRedis() || keyValuePairs.length === 0) return false;
     try {
       const p = this.client.pipeline();
       for (const [key, value] of keyValuePairs) {
@@ -226,7 +278,7 @@ class RedisService {
    */
   async setSessionShownVideos(userIdentifier, videoIds) {
     const key = `session:shown:${userIdentifier}`;
-    if (!this.client || videoIds.length === 0) return false;
+    if (!this._canUseRedis() || videoIds.length === 0) return false;
     try {
       const p = this.client.pipeline();
       p.sadd(key, ...videoIds);
@@ -244,7 +296,7 @@ class RedisService {
    */
   async isVideoShownInSession(userIdentifier, videoId) {
     const key = `session:shown:${userIdentifier}`;
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       const res = await this.client.sismember(key, videoId);
       return res === 1;
@@ -259,7 +311,7 @@ class RedisService {
    */
   async getSessionShownVideos(userIdentifier) {
     const key = `session:shown:${userIdentifier}`;
-    if (!this.client) return new Set();
+    if (!this._canUseRedis()) return new Set();
     try {
       const members = await this.client.smembers(key);
       return new Set(members);
@@ -281,7 +333,7 @@ class RedisService {
    */
   async clearSessionShownVideos(userIdentifier) {
     const key = `session:shown:${userIdentifier}`;
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       await this.client.del(key);
       return true;
@@ -296,7 +348,7 @@ class RedisService {
    */
   async addToLongTermWatchHistory(userIdentifier, videoIds) {
     const key = `watch:history:${userIdentifier}`;
-    if (!this.client || videoIds.length === 0) return false;
+    if (!this._canUseRedis() || videoIds.length === 0) return false;
     try {
       const p = this.client.pipeline();
       p.sadd(key, ...videoIds);
@@ -314,7 +366,7 @@ class RedisService {
    */
   async checkWatchedBatch(userIdentifier, videoIds) {
     const key = `watch:history:${userIdentifier}`;
-    if (!this.client || videoIds.length === 0) return new Set();
+    if (!this._canUseRedis() || videoIds.length === 0) return new Set();
     try {
       const results = await this.client.smismember(key, ...videoIds);
       const watchedSet = new Set();
@@ -333,7 +385,7 @@ class RedisService {
    */
   async getLongTermWatchHistory(userIdentifier) {
     const key = `watch:history:${userIdentifier}`;
-    if (!this.client) return new Set();
+    if (!this._canUseRedis()) return new Set();
     try {
       const members = await this.client.smembers(key);
       return new Set(members);
@@ -347,7 +399,7 @@ class RedisService {
    * Add members to a set
    */
   async addToSet(key, members) {
-    if (!this.client || members.length === 0) return false;
+    if (!this._canUseRedis() || members.length === 0) return false;
     try {
       await this.client.sadd(key, ...members);
       return true;
@@ -361,7 +413,7 @@ class RedisService {
    * Get all members of a set
    */
   async getSetMembers(key) {
-    if (!this.client) return new Set();
+    if (!this._canUseRedis()) return new Set();
     try {
       const members = await this.client.smembers(key);
       return new Set(members);
@@ -375,7 +427,7 @@ class RedisService {
    * Check if multiple values exist in a set
    */
   async smIsMember(key, members) {
-    if (!this.client || members.length === 0) return members.map(() => false);
+    if (!this._canUseRedis() || members.length === 0) return members.map(() => false);
     try {
       const results = await this.client.smismember(key, ...members);
       return results.map(r => r === 1);
@@ -389,7 +441,7 @@ class RedisService {
    * Set expiry for a key
    */
   async expire(key, seconds) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       await this.client.expire(key, seconds);
       return true;
@@ -403,7 +455,7 @@ class RedisService {
    * Push values to the tail of a list
    */
   async rPush(key, values) {
-    if (!this.client || values.length === 0) return 0;
+    if (!this._canUseRedis() || values.length === 0) return 0;
     try {
       return await this.client.rpush(key, ...values);
     } catch (error) {
@@ -416,7 +468,7 @@ class RedisService {
    * Push value to the head of a list
    */
   async lPush(key, value) {
-    if (!this.client) return 0;
+    if (!this._canUseRedis()) return 0;
     try {
       const values = Array.isArray(value) ? value : [value];
       if (values.length === 0) return 0;
@@ -431,7 +483,7 @@ class RedisService {
    * Pop value(s) from the head of a list
    */
   async lPop(key, count = null) {
-    if (!this.client) return null;
+    if (!this._canUseRedis()) return null;
     try {
       if (count && count > 1) {
         // Upstash REST lpop supports count argument
@@ -448,7 +500,7 @@ class RedisService {
    * Get range of elements from a list
    */
   async lRange(key, start, stop) {
-    if (!this.client) return [];
+    if (!this._canUseRedis()) return [];
     try {
       return await this.client.lrange(key, start, stop);
     } catch (error) {
@@ -461,7 +513,7 @@ class RedisService {
    * Trim list to specified range
    */
   async lTrim(key, start, stop) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
     try {
       await this.client.ltrim(key, start, stop);
       return true;
@@ -475,7 +527,7 @@ class RedisService {
    * Get length of a list
    */
   async lLen(key) {
-    if (!this.client) return 0;
+    if (!this._canUseRedis()) return 0;
     try {
       return await this.client.llen(key);
     } catch (error) {
@@ -488,7 +540,7 @@ class RedisService {
    * Smart Push to Feed Queue (Lua Script)
    */
   async smartPushToFeed(queueKey, videoId, uploaderId) {
-    if (!this.client) return false;
+    if (!this._canUseRedis()) return false;
 
     try {
       const lastCreatorKey = `${queueKey}:last_creator`;
@@ -531,7 +583,7 @@ class RedisService {
    * Universal call method for compatibility with other libraries (like rate-limit-redis)
    */
   async call(command, ...args) {
-    if (!this.client) return null;
+    if (!this._canUseRedis()) return null;
     try {
       const cmd = command.toLowerCase();
       // Try direct method first (e.g. client.get, client.sadd)
@@ -566,7 +618,7 @@ class RedisService {
    * Uses Redis Bitmaps and a Lua script for atomicity and 15-day expiry
    */
   async bfMAdd(key, items) {
-    if (!this.client || !items || items.length === 0) return false;
+    if (!this._canUseRedis() || !items || items.length === 0) return false;
     try {
       const allPositions = items.flatMap(item => this._getBitPositions(item));
       
@@ -591,7 +643,7 @@ class RedisService {
    * Returns array of booleans [true, false, ...]
    */
   async bfMExists(key, items) {
-    if (!this.client || !items || items.length === 0) return items.map(() => false);
+    if (!this._canUseRedis() || !items || items.length === 0) return items.map(() => false);
     try {
       const allPositions = items.flatMap(item => this._getBitPositions(item));
       
@@ -626,3 +678,5 @@ class RedisService {
 }
 
 export default new RedisService();
+
+

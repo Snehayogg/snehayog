@@ -806,7 +806,11 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
     _pauseCurrentVideo(); _reprimeWindowIfNeeded(index); _stopViewTracking(_currentIndex);
-    setState(() => _currentIndex = index);
+    setState(() {
+      _currentIndex = index;
+      _activeQuiz = null;
+      _activeQuizHistory.clear();
+    });
     ref.read(mainControllerProvider).updateCurrentVideoIndex(index, tabIndex: 1);
     _startViewTracking(index); _preloadNearbyVideos(); _initializePlayer(index); _loadBannerAd(index);
     if (_videos.length - index < 3) _loadMoreVideos();

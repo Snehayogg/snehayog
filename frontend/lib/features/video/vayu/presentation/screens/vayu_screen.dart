@@ -210,7 +210,6 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final authController = ref.watch(googleSignInProvider);
@@ -266,7 +265,8 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
         ),
         actions: [
           IconButton(
-            icon: const HugeIcon(icon: HugeIcons.strokeRoundedSearch01,
+            icon: const HugeIcon(
+              icon: HugeIcons.strokeRoundedSearch01,
               color: Colors.white,
               size: 20,
             ),
@@ -600,4 +600,3 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
     );
   }
 }
-

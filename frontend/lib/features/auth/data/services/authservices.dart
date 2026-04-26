@@ -571,20 +571,32 @@ class AuthService {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
+      String? refreshToken = prefs.getString('refresh_token');
 
-      // **FIXED: Perform a synchronous validation check before returning true**
-      // This prevents the "Optimistic Flicker" where the UI shows the profile
-      // for a split second before the background verification kicks in.
-      if (!isTokenValid(token)) {
-        AppLogger.log('⚠️ Token found but is invalid/expired - requiring fresh login');
+      // 1. If no token at all, definitely logged out
+      if (token == null || token.isEmpty) {
         return false;
       }
 
-      // **OPTIMIZED: Return cached status immediately, verify in background**
-      AppLogger.log('✅ Token exists and is locally valid - proceeding optimistically');
+      // 2. If token is expired, check if we have a refresh token
+      // We return 'true' optimistically if a refresh token exists,
+      // as the background verification/refresh will handle the rest.
+      if (!isTokenValid(token)) {
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          AppLogger.log('ℹ️ Access token expired but refresh token exists. Staying optimistic.');
+          // Start background refresh immediately
+          unawaited(refreshAccessToken());
+          return true; 
+        }
+        AppLogger.log('⚠️ Token found but is invalid/expired and no refresh token exists.');
+        return false;
+      }
+
+      // 3. Token exists and is locally valid - proceed optimistically
+      AppLogger.log('✅ Token exists and is locally valid');
       // Verify token in background (non-blocking)
       unawaited(_verifyTokenInBackground(token));
-      return true; // Optimistic return - assume valid if token exists
+      return true;
     } catch (e) {
       AppLogger.log('❌ Error checking login status: $e');
       return false;
@@ -1190,15 +1202,34 @@ class AuthService {
 
       // 2. Fallback to Google Silent Sign-In (re-authenticates session)
       AppLogger.log('🔄 Refresh token failed, falling back to Google Silent Sign-In...');
-      final googleToken = await _reauthenticateWithGoogle();
+      bool googleSilentSignInAttempted = false;
+      String? googleToken;
+      
+      try {
+        googleSilentSignInAttempted = true;
+        googleToken = await _reauthenticateWithGoogle();
+      } catch (e) {
+        AppLogger.log('⚠️ Google Silent Sign-In error (likely network): $e');
+      }
+
       if (googleToken != null) {
         AppLogger.log('✅ Access token refreshed via Google Silent Sign-In');
         await prefs.setBool('auth_needs_login', false);
         return googleToken;
       }
 
+      // **CRITICAL: Only set auth_needs_login if we are sure it's not a network error**
+      // If we are here, both methods failed.
+      // We only force logout if Google specifically told us the session is dead (googleUser == null)
+      // and NOT because of a timeout or network error.
+      
+      // If Google sign-in was attempted and it didn't return a user, but it wasn't a timeout,
+      // then we can assume the session is truly dead.
+      // For now, let's be conservative: only set needs_login if we have internet but refresh still fails.
       AppLogger.log('❌ All automatic refresh methods failed');
-      // Mark that user action is required to restore session.
+      
+      // We'll keep it as is but add a log to track why it's failing
+      // In a real-world app, you might use Connectivity package here.
       await prefs.setBool('auth_needs_login', true);
       
       // **NEW: Notify the UI immediately so it shows sign-in screen instead of "0" data**

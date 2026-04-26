@@ -13,6 +13,7 @@ import { AD_CONFIG } from '../constants/index.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 import WatchHistory from '../models/WatchHistory.js';
 import RevenueService from '../services/adServices/revenueService.js';
+import brevoService from '../services/notificationServices/brevoService.js';
 
 const router = express.Router();
 
@@ -1283,6 +1284,71 @@ router.get('/report-stats', requireAdminDashboardKey, async (req, res) => {
   } catch (error) {
     console.error('❌ Error loading report stats:', error);
     res.status(500).json({ success: false, error: 'Failed to load report stats' });
+  }
+});
+
+// **NEW: Route to broadcast emails to users (via Brevo)**
+router.post('/email/blast', requireAdminDashboardKey, async (req, res) => {
+  try {
+    const { target, customEmail, subject, htmlContent } = req.body;
+
+    if (!subject || !htmlContent) {
+      return res.status(400).json({ success: false, error: 'Subject and content are required' });
+    }
+
+    let recipients = [];
+
+    if (target === 'individual') {
+      if (!customEmail) return res.status(400).json({ success: false, error: 'Email is required for individual target' });
+      recipients = [customEmail];
+    } else if (target === 'all') {
+      const users = await User.find({ email: { $exists: true, $ne: '' } }).select('email').lean();
+      recipients = users.map(u => u.email).filter(Boolean);
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid target specified' });
+    }
+
+    if (recipients.length === 0) {
+      return res.status(404).json({ success: false, error: 'No recipients found' });
+    }
+
+    console.log(`📧 Email Blast: Sending to ${recipients.length} recipients...`);
+
+    // In a massive blast, we should batch these or use a worker
+    // For now, if < 100, we can do it in a loop
+    const results = {
+      total: recipients.length,
+      successCount: 0,
+      failCount: 0
+    };
+
+    // Parallel execution for small batches, sequential for large to avoid rate limits
+    if (recipients.length < 50) {
+       await Promise.all(recipients.map(async (email) => {
+         const res = await brevoService.sendEmail({ to: email, subject, htmlContent });
+         if (res.success) results.successCount++;
+         else results.failCount++;
+       }));
+    } else {
+       // Batch processing for large lists
+       for (const email of recipients) {
+         const res = await brevoService.sendEmail({ to: email, subject, htmlContent });
+         if (res.success) results.successCount++;
+         else results.failCount++;
+         // Slight pause to respect API
+         await new Promise(r => setTimeout(r, 100));
+       }
+    }
+
+    res.json({
+      success: true,
+      message: `Email blast completed. Sent ${results.successCount} successfully, ${results.failCount} failed.`,
+      results
+    });
+
+  } catch (error) {
+    console.error('❌ Error in email blast:', error);
+    res.status(500).json({ success: false, error: 'Failed to complete email blast' });
   }
 });
 

@@ -129,6 +129,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         ErrorLoggingService.logAppLifecycle('Resumed');
         mainController.setAppInForeground(true);
         hotUIManager.handleAppLifecycleChange(state);
+        
+        // **NEW: Proactive Token Refresh on App Resume**
+        // This ensures that if the user opens the app after few days,
+        // we refresh the token immediately before they see expired data.
+        unawaited(AuthService().refreshTokenIfNeeded());
         break;
       case AppLifecycleState.inactive:
         ErrorLoggingService.logAppLifecycle('Inactive');
