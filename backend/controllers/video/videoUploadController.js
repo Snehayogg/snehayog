@@ -66,7 +66,7 @@ export const uploadVideo = async (req, res) => {
       return res.status(401).json({ error: 'Google ID not found in token' });
     }
 
-    const { videoName, description, videoType, link, category, tags } = req.body;
+    const { videoName, description, videoType, link, category, tags, allowedSubscribers } = req.body;
 
     // 1. Validate file
     if (!req.file || !req.file.path) {
@@ -181,7 +181,10 @@ export const uploadVideo = async (req, res) => {
       tags: Array.isArray(tags) ? tags : [],
       seriesId: req.body.seriesId || null,
       episodeNumber: parseInt(req.body.episodeNumber) || 0,
-      finalScore: initialScore
+      finalScore: initialScore,
+      // **NEW: Subscriber-only access control**
+      allowedSubscribers: Array.isArray(allowedSubscribers) ? allowedSubscribers : [],
+      isSubscriberOnly: Array.isArray(allowedSubscribers) && allowedSubscribers.length > 0
     });
 
     await video.save();

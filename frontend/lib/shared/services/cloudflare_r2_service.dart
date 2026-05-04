@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart' as dio;
+import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/config/app_config.dart';
@@ -34,7 +35,7 @@ class CloudflareR2Service {
       AppLogger.log('⚠️ CloudflareR2Service: Token is NOT a 3-part JWT! This will fail at the Worker.');
     }
 
-    final response = await http.get(
+    final response = await httpClientService.get(
       Uri.parse('${NetworkHelper.uploadUrlEndpoint}?filename=${Uri.encodeComponent(fileName)}&folder=${Uri.encodeComponent(folder)}'),
       headers: {
         'Authorization': 'Bearer $token',
@@ -60,16 +61,32 @@ class CloudflareR2Service {
 
   Future<void> _binaryPutUpload(String uploadUrl, File file, String mimeType) async {
     final bytes = await file.readAsBytes();
-    final response = await http.put(
-      Uri.parse(uploadUrl),
-      body: bytes,
-      headers: {
-        'Content-Type': mimeType,
-      },
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Binary upload failed: ${response.statusCode} - ${response.body}');
+    final uri = Uri.parse(uploadUrl);
+    
+    // **FIX: Use a clean HttpClient for the final R2 PUT**
+    // Centralized clients often inject extra headers (User-Agent, etc.) 
+    // which invalidates the S3 signature on Cloudflare R2, causing 500 errors.
+    final client = HttpClient();
+    try {
+      final request = await client.putUrl(uri);
+      
+      // Set ONLY the required headers
+      request.headers.set('Content-Type', mimeType);
+      request.headers.contentLength = bytes.length;
+      
+      AppLogger.log('📡 CloudflareR2Service: Sending PUT to ${uri.host} with Type: $mimeType');
+      
+      // Send raw bytes
+      request.add(bytes);
+      
+      final response = await request.close();
+      
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        throw Exception('Binary upload failed: ${response.statusCode} - $responseBody');
+      }
+    } finally {
+      client.close();
     }
   }
 
@@ -91,7 +108,10 @@ class CloudflareR2Service {
         return 'video/quicktime';
       case '.webm':
         return 'video/webm';
+      case '.heic':
+        return 'image/heic';
       default:
+        // Use standard binary stream if unknown
         return 'application/octet-stream';
     }
   }
@@ -102,22 +122,62 @@ class CloudflareR2Service {
       if (!await imageFile.exists()) throw Exception('Image file does not exist');
       
       final fileName = p.basename(imageFile.path).toLowerCase();
-      final targetFolder = folder ?? 'snehayog/ads/images';
+      // **TEST: Use the successful video folder to see if it bypasses the 500/Handshake error**
+      final targetFolder = folder ?? 'snehayog/videos'; 
       
-      AppLogger.log('🔍 CloudflareR2Service: Getting signed URL for image...');
+      AppLogger.log('🔍 CloudflareR2Service: Getting signed URL for image in folder: $targetFolder');
       final uploadData = await _getUploadUrl(fileName, targetFolder);
       final uploadUrl = uploadData['uploadUrl'];
       final publicUrl = uploadData['publicUrl'];
 
       AppLogger.log('🔍 CloudflareR2Service: Uploading image to R2...');
+      AppLogger.log('🔗 CloudflareR2Service: Target URL: ${uploadUrl.split('?')[0]}'); // Log domain/path without secret params
       final mimeType = _getMimeType(imageFile.path);
       await _binaryPutUpload(uploadUrl, imageFile, mimeType);
 
       AppLogger.log('✅ CloudflareR2Service: Image uploaded successfully to $publicUrl');
       return publicUrl;
     } catch (e) {
-      AppLogger.log('❌ CloudflareR2Service: Error uploading image: $e');
-      throw Exception('Error uploading image: $e');
+      AppLogger.log('⚠️ CloudflareR2Service: Cloudflare upload failed, trying Backend Fallback... ($e)');
+      try {
+        return await uploadImageToBackend(imageFile);
+      } catch (fallbackError) {
+        AppLogger.log('❌ CloudflareR2Service: Both Cloudflare and Backend upload failed!');
+        throw Exception('Error uploading image: $fallbackError');
+      }
+    }
+  }
+
+  /// NEW: Direct upload to your Node.js backend (Bypasses Worker & Cloudflare)
+  Future<String> uploadImageToBackend(File imageFile) async {
+    try {
+      AppLogger.log('🔍 CloudflareR2Service: Uploading image DIRECTLY to backend...');
+      final userData = await authService.getUserData();
+      final token = userData?['token'];
+      
+      // Use standard multipart upload (Dio compatible)
+      final response = await httpClientService.postMultipart(
+        '${NetworkHelper.apiBaseUrl}/ads/upload-manual',
+        files: [
+          MapEntry('media', await dio.MultipartFile.fromFile(imageFile.path)),
+        ],
+        fields: {}, 
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data is String ? json.decode(response.data) : response.data;
+        final url = data['publicUrl'] ?? data['url'];
+        AppLogger.log('✅ CloudflareR2Service: Image uploaded directly to backend: $url');
+        return url;
+      } else {
+        throw Exception('Backend upload failed: ${response.statusCode} - ${response.data}');
+      }
+    } catch (e) {
+      AppLogger.log('❌ CloudflareR2Service: Error in backend upload: $e');
+      rethrow;
     }
   }
 
@@ -147,19 +207,19 @@ class CloudflareR2Service {
       final authService = AuthService();
       final userData = await authService.getUserData();
       
-      final response = await http.post(
+      final response = await httpClientService.post(
         Uri.parse('${NetworkHelper.apiBaseUrl}/videos/register-upload'),
         headers: {
           'Authorization': 'Bearer ${userData!['token']}',
           'Content-Type': 'application/json',
         },
-        body: json.encode({
+        body: {
           'videoName': videoName ?? fileName,
           'description': description ?? '',
           'r2Key': r2Key,
           'videoType': profile.contains('portrait') ? 'yog' : 'vayu',
           'mimeType': 'video/mp4', // Fallback
-        }),
+        },
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {

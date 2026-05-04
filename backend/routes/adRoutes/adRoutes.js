@@ -19,6 +19,33 @@ const router = express.Router();
 
 const REVENUE_CACHE_TTL = 300; // 5 minutes
 
+// **NEW: Manual upload endpoint (Bypass Worker)**
+router.post('/upload-manual', (req, res, next) => {
+  // Use the existing multer 'upload' defined below (line 44)
+  // We move the call here to handle it before the other routes
+  next();
+}, (req, res) => {
+  upload.single('media')(req, res, (err) => {
+    if (err) {
+      console.error('❌ Manual upload error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    // Construct the public URL
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/ads/${req.file.filename}`;
+    console.log('✅ Manual upload success:', fileUrl);
+    
+    res.json({ 
+      url: fileUrl,
+      publicUrl: fileUrl,
+      key: `manual/${req.file.filename}`
+    });
+  });
+});
+
 const getRevenueCacheKey = (userId) => userId ? `revenue:${userId}` : null;
 
 const cacheResponse = async (key, data, ttl) => {

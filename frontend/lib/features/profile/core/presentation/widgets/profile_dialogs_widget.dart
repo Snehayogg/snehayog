@@ -368,7 +368,7 @@ class ProfileDialogsWidget {
             isFullWidth: true,
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.check_circle_outline),
-            label: 'Theek hai, dhanyavad!',
+            label: 'Got it!',
             variant: AppButtonVariant.primary,
           ),
         ],

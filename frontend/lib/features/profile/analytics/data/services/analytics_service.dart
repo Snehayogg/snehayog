@@ -70,4 +70,29 @@ class AnalyticsService {
       return [];
     }
   }
+
+  Future<Map<String, dynamic>> exportSubscribers() async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await httpClientService.get(
+        Uri.parse('$baseUrl/api/users/my-subscribers/export'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        AppLogger.log('❌ AnalyticsService: Failed to export subscribers: ${response.body}');
+        throw Exception('Failed to export subscribers: ${response.body}');
+      }
+    } catch (e) {
+      AppLogger.log('❌ AnalyticsService: Error in exportSubscribers: $e');
+      rethrow;
+    }
+  }
 }

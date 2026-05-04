@@ -479,6 +479,44 @@ class VideoService {
     }
   }
 
+  /// **Get subscriber-only videos for the current user**
+  Future<List<VideoModel>> getSubscriberVideos() async {
+    final hasInternet = await ConnectivityService.hasInternetConnection();
+    if (!hasInternet) {
+      throw Exception('No internet connection');
+    }
+
+    try {
+      AppLogger.log('📡 VideoService: Fetching subscriber videos...');
+
+      final resolvedBaseUrl = await getBaseUrlWithFallback();
+      final url = '$resolvedBaseUrl/api/users/subscriber-videos';
+
+      final res = await httpClientService
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List<dynamic> videoList = data['videos'] ?? [];
+        AppLogger.log(
+            '✅ VideoService: Fetched ${videoList.length} subscriber videos');
+        return videoList
+            .map((json) => VideoModel.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        throw Exception('Please sign in to view subscriber content');
+      } else {
+        final error = json.decode(res.body);
+        throw Exception(
+            error['error'] ?? 'Failed to fetch subscriber videos');
+      }
+    } catch (e) {
+      AppLogger.log('❌ VideoService: Error fetching subscriber videos: $e');
+      rethrow;
+    }
+  }
+
   /// **Like a video (for backward compatibility)**
   Future<VideoModel> likeVideo(String videoId) async {
     return await toggleLike(videoId);
@@ -632,6 +670,7 @@ class VideoService {
     String? seriesId,
     int? episodeNumber,
     List<QuizModel>? quizzes,
+    List<String>? allowedSubscribers,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting video upload...');
@@ -679,6 +718,7 @@ class VideoService {
         seriesId: seriesId,
         episodeNumber: episodeNumber,
         quizzes: quizzes,
+        allowedSubscribers: allowedSubscribers,
       );
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
@@ -706,6 +746,7 @@ class VideoService {
     String? seriesId,
     int? episodeNumber,
     List<QuizModel>? quizzes,
+    List<String>? allowedSubscribers,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting Direct R2 Upload...');
@@ -784,6 +825,7 @@ class VideoService {
           'seriesId': seriesId,
           'episodeNumber': episodeNumber,
           'quizzes': quizzes?.map((q) => q.toJson()).toList(),
+          'allowedSubscribers': allowedSubscribers,
         },
       );
 

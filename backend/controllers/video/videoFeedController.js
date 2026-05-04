@@ -279,20 +279,38 @@ export const getFeed = async (req, res) => {
     finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
     
     if (finalVideos.length === 0) {
-      const query = { 
+      const query = {
         videoType: type,
         processingStatus: 'completed'
       };
 
+      // **NEW: Filter subscriber-only videos**
+      // If video is subscriber-only, only show if user is in allowedSubscribers
+      if (userId) {
+        const user = await User.findOne({ googleId: userId }).select('_id').lean();
+        if (user) {
+          query.$or = [
+            { isSubscriberOnly: { $ne: true } }, // Public videos
+            { isSubscriberOnly: true, allowedSubscribers: user._id } // Subscriber-only videos user has access to
+          ];
+        } else {
+          // If user not found, only show public videos
+          query.isSubscriberOnly = { $ne: true };
+        }
+      } else {
+        // Anonymous users only see public videos
+        query.isSubscriberOnly = { $ne: true };
+      }
+
       if (cursor) {
         query.createdAt = { $lt: new Date(cursor) };
       }
-      
+
       const videosQuery = Video.find(query)
         .populate('uploader', 'name profilePic googleId')
         .sort({ createdAt: -1 })
         .limit(limitNum);
-      
+
       if (!cursor && pageNum > 1) {
         const skip = (pageNum - 1) * limitNum;
         videosQuery.skip(skip);
@@ -347,11 +365,30 @@ export const getVideoById = async (req, res) => {
     if (!video) return res.status(404).json({ error: 'Video not found' });
 
     const videoObj = video.toObject();
+
+    // **NEW: Check access for subscriber-only videos**
+    if (videoObj.isSubscriberOnly) {
+      const requestingGoogleId = req.user?.googleId || req.user?.id;
+      if (!requestingGoogleId) {
+        return res.status(403).json({ error: 'This video is only available to subscribers' });
+      }
+
+      const requestingUser = await User.findOne({ googleId: requestingGoogleId }).select('_id').lean();
+      if (!requestingUser) {
+        return res.status(403).json({ error: 'This video is only available to subscribers' });
+      }
+
+      const hasAccess = videoObj.allowedSubscribers.some(id => id.toString() === requestingUser._id.toString());
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'This video is only available to subscribers' });
+      }
+    }
+
     const requestingGoogleId = req.user?.googleId || req.user?.id;
     const rqUserObjectIdStr = req.user?._id;
-    
+
     const [episodes, rank, isLiked] = await Promise.all([
-      videoObj.seriesId ? 
+      videoObj.seriesId ?
         Video.find({ seriesId: videoObj.seriesId, processingStatus: 'completed' })
           .select('_id videoName thumbnailUrl episodeNumber seriesId duration')
           .sort({ episodeNumber: 1 }).lean().then(eps => eps.map(ep => ({ ...ep, _id: ep._id.toString() })))

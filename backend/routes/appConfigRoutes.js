@@ -341,5 +341,28 @@ router.get(
   })
 );
 
+/**
+ * GET /api/app-config/redis-stats
+ *
+ * Get Redis request statistics for monitoring.
+ * This endpoint helps track Redis usage and prevent hitting limits.
+ */
+router.get(
+  '/redis-stats',
+  apiVersioning,
+  asyncHandler(async (req, res) => {
+    const stats = redisService.getRequestCount();
+    const isConnected = redisService.getConnectionStatus();
+
+    res.json({
+      success: true,
+      connected: isConnected,
+      stats: stats,
+      warning: stats.percentage >= 80 ? 'Approaching daily limit' : null,
+      critical: stats.percentage >= 95 ? 'Critical: Near daily limit' : null
+    });
+  })
+);
+
 export default router;
 

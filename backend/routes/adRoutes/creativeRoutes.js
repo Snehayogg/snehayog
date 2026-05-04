@@ -7,6 +7,25 @@ import User from '../../models/User.js';
 
 const router = express.Router();
 
+// **NEW: Manual upload endpoint (Bypass Worker)**
+router.post('/upload-manual', adUpload.single('media'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  
+  // Construct the public URL
+  // The path is already mapped to /uploads in express.js
+  // multer saves to 'uploads/ads/' so the URL is /uploads/ads/filename
+  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/ads/${req.file.filename}`;
+  console.log('✅ Manual upload success:', fileUrl);
+  
+  res.json({ 
+    url: fileUrl,
+    publicUrl: fileUrl,
+    key: `manual/${req.file.filename}`
+  });
+});
+
 // POST /ads/campaigns/:id/creatives - Upload ad creative
 router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandler(async (req, res) => {
   const campaignId = req.params.id;

@@ -25,7 +25,7 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   final VoidCallback onHandleTap;
   final void Function(TapDownDetails) onDoubleTapToSeek;
   final VoidCallback onHorizontalDragEnd;
-  final void Function(DragUpdateDetails) onVerticalDragUpdate;
+  final void Function(double, Offset) onVerticalDragUpdate;
   final VoidCallback onVerticalDragEnd;
   final void Function(double) onUnifiedHorizontalDrag;
   final void Function(bool) onScrollingLock;
@@ -220,7 +220,8 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
               onPointerDown: (event) => _pointers++,
               onPointerUp: (event) {
                 _pointers--;
-                if (_pointers == 0) {
+                if (_pointers <= 0) {
+                  _pointers = 0;
                   if (_isScaling) {
                     setState(() {
                       _isScaling = false;
@@ -229,11 +230,27 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
                     });
                     widget.onScrollingLock(false);
                   }
-                  if (_activeGesture == GestureType.horizontal) widget.onHorizontalDragEnd();
+                  // Let GestureDetector handle the drag ends, but reset state here just in case
                   _activeGesture = GestureType.none;
                   _dragHorizontalDeltaAccumulated = 0;
                   _dragVerticalDeltaAccumulated = 0;
                 }
+              },
+              onPointerCancel: (event) {
+                _pointers = 0;
+                if (_isScaling) {
+                  setState(() {
+                    _isScaling = false;
+                    _scale = 1.0;
+                    _offset = Offset.zero;
+                  });
+                  widget.onScrollingLock(false);
+                }
+                if (_activeGesture == GestureType.horizontal) widget.onHorizontalDragEnd();
+                if (_activeGesture == GestureType.vertical) widget.onVerticalDragEnd();
+                _activeGesture = GestureType.none;
+                _dragHorizontalDeltaAccumulated = 0;
+                _dragVerticalDeltaAccumulated = 0;
               },
               child: GestureDetector(
                 onTap: widget.onHandleTap,
@@ -250,28 +267,31 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
                     setState(() {
                       _scale = (_baseScale * details.scale).clamp(1.0, 4.0);
                     });
+                    return;
+                  }
+
+                  if (_activeGesture == GestureType.none) {
+                    _dragHorizontalDeltaAccumulated += details.focalPointDelta.dx;
+                    _dragVerticalDeltaAccumulated += details.focalPointDelta.dy;
+                    if (_dragHorizontalDeltaAccumulated.abs() > _gestureThreshold) {
+                      _activeGesture = GestureType.horizontal;
+                    } else if (_dragVerticalDeltaAccumulated.abs() > _gestureThreshold) {
+                      _activeGesture = GestureType.vertical;
+                    }
+                  }
+
+                  if (_activeGesture == GestureType.horizontal) {
+                    widget.onUnifiedHorizontalDrag(details.focalPointDelta.dx);
+                  } else if (_activeGesture == GestureType.vertical) {
+                    widget.onVerticalDragUpdate(details.focalPointDelta.dy, details.localFocalPoint);
                   }
                 },
-                onVerticalDragUpdate: (details) {
-                  if (_isScaling || _activeGesture == GestureType.horizontal) return;
-                  _dragVerticalDeltaAccumulated += details.primaryDelta!;
-                  if (_activeGesture == GestureType.vertical ||
-                      _dragVerticalDeltaAccumulated.abs() > _gestureThreshold) {
-                    _activeGesture = GestureType.vertical;
-                    widget.onVerticalDragUpdate(details);
-                  }
-                },
-                onVerticalDragEnd: (details) {
+                onScaleEnd: (details) {
+                  if (_activeGesture == GestureType.horizontal) widget.onHorizontalDragEnd();
                   if (_activeGesture == GestureType.vertical) widget.onVerticalDragEnd();
-                },
-                onHorizontalDragUpdate: (details) {
-                  if (_isScaling || _activeGesture == GestureType.vertical) return;
-                  _dragHorizontalDeltaAccumulated += details.primaryDelta!;
-                  if (_activeGesture == GestureType.horizontal ||
-                      _dragHorizontalDeltaAccumulated.abs() > _gestureThreshold) {
-                    _activeGesture = GestureType.horizontal;
-                    widget.onUnifiedHorizontalDrag(details.primaryDelta!);
-                  }
+                  _activeGesture = GestureType.none;
+                  _dragHorizontalDeltaAccumulated = 0;
+                  _dragVerticalDeltaAccumulated = 0;
                 },
               ),
             ),

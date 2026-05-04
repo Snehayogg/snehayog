@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayug/features/video/core/presentation/managers/main_controller.dart';
 import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_screen.dart';
+import 'package:vayug/features/video/subscriptions/presentation/screens/subscriptions_screen.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
@@ -48,7 +49,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
     GlobalKey<NavigatorState>(), // Index 0: Yug
     GlobalKey<NavigatorState>(), // Index 1: Vayu
     GlobalKey<NavigatorState>(), // Index 2: Upload
-    GlobalKey<NavigatorState>(), // Index 3: Profile
+    GlobalKey<NavigatorState>(), // Index 3: Subscriptions
+    GlobalKey<NavigatorState>(), // Index 4: Profile
   ];
 
   // **NEW: Track refresh state for visual feedback**
@@ -500,7 +502,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
       // If switching to profile tab, ensure profile data is loaded
       // If switching to profile tab, ensure profile data is loaded
-      if (index == 3) { // Profile is now index 3
+      if (index == 4) { // Profile is now index 4
         // Force immediate data load when profile tab is selected
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final profileScreenState = _profileScreenKey.currentState;
@@ -586,7 +588,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
                   key: const PageStorageKey('uploadScreen'),
                   onVideoUploaded: _refreshVideoList,
                 )),
-                _buildTabNavigator(3, ProfileScreen(
+                _buildTabNavigator(3, const SubscriptionsScreen()),
+                _buildTabNavigator(4, ProfileScreen(
                   key: _profileScreenKey,
                 )),
               ],
@@ -652,10 +655,19 @@ class _MainScreenState extends ConsumerState<MainScreen>
                             _buildNavItem(
                               index: 3,
                               currentIndex: mainController.currentIndex,
+                              icon: HugeIcons.strokeRoundedUserMultiple02,
+                              activeIcon: HugeIcons.strokeRoundedUserMultiple02,
+                              label: 'Subs',
+                              onTap: () => _handleNavTap(3, mainController),
+                              mainController: mainController,
+                            ),
+                            _buildNavItem(
+                              index: 4,
+                              currentIndex: mainController.currentIndex,
                               icon: HugeIcons.strokeRoundedUser,
                               activeIcon: HugeIcons.strokeRoundedUser,
                               label: 'Account',
-                              onTap: () => _handleNavTap(3, mainController),
+                              onTap: () => _handleNavTap(4, mainController),
                               mainController: mainController,
                             ),
                           ],

@@ -12,9 +12,15 @@ class RedisService {
     this.disabledUntil = 0;
     this.circuitCooldownMs = 10 * 60 * 1000; // 10 minutes
     this.lastCircuitLogAt = 0;
+    // OPTIMIZATION: Track request count and warn when approaching limit
+    this.requestCount = 0;
+    this.requestCountResetAt = Date.now();
+    this.dailyLimit = 10000; // Upstash free tier limit
+    this.warningThreshold = 8000; // Warn at 80% of limit
   }
 
   _isMaxRequestLimitError(error) {
+    if (!error) return false;
     const message = error?.message || '';
     return typeof message === 'string' && message.toLowerCase().includes('max requests limit exceeded');
   }
@@ -29,6 +35,10 @@ class RedisService {
   }
 
   _handleRedisError(error, context = 'operation') {
+    if (!error) {
+      console.error(`❌ Redis: Error during ${context}: Unknown error`);
+      return;
+    }
     if (this._isMaxRequestLimitError(error)) {
       const now = Date.now();
       this.disabledUntil = now + this.circuitCooldownMs;
@@ -38,7 +48,23 @@ class RedisService {
       }
       return;
     }
-    console.error(`❌ Redis: Error during ${context}:`, error.message);
+    console.error(`❌ Redis: Error during ${context}:`, error?.message || error);
+  }
+
+  // OPTIMIZATION: Track and warn about request count
+  _trackRequest() {
+    const now = Date.now();
+    // Reset counter daily
+    if (now - this.requestCountResetAt > 24 * 60 * 60 * 1000) {
+      this.requestCount = 0;
+      this.requestCountResetAt = now;
+    }
+    this.requestCount++;
+
+    // Warn when approaching limit
+    if (this.requestCount === this.warningThreshold) {
+      console.warn(`⚠️ Redis: Approaching daily limit (${this.requestCount}/${this.dailyLimit}). Consider optimizing Redis usage.`);
+    }
   }
 
   /**
@@ -55,17 +81,28 @@ class RedisService {
       }
 
       console.log('🔄 Redis: Initializing Upstash REST client...');
+      // OPTIMIZATION: enableAutoPipelining batches concurrent requests into 1 HTTP call
       const baseClient = new Redis({
         url: url,
         token: token,
+        enableAutoPipelining: true
       });
+      
       this.client = new Proxy(baseClient, {
         get: (target, prop, receiver) => {
           const value = Reflect.get(target, prop, receiver);
           if (typeof value !== 'function') return value;
+          
           return async (...args) => {
             try {
-              return await value.apply(target, args);
+              // OPTIMIZATION: Use a timeout for all Redis operations to prevent hanging on slow REST calls
+              // This also helps identify the "reading 'error'" issue which is often a timeout/network failure
+              return await Promise.race([
+                value.apply(target, args),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error(`Redis timeout during ${String(prop)}`)), 10000)
+                )
+              ]);
             } catch (error) {
               this._handleRedisError(error, `client.${String(prop)}`);
               throw error;
@@ -89,7 +126,7 @@ class RedisService {
       }
       return true;
     } catch (error) {
-      console.error('❌ Redis: Initialization failed:', error.message);
+      console.error('❌ Redis: Initialization failed:', error?.message || error);
       this.isConnected = false;
       return false;
     }
@@ -100,10 +137,11 @@ class RedisService {
    */
   async get(key) {
     if (!this._canUseRedis()) return null;
+    this._trackRequest();
     try {
       return await this.client.get(key);
     } catch (error) {
-      console.error(`❌ Redis: Error getting key ${key}:`, error.message);
+      console.error(`❌ Redis: Error getting key ${key}:`, error?.message || error);
       return null;
     }
   }
@@ -113,12 +151,13 @@ class RedisService {
    */
   async set(key, value, expirySeconds = null) {
     if (!this._canUseRedis()) return false;
+    this._trackRequest();
     try {
       const options = expirySeconds ? { ex: expirySeconds } : {};
       await this.client.set(key, value, options);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error setting key ${key}:`, error.message);
+      console.error(`❌ Redis: Error setting key ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -133,7 +172,7 @@ class RedisService {
       const result = await this.client.set(key, value, { nx: true, ex: expirySeconds });
       return result === 'OK';
     } catch (error) {
-      console.error(`❌ Redis: Error acquiring lock ${key}:`, error.message);
+      console.error(`❌ Redis: Error acquiring lock ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -147,7 +186,7 @@ class RedisService {
       await this.client.del(key);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error deleting key ${key}:`, error.message);
+      console.error(`❌ Redis: Error deleting key ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -177,7 +216,7 @@ class RedisService {
       }
       return count;
     } catch (error) {
-      console.error(`❌ Redis: Error clearing pattern ${pattern}:`, error.message);
+      console.error(`❌ Redis: Error clearing pattern ${pattern}:`, error?.message || error);
       return 0;
     }
   }
@@ -187,11 +226,12 @@ class RedisService {
    */
   async exists(key) {
     if (!this._canUseRedis()) return false;
+    this._trackRequest();
     try {
       const result = await this.client.exists(key);
       return result === 1;
     } catch (error) {
-      console.error(`❌ Redis: Error checking key ${key}:`, error.message);
+      console.error(`❌ Redis: Error checking key ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -204,7 +244,7 @@ class RedisService {
     try {
       return await this.client.ttl(key);
     } catch (error) {
-      console.error(`❌ Redis: Error getting TTL for key ${key}:`, error.message);
+      console.error(`❌ Redis: Error getting TTL for key ${key}:`, error?.message || error);
       return -2;
     }
   }
@@ -217,7 +257,7 @@ class RedisService {
     try {
       return await this.client.incrby(key, increment);
     } catch (error) {
-      console.error(`❌ Redis: Error incrementing key ${key}:`, error.message);
+      console.error(`❌ Redis: Error incrementing key ${key}:`, error?.message || error);
       return null;
     }
   }
@@ -239,36 +279,51 @@ class RedisService {
   }
 
   /**
+   * Get current request count for monitoring
+   */
+  getRequestCount() {
+    return {
+      count: this.requestCount,
+      limit: this.dailyLimit,
+      percentage: Math.round((this.requestCount / this.dailyLimit) * 100),
+      resetAt: new Date(this.requestCountResetAt + 24 * 60 * 60 * 1000).toISOString()
+    };
+  }
+
+  /**
    * Get multiple keys at once
    */
   async mget(keys) {
     if (!this._canUseRedis() || keys.length === 0) return keys.map(() => null);
+    this._trackRequest();
     try {
       return await this.client.mget(...keys);
     } catch (error) {
-      console.error(`❌ Redis: Error in mget:`, error.message);
+      console.error(`❌ Redis: Error in mget:`, error?.message || error);
       return keys.map(() => null);
     }
   }
 
   /**
    * Set multiple key-value pairs at once
+   * OPTIMIZATION: Uses pipeline() to batch into ONE HTTP request
    */
   async mset(keyValuePairs, expirySeconds = null) {
     if (!this._canUseRedis() || keyValuePairs.length === 0) return false;
+    this._trackRequest();
     try {
       const p = this.client.pipeline();
-      for (const [key, value] of keyValuePairs) {
+      keyValuePairs.forEach(([key, value]) => {
         if (expirySeconds) {
           p.set(key, value, { ex: expirySeconds });
         } else {
           p.set(key, value);
         }
-      }
+      });
       await p.exec();
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error in mset:`, error.message);
+      console.error(`❌ Redis: Error in mset:`, error?.message || error);
       return false;
     }
   }
@@ -286,7 +341,7 @@ class RedisService {
       await p.exec();
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error setting session videos:`, error.message);
+      console.error(`❌ Redis: Error setting session videos:`, error?.message || error);
       return false;
     }
   }
@@ -301,7 +356,7 @@ class RedisService {
       const res = await this.client.sismember(key, videoId);
       return res === 1;
     } catch (error) {
-      console.error(`❌ Redis: Error checking session video:`, error.message);
+      console.error(`❌ Redis: Error checking session video:`, error?.message || error);
       return false;
     }
   }
@@ -316,7 +371,7 @@ class RedisService {
       const members = await this.client.smembers(key);
       return new Set(members);
     } catch (error) {
-      console.error(`❌ Redis: Error getting session videos:`, error.message);
+      console.error(`❌ Redis: Error getting session videos:`, error?.message || error);
       return new Set();
     }
   }
@@ -338,7 +393,7 @@ class RedisService {
       await this.client.del(key);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error clearing session videos:`, error.message);
+      console.error(`❌ Redis: Error clearing session videos:`, error?.message || error);
       return false;
     }
   }
@@ -356,7 +411,7 @@ class RedisService {
       await p.exec();
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error adding to long-term watch history:`, error.message);
+      console.error(`❌ Redis: Error adding to long-term watch history:`, error?.message || error);
       return false;
     }
   }
@@ -375,7 +430,7 @@ class RedisService {
       });
       return watchedSet;
     } catch (error) {
-      console.error(`❌ Redis: Error in checkWatchedBatch:`, error.message);
+      console.error(`❌ Redis: Error in checkWatchedBatch:`, error?.message || error);
       return new Set();
     }
   }
@@ -390,7 +445,7 @@ class RedisService {
       const members = await this.client.smembers(key);
       return new Set(members);
     } catch (error) {
-      console.error(`❌ Redis: Error getting long-term watch history:`, error.message);
+      console.error(`❌ Redis: Error getting long-term watch history:`, error?.message || error);
       return new Set();
     }
   }
@@ -404,7 +459,7 @@ class RedisService {
       await this.client.sadd(key, ...members);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error adding to set ${key}:`, error.message);
+      console.error(`❌ Redis: Error adding to set ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -418,7 +473,7 @@ class RedisService {
       const members = await this.client.smembers(key);
       return new Set(members);
     } catch (error) {
-      console.error(`❌ Redis: Error getting set members ${key}:`, error.message);
+      console.error(`❌ Redis: Error getting set members ${key}:`, error?.message || error);
       return new Set();
     }
   }
@@ -432,7 +487,7 @@ class RedisService {
       const results = await this.client.smismember(key, ...members);
       return results.map(r => r === 1);
     } catch (error) {
-      console.error(`❌ Redis: Error in smIsMember ${key}:`, error.message);
+      console.error(`❌ Redis: Error in smIsMember ${key}:`, error?.message || error);
       return members.map(() => false);
     }
   }
@@ -442,11 +497,12 @@ class RedisService {
    */
   async expire(key, seconds) {
     if (!this._canUseRedis()) return false;
+    this._trackRequest();
     try {
       await this.client.expire(key, seconds);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error setting expiry for ${key}:`, error.message);
+      console.error(`❌ Redis: Error setting expiry for ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -456,10 +512,11 @@ class RedisService {
    */
   async rPush(key, values) {
     if (!this._canUseRedis() || values.length === 0) return 0;
+    this._trackRequest();
     try {
       return await this.client.rpush(key, ...values);
     } catch (error) {
-      console.error(`❌ Redis: Error rPush to ${key}:`, error.message);
+      console.error(`❌ Redis: Error rPush to ${key}:`, error?.message || error);
       return 0;
     }
   }
@@ -469,12 +526,13 @@ class RedisService {
    */
   async lPush(key, value) {
     if (!this._canUseRedis()) return 0;
+    this._trackRequest();
     try {
       const values = Array.isArray(value) ? value : [value];
       if (values.length === 0) return 0;
       return await this.client.lpush(key, ...values);
     } catch (error) {
-      console.error(`❌ Redis: Error lPush to ${key}:`, error.message);
+      console.error(`❌ Redis: Error lPush to ${key}:`, error?.message || error);
       return 0;
     }
   }
@@ -484,6 +542,7 @@ class RedisService {
    */
   async lPop(key, count = null) {
     if (!this._canUseRedis()) return null;
+    this._trackRequest();
     try {
       if (count && count > 1) {
         // Upstash REST lpop supports count argument
@@ -491,7 +550,7 @@ class RedisService {
       }
       return await this.client.lpop(key);
     } catch (error) {
-      console.error(`❌ Redis: Error lPop from ${key}:`, error.message);
+      console.error(`❌ Redis: Error lPop from ${key}:`, error?.message || error);
       return null;
     }
   }
@@ -501,10 +560,11 @@ class RedisService {
    */
   async lRange(key, start, stop) {
     if (!this._canUseRedis()) return [];
+    this._trackRequest();
     try {
       return await this.client.lrange(key, start, stop);
     } catch (error) {
-      console.error(`❌ Redis: Error lRange from ${key}:`, error.message);
+      console.error(`❌ Redis: Error lRange from ${key}:`, error?.message || error);
       return [];
     }
   }
@@ -514,11 +574,12 @@ class RedisService {
    */
   async lTrim(key, start, stop) {
     if (!this._canUseRedis()) return false;
+    this._trackRequest();
     try {
       await this.client.ltrim(key, start, stop);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Error lTrim ${key}:`, error.message);
+      console.error(`❌ Redis: Error lTrim ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -528,10 +589,11 @@ class RedisService {
    */
   async lLen(key) {
     if (!this._canUseRedis()) return 0;
+    this._trackRequest();
     try {
       return await this.client.llen(key);
     } catch (error) {
-      console.error(`❌ Redis: Error lLen ${key}:`, error.message);
+      console.error(`❌ Redis: Error lLen ${key}:`, error?.message || error);
       return 0;
     }
   }
@@ -544,7 +606,7 @@ class RedisService {
 
     try {
       const lastCreatorKey = `${queueKey}:last_creator`;
-      
+
       const script = `
         local queueKey = KEYS[1]
         local lastCreatorKey = KEYS[2]
@@ -571,29 +633,24 @@ class RedisService {
       await this.client.eval(script, [queueKey, lastCreatorKey], [videoId, uploaderId]);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: SmartPush error for ${queueKey}:`, error.message);
+      console.error(`❌ Redis: SmartPush error for ${queueKey}:`, error?.message || error);
       return this.lPush(queueKey, videoId);
     }
   }
 
   /**
    * Universal call method for compatibility with other libraries (like rate-limit-redis)
-   */
-  /**
-   * Universal call method for compatibility with other libraries (like rate-limit-redis)
+   * Uses raw execution to ensure standard Redis argument compatibility (especially for EVAL)
    */
   async call(command, ...args) {
     if (!this._canUseRedis()) return null;
+    this._trackRequest();
     try {
-      const cmd = command.toLowerCase();
-      // Try direct method first (e.g. client.get, client.sadd)
-      if (typeof this.client[cmd] === 'function') {
-        return await this.client[cmd](...args);
-      }
-      // Fallback to raw execution for commands not explicitly in the SDK (like BF.*)
+      // Use raw execute for all calls via 'call' to ensure compatibility with 
+      // standard Redis command arrays (like those from rate-limit-redis)
       return await this.client.execute([command, ...args]);
     } catch (error) {
-      console.error(`❌ Redis: Error in call (${command}):`, error.message);
+      console.error(`❌ Redis: Error in call (${command}):`, error?.message || error);
       return null;
     }
   }
@@ -619,9 +676,10 @@ class RedisService {
    */
   async bfMAdd(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return false;
+    this._trackRequest();
     try {
       const allPositions = items.flatMap(item => this._getBitPositions(item));
-      
+
       const script = `
         for i, pos in ipairs(ARGV) do
           redis.call('SETBIT', KEYS[1], pos, 1)
@@ -633,7 +691,7 @@ class RedisService {
       await this.client.eval(script, [key], allPositions);
       return true;
     } catch (error) {
-      console.error(`❌ Redis: Manual BF.MADD error for key ${key}:`, error.message);
+      console.error(`❌ Redis: Manual BF.MADD error for key ${key}:`, error?.message || error);
       return false;
     }
   }
@@ -644,9 +702,10 @@ class RedisService {
    */
   async bfMExists(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return items.map(() => false);
+    this._trackRequest();
     try {
       const allPositions = items.flatMap(item => this._getBitPositions(item));
-      
+
       const script = `
         local results = {}
         local key = KEYS[1]
@@ -666,7 +725,7 @@ class RedisService {
       if (!Array.isArray(results)) return items.map(() => false);
       return results.map(r => r === 1);
     } catch (error) {
-      console.error(`❌ Redis: Manual BF.MEXISTS error for key ${key}:`, error.message);
+      console.error(`❌ Redis: Manual BF.MEXISTS error for key ${key}:`, error?.message || error);
       return items.map(() => false);
     }
   }
@@ -678,5 +737,3 @@ class RedisService {
 }
 
 export default new RedisService();
-
-

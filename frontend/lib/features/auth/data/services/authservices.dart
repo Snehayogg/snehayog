@@ -1141,9 +1141,12 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       final refreshToken = prefs.getString('refresh_token');
 
+      AppLogger.log('🔄 Refresh token exists: ${refreshToken != null && refreshToken.isNotEmpty}');
+
       // 1. Try Refresh Token first (fast, server-side)
       if (refreshToken != null && refreshToken.isNotEmpty) {
         try {
+          AppLogger.log('🔄 Calling refresh token endpoint...');
           // Refresh token request no longer requires deviceId for rotation check
 
           final response = await http.post(
@@ -1154,11 +1157,16 @@ class AuthService {
             }),
           ).timeout(const Duration(seconds: 10)); // Increased timeout for reliability
 
+          AppLogger.log('🔄 Refresh endpoint response status: ${response.statusCode}');
+
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
             // **FIX: Handle both 'accessToken' and 'token' formats**
             final newToken = data['accessToken'] ?? data['token'];
             final newRefreshToken = data['refreshToken'];
+
+            AppLogger.log('🔄 New token received: ${newToken != null ? "Yes" : "No"}');
+            AppLogger.log('🔄 New refresh token received: ${newRefreshToken != null ? "Yes" : "No"}');
 
             if (newToken != null) {
               await prefs.setString('jwt_token', newToken);
@@ -1204,10 +1212,12 @@ class AuthService {
       AppLogger.log('🔄 Refresh token failed, falling back to Google Silent Sign-In...');
       bool googleSilentSignInAttempted = false;
       String? googleToken;
-      
+
       try {
         googleSilentSignInAttempted = true;
+        AppLogger.log('🔄 Attempting Google Silent Sign-In...');
         googleToken = await _reauthenticateWithGoogle();
+        AppLogger.log('🔄 Google Silent Sign-In result: ${googleToken != null ? "Success" : "Failed"}');
       } catch (e) {
         AppLogger.log('⚠️ Google Silent Sign-In error (likely network): $e');
       }

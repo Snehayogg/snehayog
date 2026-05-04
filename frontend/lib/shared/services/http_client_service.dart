@@ -227,15 +227,21 @@ class HttpClientService {
                 return handler.resolve(response);
               } else {
                 AppLogger.log('🔐 HttpClientService: Token refresh returned null, user must re-authenticate');
+                AppLogger.log('🔐 HttpClientService: Request that failed: ${error.requestOptions.method} ${error.requestOptions.path}');
+                AppLogger.log('🔐 HttpClientService: Response status: ${error.response?.statusCode}');
                 try {
                   final prefs = await SharedPreferences.getInstance();
+                  final hasRefreshToken = prefs.getString('refresh_token') != null;
+                  AppLogger.log('🔐 HttpClientService: Has refresh token: $hasRefreshToken');
                   await prefs.setBool('auth_needs_login', true);
                   // Remove JWT to stop auto-injection/401 loops; keep fallback_user for UI.
                   await prefs.remove('jwt_token');
-                  
+
                   // Notify UI globally that session has expired
                   onSessionExpired?.call();
-                } catch (_) {}
+                } catch (e) {
+                  AppLogger.log('🔐 HttpClientService: Error setting auth_needs_login: $e');
+                }
               }
             } catch (e) {
               _isRefreshing = false;
@@ -366,7 +372,7 @@ class HttpClientService {
     try {
       final response = await dio.post(
         url.toString(),
-        data: body is String ? body : jsonEncode(body),
+        data: (body is String || body is List<int>) ? body : jsonEncode(body),
         options: Options(
           headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
@@ -389,7 +395,7 @@ class HttpClientService {
     try {
       final response = await dio.put(
         url.toString(),
-        data: body is String ? body : jsonEncode(body),
+        data: (body is String || body is List<int>) ? body : jsonEncode(body),
         options: Options(
           headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,
@@ -412,7 +418,7 @@ class HttpClientService {
     try {
       final response = await dio.patch(
         url.toString(),
-        data: body is String ? body : jsonEncode(body),
+        data: (body is String || body is List<int>) ? body : jsonEncode(body),
         options: Options(
           headers: headers ?? <String, String>{},
           receiveTimeout: timeout ?? AppConfig.apiTimeout,

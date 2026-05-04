@@ -658,6 +658,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 return Positioned(
                   top: MediaQuery.of(context).padding.top + 4,
                   left: 8,
+                  right: 8,
                   child: _buildBannerAd(video, index),
                 );
               },
@@ -754,7 +755,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
   Widget _buildBannerAd(VideoModel video, int index) {
     // **DEBUG: Track ad state**
-    // AppLogger.log('📺 UI: _buildBannerAd calling for video $index. AdsLoaded: $_adsLoaded, BannerAds: ${_bannerAds.length}');
+    AppLogger.log('📺 UI: _buildBannerAd calling for video $index. AdsLoaded: $_adsLoaded, BannerAds: ${_bannerAds.length}');
 
     // **FIXED: Prepare custom ad data for fallback (even when AdMob is configured)**
     Map<String, dynamic>? adData;

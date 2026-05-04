@@ -305,7 +305,21 @@ const videoSchema = new mongoose.Schema({
       required: true,
       min: 0
     }
-  }]
+  }],
+
+  // **NEW: Subscriber-Only Access Control**
+  // List of user IDs who are allowed to view this video
+  // If empty, video is public. If populated, only these users can view it.
+  allowedSubscribers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: []
+  }],
+  isSubscriberOnly: {
+    type: Boolean,
+    default: false,
+    index: true
+  }
 }, {
   timestamps: true
 });

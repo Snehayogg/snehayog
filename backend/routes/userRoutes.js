@@ -9,6 +9,7 @@ import redisService from '../services/caching/redisService.js';
 import { getGlobalLeaderboard } from '../controllers/video/videoFeedController.js';
 import RecommendationService from '../services/yugFeedServices/recommendationService.js';
 import Notice from '../models/Notice.js';
+import Video from '../models/Video.js';
 
 const router = express.Router();
 
@@ -530,86 +531,47 @@ router.get('/top-earners-from-following', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ Route to get user profile by ID
-// **IMPORTANT: This must come AFTER all specific routes**
-// **SECURITY FIX: Disabled caching and added privacy filter**
-router.get('/:id', passiveVerifyToken, async (req, res) => {
+// ✅ Export subscriber emails (Substack-style)
+router.get('/my-subscribers/export', verifyToken, async (req, res) => {
   try {
-    const { id } = req.params;
+    const creatorGoogleId = req.user.id;
+    let creator = await User.findOne({ googleId: creatorGoogleId }).lean();
     
-    // First try to find by Google ID (primary identifier)
-    let user = await User.findOne({ googleId: id })
-      .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+    if (!creator && req.user._id) {
+       creator = await User.findById(req.user._id).lean();
+    }
+    
+    if (!creator) {
+      return res.status(404).json({ error: 'Creator not found' });
+    }
+
+    const creatorId = creator._id;
+    
+    // Get all followers of this creator
+    const followerDocs = await Follower.find({ following: creatorId })
+      .select('follower createdAt')
+      .populate('follower', 'name email profilePic')
       .lean();
-
-    // If not found, try by MongoDB ObjectId
-    if (!user) {
-      try {
-        const mongoose = (await import('mongoose')).default;
-        // **IDENTITY OPTIMIZATION: Support pre-resolved ObjectIds**
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          user = await User.findById(id)
-            .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
-            .lean();
-        }
-      } catch (e) {
-        // ignore invalid ObjectId errors
-      }
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // **PRIVACY CHECK**: Check if the requester is the owner of the profile
-    const requesterId = req.user?.googleId || req.user?.id;
-    const isOwner = requesterId && (requesterId === user.googleId || requesterId === user._id.toString());
     
-    // console.log(`🔒 Profile Access Check: Requester=${requesterId}, Target=${user.googleId}, IsOwner=${isOwner}`);
-
-    // **SAFE: Wrap rank call so any failure doesn't cause a 500**
-    let rank = 0;
-    try {
-      rank = await RecommendationService.getGlobalCreatorRank(user._id);
-    } catch (rankErr) {
-      console.error('⚠️ GET /:id: Failed to get creator rank (non-fatal):', rankErr.message);
-    }
-
-    const payload = {
-      _id: user._id, // MongoDB ObjectID
-      id: user.googleId,
-      googleId: user.googleId,
-      name: user.name,
-      profilePic: user.profilePic,
-      websiteUrl: user.websiteUrl, // Adding websiteUrl to payload
-      videos: user.videos,
-      rank,
-      // **SENSITIVE FIELDS**: Only include if owner
-      email: isOwner ? user.email : null,
-      preferredCurrency: isOwner ? user.preferredCurrency : null,
-      preferredPaymentMethod: isOwner ? user.preferredPaymentMethod : null,
-      country: isOwner ? user.country : null,
-    };
-
-    // **API VERSIONING: Backward Compatibility for Legacy Versions**
-    if (req.apiVersion < '2026-03-02') {
-      const [followingDocs, followerDocs] = await Promise.all([
-        Follower.find({ follower: user._id }).select('following').lean(),
-        Follower.find({ following: user._id }).select('follower').lean()
-      ]);
-      
-      payload.following = followingDocs.map(f => f.following);
-      payload.followers = followerDocs.map(f => f.follower);
-    } else {
-      payload.following = user.followingCount || 0;
-      payload.followers = user.followerCount || 0;
-    }
-
-    res.json(payload);
-
+    const subscribers = followerDocs
+      .filter(f => f.follower && f.follower.email) // Safety check
+      .map(f => ({
+        name: f.follower.name,
+        email: f.follower.email,
+        profilePic: f.follower.profilePic || '',
+        subscribedAt: f.createdAt,
+      }));
+    
+    // Return as JSON (frontend will convert to CSV)
+    res.json({
+      success: true,
+      totalSubscribers: subscribers.length,
+      subscribers,
+      exportedAt: new Date().toISOString(),
+    });
   } catch (err) {
-    console.error('Get user by ID error:', err);
-    res.status(500).json({ error: 'Failed to get user' });
+    console.error('❌ Export subscribers error:', err);
+    res.status(500).json({ error: 'Failed to export subscribers' });
   }
 });
 
@@ -1092,6 +1054,206 @@ router.post('/sync-all-counters', async (req, res) => {
     res.json({ success: true, processed: count });
   } catch (err) {
     res.status(500).json({ error: 'Bulk sync failed', details: err.message });
+  }
+});
+
+// ✅ Route to get creator's subscribers (for subscriber-only content)
+router.get('/subscribers', verifyToken, async (req, res) => {
+  try {
+    let user = null;
+    if (req.user?._id) {
+      user = await User.findById(req.user._id).select('_id').lean();
+    }
+    if (!user) {
+      const googleId = req.user?.googleId || req.user?.id;
+      if (googleId) {
+        user = await User.findOne({ googleId }).select('_id').lean();
+      }
+    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const userId = user._id;
+
+    // Get all followers (subscribers) of this creator
+    const followers = await Follower.find({ following: userId })
+      .populate('follower', 'name email profilePic profilePicture')
+      .lean();
+
+    const subscribers = followers.map(f => ({
+      _id: f.follower._id,
+      id: f.follower._id.toString(),
+      name: f.follower.name,
+      email: f.follower.email,
+      profilePic: f.follower.profilePic || f.follower.profilePicture,
+    }));
+
+    res.json({
+      success: true,
+      subscribers,
+      total: subscribers.length,
+    });
+  } catch (err) {
+    console.error('❌ Get subscribers error:', err);
+    res.status(500).json({ error: 'Failed to fetch subscribers', details: err.message });
+  }
+});
+
+// ✅ Route to get subscriber-only videos for current user
+router.get('/subscriber-videos', verifyToken, async (req, res) => {
+  try {
+    let user = null;
+    if (req.user?._id) {
+      user = await User.findById(req.user._id).select('_id').lean();
+    }
+    if (!user) {
+      const googleId = req.user?.googleId || req.user?.id;
+      if (googleId) {
+        user = await User.findOne({ googleId }).select('_id').lean();
+      }
+    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const userId = user._id;
+
+    // Get videos where this user is in allowedSubscribers
+    const videos = await Video.find({
+      isSubscriberOnly: true,
+      allowedSubscribers: userId,
+      processingStatus: 'completed'
+    })
+    .populate('uploader', 'name profilePic profilePicture')
+    .sort({ uploadedAt: -1 })
+    .limit(50)
+    .lean();
+
+    res.json({
+      success: true,
+      videos,
+      total: videos.length,
+    });
+  } catch (err) {
+    console.error('❌ Get subscriber videos error:', err);
+    res.status(500).json({ error: 'Failed to fetch subscriber videos', details: err.message });
+  }
+});
+
+// ✅ Route to check if user has access to a video
+router.get('/video-access/:videoId', verifyToken, async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const googleId = req.user.googleId;
+    const user = await User.findOne({ googleId }).select('_id').lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const userId = user._id;
+
+    const video = await Video.findById(videoId).lean();
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+
+    // Check if video is subscriber-only
+    if (video.isSubscriberOnly) {
+      // Check if user is in allowedSubscribers
+      const hasAccess = video.allowedSubscribers.some(id => id.toString() === userId.toString());
+
+      return res.json({
+        success: true,
+        hasAccess,
+        isSubscriberOnly: true,
+      });
+    }
+
+    // Video is public
+    res.json({
+      success: true,
+      hasAccess: true,
+      isSubscriberOnly: false,
+    });
+  } catch (err) {
+    console.error('❌ Check video access error:', err);
+    res.status(500).json({ error: 'Failed to check video access', details: err.message });
+  }
+});
+
+// ✅ Route to get user profile by ID
+// **IMPORTANT: This must come AFTER all specific routes**
+// **SECURITY FIX: Disabled caching and added privacy filter**
+router.get('/:id', passiveVerifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // First try to find by Google ID (primary identifier)
+    let user = await User.findOne({ googleId: id })
+      .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+      .lean();
+
+    // If not found, try by MongoDB ObjectId
+    if (!user) {
+      try {
+        const mongoose = (await import('mongoose')).default;
+        // **IDENTITY OPTIMIZATION: Support pre-resolved ObjectIds**
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          user = await User.findById(id)
+            .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+            .lean();
+        }
+      } catch (e) {
+        // ignore invalid ObjectId errors
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // **PRIVACY CHECK**: Check if the requester is the owner of the profile
+    const requesterId = req.user?.googleId || req.user?.id;
+    const isOwner = requesterId && (requesterId === user.googleId || requesterId === user._id.toString());
+    
+    // console.log(`🔒 Profile Access Check: Requester=${requesterId}, Target=${user.googleId}, IsOwner=${isOwner}`);
+
+    // **SAFE: Wrap rank call so any failure doesn't cause a 500**
+    let rank = 0;
+    try {
+      rank = await RecommendationService.getGlobalCreatorRank(user._id);
+    } catch (rankErr) {
+      console.error('⚠️ GET /:id: Failed to get creator rank (non-fatal):', rankErr.message);
+    }
+
+    const payload = {
+      _id: user._id, // MongoDB ObjectID
+      id: user.googleId,
+      googleId: user.googleId,
+      name: user.name,
+      profilePic: user.profilePic,
+      websiteUrl: user.websiteUrl, // Adding websiteUrl to payload
+      videos: user.videos,
+      rank,
+      // **SENSITIVE FIELDS**: Only include if owner
+      email: isOwner ? user.email : null,
+      preferredCurrency: isOwner ? user.preferredCurrency : null,
+      preferredPaymentMethod: isOwner ? user.preferredPaymentMethod : null,
+      country: isOwner ? user.country : null,
+    };
+
+    // **API VERSIONING: Backward Compatibility for Legacy Versions**
+    if (req.apiVersion < '2026-03-02') {
+      const [followingDocs, followerDocs] = await Promise.all([
+        Follower.find({ follower: user._id }).select('following').lean(),
+        Follower.find({ following: user._id }).select('follower').lean()
+      ]);
+      
+      payload.following = followingDocs.map(f => f.following);
+      payload.followers = followerDocs.map(f => f.follower);
+    } else {
+      payload.following = user.followingCount || 0;
+      payload.followers = user.followerCount || 0;
+    }
+
+    res.json(payload);
+
+  } catch (err) {
+    console.error('Get user by ID error:', err);
+    res.status(500).json({ error: 'Failed to get user' });
   }
 });
 

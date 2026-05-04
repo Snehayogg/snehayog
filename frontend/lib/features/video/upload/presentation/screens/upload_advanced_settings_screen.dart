@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
-import 'package:vayug/core/design/spacing.dart';
-import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/features/video/quiz/presentation/screens/create_quiz_screen.dart';
+import 'package:vayug/features/profile/core/data/services/user_service.dart';
+import 'package:vayug/shared/utils/app_logger.dart';
 
 class UploadAdvancedSettingsScreen extends StatefulWidget {
   final TextEditingController linkController;
@@ -15,6 +15,7 @@ class UploadAdvancedSettingsScreen extends StatefulWidget {
   final VoidCallback onMakeEpisode;
   final ValueNotifier<List<QuizModel>> quizzes;
   final ValueNotifier<List<String>> selectedPlatforms;
+  final ValueNotifier<List<String>> selectedSubscribers;
   final double videoDuration;
 
   const UploadAdvancedSettingsScreen({
@@ -27,6 +28,7 @@ class UploadAdvancedSettingsScreen extends StatefulWidget {
     required this.onMakeEpisode,
     required this.quizzes,
     required this.selectedPlatforms,
+    required this.selectedSubscribers,
     this.videoDuration = 0.0,
   });
 
@@ -127,6 +129,8 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
                   subtitle: 'Add to a series or playlist',
                   onTap: widget.onMakeEpisode,
                 ),
+
+                _buildSubscriberOnlyTile(),
 
                 _buildCrossPostingTile(),
                 
@@ -281,7 +285,7 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
               else { current.remove('youtube'); }
               widget.selectedPlatforms.value = current;
             },
-            activeColor: AppColors.primary,
+            activeTrackColor: AppColors.primary,
           ),
           onTap: () {},
         );
@@ -408,6 +412,364 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
             Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textTertiary),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriberOnlyTile() {
+    return ValueListenableBuilder<List<String>>(
+      valueListenable: widget.selectedSubscribers,
+      builder: (context, selected, _) {
+        return _buildSettingRow(
+          icon: Icons.lock_person,
+          title: 'Subscriber Only',
+          subtitle: selected.isEmpty
+              ? 'Share with specific subscribers'
+              : '${selected.length} subscriber${selected.length == 1 ? '' : 's'} selected',
+          trailing: selected.isEmpty
+              ? null
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${selected.length}',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+          onTap: () => _showSubscriberSelectionBottomSheet(context),
+        );
+      },
+    );
+  }
+
+  void _showSubscriberSelectionBottomSheet(BuildContext context) {
+    Navigator.push(
+      context,
+        MaterialPageRoute(
+          builder: (context) => SubscriberSelectionSheet(
+            selectedSubscribers: widget.selectedSubscribers,
+          ),
+      ),
+    );
+  }
+}
+
+class SubscriberSelectionSheet extends StatefulWidget {
+  final ValueNotifier<List<String>> selectedSubscribers;
+
+  const SubscriberSelectionSheet({
+    super.key,
+    required this.selectedSubscribers,
+  });
+
+  @override
+  State<SubscriberSelectionSheet> createState() => _SubscriberSelectionSheetState();
+}
+
+class _SubscriberSelectionSheetState extends State<SubscriberSelectionSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  final ValueNotifier<List<Subscriber>> _subscribers = ValueNotifier<List<Subscriber>>([]);
+  final ValueNotifier<bool> _isLoading = ValueNotifier<bool>(true);
+  final ValueNotifier<String?> _error = ValueNotifier<String?>(null);
+  final UserService _userService = UserService();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSubscribers();
+  }
+
+  Future<void> _fetchSubscribers() async {
+    try {
+      _isLoading.value = true;
+      _error.value = null;
+
+      AppLogger.log('📡 Fetching subscribers from backend...');
+      final subscribers = await _userService.getSubscribers();
+      _subscribers.value = subscribers;
+      AppLogger.log('✅ Fetched ${subscribers.length} subscribers');
+    } catch (e) {
+      AppLogger.log('❌ Failed to fetch subscribers: $e');
+      _error.value = 'Failed to load subscribers: $e';
+    } finally {
+      _isLoading.value = false;
+    }
+  }
+
+  List<Subscriber> get _filteredSubscribers {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return _subscribers.value;
+
+    return _subscribers.value.where((sub) {
+      return sub.name.toLowerCase().contains(query) ||
+             sub.email.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  bool _isSelected(String subscriberId) {
+    return widget.selectedSubscribers.value.contains(subscriberId);
+  }
+
+  void _toggleSelection(String subscriberId) {
+    final current = List<String>.from(widget.selectedSubscribers.value);
+    if (current.contains(subscriberId)) {
+      current.remove(subscriberId);
+    } else {
+      current.add(subscriberId);
+    }
+    widget.selectedSubscribers.value = current;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _subscribers.dispose();
+    _isLoading.dispose();
+    _error.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.borderPrimary),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_person, color: AppColors.primary),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Select Subscribers',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by name or email',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: AppColors.backgroundSecondary,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+
+          // Selected subscribers chips
+          ValueListenableBuilder<List<String>>(
+            valueListenable: widget.selectedSubscribers,
+            builder: (context, selected, _) {
+              if (selected.isEmpty) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Selected',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: selected.map((id) {
+                    final subscriber = _subscribers.value.firstWhere(
+                      (s) => s.id == id,
+                      orElse: () => Subscriber(id: id, name: 'Unknown', email: '', profilePic: null),
+                    );
+                    return Chip(
+                      label: Text(subscriber.name),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      onDeleted: () => _toggleSelection(id),
+                      avatar: subscriber.profilePic != null
+                          ? CircleAvatar(
+                              backgroundImage: NetworkImage(subscriber.profilePic!),
+                              radius: 12,
+                            )
+                          : CircleAvatar(
+                              radius: 12,
+                              child: Text(
+                                subscriber.name.isNotEmpty ? subscriber.name[0].toUpperCase() : '?',
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ),
+                    );
+                  }).toList(),
+                ),
+                    const Divider(height: 24),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          // Subscribers list
+          Expanded(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _isLoading,
+              builder: (context, loading, _) {
+                if (loading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                return ValueListenableBuilder<String?>(
+                  valueListenable: _error,
+                  builder: (context, error, _) {
+                    if (error != null) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                            const SizedBox(height: 16),
+                            Text(error, textAlign: TextAlign.center),
+                            const SizedBox(height: 16),
+                            AppButton(
+                              onPressed: _fetchSubscribers,
+                              label: 'Retry',
+                              variant: AppButtonVariant.outline,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final filtered = _filteredSubscribers;
+
+                    if (filtered.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off, size: 48, color: AppColors.textSecondary),
+                            SizedBox(height: 16),
+                             Text('No subscribers found'),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final subscriber = filtered[index];
+                        final isSelected = _isSelected(subscriber.id);
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: subscriber.profilePic != null
+                                ? NetworkImage(subscriber.profilePic!)
+                                : null,
+                            child: subscriber.profilePic == null
+                                ? Text(
+                                    subscriber.name.isNotEmpty ? subscriber.name[0].toUpperCase() : '?',
+                                  )
+                                : null,
+                          ),
+                          title: Text(subscriber.name),
+                          subtitle: Text(subscriber.email),
+                          trailing: Checkbox(
+                            value: isSelected,
+                            onChanged: (_) => _toggleSelection(subscriber.id),
+                          ),
+                          onTap: () => _toggleSelection(subscriber.id),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+
+          // Bottom action bar
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: AppColors.backgroundPrimary,
+              border: Border(
+                top: BorderSide(color: AppColors.borderPrimary),
+              ),
+            ),
+            child: ValueListenableBuilder<List<String>>(
+              valueListenable: widget.selectedSubscribers,
+              builder: (context, selected, _) {
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${selected.length} subscriber${selected.length == 1 ? '' : 's'} selected',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    AppButton(
+                      onPressed: selected.isEmpty ? null : () => Navigator.pop(context),
+                      label: 'Done',
+                      variant: AppButtonVariant.primary,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

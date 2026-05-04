@@ -519,11 +519,11 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     setState(() { _showScrubbingOverlay = false; _horizontalDragTotal = 0.0; _showControls = true; });
   }
 
-  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+  void _handleVerticalDragUpdate(double primaryDelta, Offset localPosition) {
     if (_isControlsLocked) return;
     final size = MediaQuery.of(context).size;
-    final isLeftSide = details.localPosition.dx < size.width / 2;
-    final delta = details.primaryDelta! / size.height * 1.5;
+    final isLeftSide = localPosition.dx < size.width / 2;
+    final delta = primaryDelta / size.height * 1.5;
     if (isLeftSide) {
       _brightnessValue = (_brightnessValue - delta).clamp(0.0, 1.0);
       ScreenBrightness().setApplicationScreenBrightness(_brightnessValue);

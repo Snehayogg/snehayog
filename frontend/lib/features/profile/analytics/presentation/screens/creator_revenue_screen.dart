@@ -14,6 +14,9 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 // NEW IMPORTS
 import 'package:vayug/features/profile/analytics/data/services/analytics_service.dart';
@@ -37,6 +40,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
   List<RemovedVideo> _removedVideos = [];
   
   bool _isLoading = true;
+  bool _isExporting = false;
   String? _errorMessage;
 
   @override
@@ -225,6 +229,8 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
             _buildRevenueOverviewCard(),
             AppSpacing.vSpace24,
             _buildRevenueBreakdownCard(),
+            AppSpacing.vSpace24,
+            _buildExportSubscribersSection(),
             if (_removedVideos.isNotEmpty) ...[
               AppSpacing.vSpace24,
               _buildRemovedVideosSection(),
@@ -233,6 +239,95 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildExportSubscribersSection() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppSpacing.spacing4),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.people_alt, color: AppColors.primary),
+              AppSpacing.hSpace8,
+              Text("Your Audience", style: AppTypography.titleMedium),
+            ],
+          ),
+          AppSpacing.vSpace12,
+          Text(
+            "Download a list of your subscribers' emails to communicate with them directly.",
+            style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+          ),
+          AppSpacing.vSpace16,
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              onPressed: _isExporting ? null : _exportSubscribers,
+              label: _isExporting ? "Exporting..." : "Export Subscribers (CSV)",
+              icon: _isExporting ? null : const Icon(Icons.home),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportSubscribers() async {
+    setState(() => _isExporting = true);
+    try {
+      final data = await _analyticsService.exportSubscribers();
+      final subscribers = List<Map<String, dynamic>>.from(data['subscribers'] ?? []);
+      
+      if (subscribers.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No subscribers to export.')),
+          );
+        }
+        return;
+      }
+
+      // Generate CSV
+      final StringBuffer csv = StringBuffer();
+      csv.writeln('Name,Email,SubscribedAt');
+      for (final sub in subscribers) {
+        final name = (sub['name'] ?? '').toString().replaceAll(',', ' ');
+        final email = (sub['email'] ?? '').toString();
+        final date = (sub['subscribedAt'] ?? '').toString();
+        csv.writeln('$name,$email,$date');
+      }
+
+      // Save to temp file
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/subscribers_export.csv');
+      await file.writeAsString(csv.toString());
+
+      // Share
+      if (mounted) {
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Vayug Subscribers Export',
+        );
+      }
+    } catch (e) {
+      AppLogger.log('❌ Failed to export subscribers: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export subscribers: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
   }
 
   Widget _buildAnalyticsTab() {

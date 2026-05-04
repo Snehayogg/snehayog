@@ -182,7 +182,7 @@ router.post('/video/presigned', verifyToken, uploadLimiter, async (req, res) => 
  */
 router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, res) => {
   try {
-    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber, thumbnailKey, quizzes } = req.body;
+    const { key, videoName, description, link, size, category, tags, videoType, crossPostPlatforms, seriesId, episodeNumber, thumbnailKey, quizzes, allowedSubscribers } = req.body;
     const userId = req.user.id;
 
     if (!key || !videoName) {
@@ -217,7 +217,10 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       isHLSEncoded: false,
       seriesId: seriesId || null,
       episodeNumber: episodeNumber ? parseInt(episodeNumber) : 0,
-      quizzes: Array.isArray(quizzes) ? quizzes : []
+      quizzes: Array.isArray(quizzes) ? quizzes : [],
+      // **NEW: Subscriber-only access control**
+      allowedSubscribers: Array.isArray(allowedSubscribers) ? allowedSubscribers : [],
+      isSubscriberOnly: Array.isArray(allowedSubscribers) && allowedSubscribers.length > 0
     });
 
     if (crossPostPlatforms && Array.isArray(crossPostPlatforms)) {

@@ -70,7 +70,7 @@ export const googleSignIn = async (req, res) => {
       platform || 'unknown'
     );
 
-    console.log('🔐 Issued tokens for device:', deviceId.substring(0, 8) + '...');
+    console.log('🔐 Issued tokens for device:', deviceId?.substring?.(0, 8) + '...');
 
     // **NEW: Merge Guest History from Device ID to User ID**
     if (deviceId && deviceId !== 'anon') {

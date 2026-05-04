@@ -1,6 +1,5 @@
 import Video from '../../models/Video.js';
 import FeedHistory from '../../models/FeedHistory.js';
-import WatchHistory from '../../models/WatchHistory.js';
 import redisService from '../caching/redisService.js';
 import RecommendationService from './recommendationService.js';
 import mongoose from 'mongoose';
@@ -38,45 +37,55 @@ class FeedQueueService {
     const videos = [];
     const tStart = Date.now();
     let currentLength = 0;
-
-    try {
-      currentLength = await redisService.lLen(queueKey);
-    } catch (e) {
-      currentLength = 0;
-    }
-
     let poppedIds = [];
+
+    // OPTIMIZATION: Combine lLen + lPop into single Lua script to reduce requests
     try {
-      const popCount = Math.min(currentLength, count);
-      if (popCount > 0) {
-        const popped = await redisService.lPop(queueKey, popCount);
-        if (Array.isArray(popped)) poppedIds = popped;
-        else if (popped) poppedIds = [popped];
+      const script = `
+        local queueKey = KEYS[1]
+        local count = tonumber(ARGV[1])
+        local len = redis.call('LLEN', queueKey)
+        local popCount = math.min(len, count)
+        local result = {}
+        if popCount > 0 then
+          for i = 1, popCount do
+            table.insert(result, redis.call('LPOP', queueKey))
+          end
+        end
+        return {len, unpack(result)}
+      `;
+      // Use fixed call method that handles EVAL correctly
+      const result = await redisService.call('EVAL', script, 1, queueKey, count);
+      if (Array.isArray(result) && result.length > 0) {
+        currentLength = result[0] || 0;
+        poppedIds = result.slice(1).filter(Boolean);
       }
-      videos.push(...poppedIds);
     } catch (e) {
       console.error(`⚠️ FeedQueue: Redis lPop failed:`, e.message);
     }
 
-    // Mark as seen in Bloom Filter immediately
+    videos.push(...poppedIds);
+
+    // OPTIMIZATION: Batch Bloom Filter operations and skip for anon users
     if (poppedIds.length > 0 && userId !== 'undefined' && userId !== 'anon') {
        const bfSeenKey = `user:bf_seen:${userId}`;
+       // OPTIMIZATION: bfMAdd already calls EXPIRE internally, saving redundant exists/expire calls
        await redisService.bfMAdd(bfSeenKey, poppedIds);
-       await redisService.expire(bfSeenKey, 604800);
     }
 
-    // Refill trigger
+    // Refill trigger - OPTIMIZATION: Only trigger if significantly below threshold
     const projectedLength = Math.max(0, currentLength - poppedIds.length);
     if (projectedLength < this.REFILL_THRESHOLD) {
       this.generateAndPushFeed(userId, videoType).catch(() => {});
     }
 
-    // Fallback if queue empty
+    // Fallback if queue empty - OPTIMIZATION: Skip lRange if we have enough videos
     if (videos.length < count) {
        const needed = count - videos.length;
-       const remainingQueued = await redisService.lRange(queueKey, 0, -1);
+       // OPTIMIZATION: Only fetch remaining if queue is not empty
+       const remainingQueued = projectedLength > 0 ? await redisService.lRange(queueKey, 0, -1) : [];
        const initialExcludes = new Set([...videos, ...remainingQueued]);
-       
+
        const fallbackIds = await this.getFallbackIds(userId, videoType, needed, Array.from(initialExcludes));
        if (fallbackIds.length > 0) {
           videos.push(...fallbackIds);
@@ -85,14 +94,17 @@ class FeedQueueService {
 
     // Populate and sync hashes to DB
     const result = await this.populateVideos(videos);
-    
+
+    // OPTIMIZATION: Batch all DB operations and reduce Redis calls
     if (result.length > 0 && userId !== 'anon' && userId !== 'undefined') {
        // Primary Deduplication Sync (Hashes + IDs)
        FeedHistory.markAsSeen(userId, result).catch(() => {});
-       
+
+       // OPTIMIZATION: Only add hashes if they exist (reduce empty operations)
        const hashes = result.map(v => v.videoHash).filter(Boolean);
        if (hashes.length > 0) {
           const bfHashKey = `user:bf_hashes:${userId}`;
+          // bfMAdd internally handles EXPIRE
           redisService.bfMAdd(bfHashKey, hashes).catch(() => {});
        }
     }
@@ -114,16 +126,18 @@ class FeedQueueService {
       const bfSeenKey = `user:bf_seen:${userId}`;
       const bfHashKey = `user:bf_hashes:${userId}`;
       const history = await FeedHistory.find({ userId }).sort({ seenAt: -1 }).limit(1000).select('videoId videoHash').lean();
-      
+
       if (history.length > 0) {
           const ids = history.map(h => h.videoId.toString());
-          await redisService.bfMAdd(bfSeenKey, ids);
           const hashes = history.map(h => h.videoHash).filter(Boolean);
-          if (hashes.length > 0) await redisService.bfMAdd(bfHashKey, hashes);
-          await redisService.expire(bfSeenKey, 604800);
-          await redisService.expire(bfHashKey, 604800);
+
+          // OPTIMIZATION: bfMAdd already calls EXPIRE internally
+          await Promise.all([
+            redisService.bfMAdd(bfSeenKey, ids),
+            hashes.length > 0 ? redisService.bfMAdd(bfHashKey, hashes) : Promise.resolve(),
+          ]);
       }
-      await redisService.set(seededKey, 'true', 86400); 
+      await redisService.set(seededKey, 'true', 86400);
     } catch (e) {
       console.error('⚠️ FeedQueue: Seeding failed:', e.message);
     }
@@ -132,7 +146,7 @@ class FeedQueueService {
   async generateAndPushFeed(userId, videoType = 'yog') {
     if (userId === 'undefined' || userId === 'null') userId = 'anon';
     const lockKey = `lock:refill:${userId}:${videoType}`;
-    
+
     if (!(await redisService.setLock(lockKey, '1', 15))) return 0;
 
     try {
@@ -146,13 +160,17 @@ class FeedQueueService {
 
       const queueKey = this.getQueueKey(userId, videoType);
       const seenVideoIds = new Set();
-      const queuedIds = await redisService.lRange(queueKey, 0, -1);
+
+      // OPTIMIZATION: Combine lRange calls into one
+      const [queuedIds, recentServed] = await Promise.all([
+        redisService.lRange(queueKey, 0, -1),
+        redisService.lRange(`user:recent_served:${userId}`, 0, -1)
+      ]);
+
       queuedIds.forEach(id => seenVideoIds.add(id));
-      
-      const recentServed = await redisService.lRange(`user:recent_served:${userId}`, 0, -1);
       recentServed.forEach(id => seenVideoIds.add(id));
 
-      const candidates = await Video.find({ 
+      const candidates = await Video.find({
           processingStatus: 'completed', videoType,
           uploader: uploaderObjectId ? { $ne: uploaderObjectId } : { $exists: true }
       }).sort({ finalScore: -1, createdAt: -1 }).limit(300).select('_id uploader createdAt score finalScore videoType videoHash vectorEmbedding').lean();
@@ -161,7 +179,7 @@ class FeedQueueService {
           const memFiltered = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
           const bfSeenKey = `user:bf_seen:${userId}`;
           const bfHashKey = `user:bf_hashes:${userId}`;
-          
+
           const [sFlags, hFlags] = await Promise.all([
               redisService.bfMExists(bfSeenKey, memFiltered.map(v => v._id.toString())),
               redisService.bfMExists(bfHashKey, memFiltered.map(v => v.videoHash).filter(Boolean))
@@ -169,7 +187,7 @@ class FeedQueueService {
 
           const hashFlagsMap = new Map(memFiltered.map(v => v.videoHash).filter(Boolean).map((h, i) => [h, hFlags[i]]));
           const finalBatch = [];
-          
+
           for (let i = 0; i < memFiltered.length; i++) {
               const video = memFiltered[i];
               if (sFlags[i] || (video.videoHash && hashFlagsMap.get(video.videoHash))) continue;
@@ -181,13 +199,15 @@ class FeedQueueService {
               const randomized = RecommendationService.weightedShuffle(finalBatch, this.BATCH_SIZE);
               const ordered = RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 4 });
               const pushIds = ordered.map(v => v._id.toString());
-              
-              await redisService.rPush(queueKey, pushIds);
-              await redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1);
-              await redisService.bfMAdd(bfSeenKey, pushIds);
-              
+
+              // OPTIMIZATION: bfMAdd internally handles EXPIRE
               const hashes = ordered.map(v => v.videoHash).filter(Boolean);
-              if (hashes.length > 0) await redisService.bfMAdd(bfHashKey, hashes);
+              await Promise.all([
+                redisService.rPush(queueKey, pushIds),
+                redisService.lTrim(queueKey, 0, this.QUEUE_SIZE_LIMIT - 1),
+                redisService.bfMAdd(bfSeenKey, pushIds),
+                hashes.length > 0 ? redisService.bfMAdd(bfHashKey, hashes) : Promise.resolve(),
+              ]);
           }
       }
       return 1;
@@ -275,7 +295,7 @@ class FeedQueueService {
 
     if (missingIds.length > 0) {
       const dbDocs = await Video.find({ _id: { $in: missingIds } })
-        .select('videoUrl thumbnailUrl description uploader views likes shares comments duration processingStatus createdAt videoHash videoName tags seriesId episodeNumber videoType aspectRatio')
+        .select('videoUrl thumbnailUrl description uploader views likes shares comments duration processingStatus createdAt videoHash videoName tags seriesId episodeNumber videoType aspectRatio quizzes')
         .populate('uploader', 'name profilePic googleId username')
         .lean();
 
@@ -298,9 +318,12 @@ class FeedQueueService {
   async addRecentCreators(userId, creatorIds) {
     if (!creatorIds || creatorIds.length === 0) return;
     const key = `user:recent_creators:${userId}`;
-    await redisService.lPush(key, creatorIds);
-    await redisService.lTrim(key, 0, 19);
-    await redisService.expire(key, 3600);
+    // OPTIMIZATION: Batch all operations together
+    await Promise.all([
+      redisService.lPush(key, creatorIds),
+      redisService.lTrim(key, 0, 19),
+      redisService.expire(key, 3600),
+    ]);
   }
 
   async getRecentCreators(userId) {
@@ -334,16 +357,14 @@ class FeedQueueService {
       const guestHistory = await FeedHistory.find({ userId: deviceId }).select('videoId videoHash').lean();
       if (guestHistory.length > 0) {
         await FeedHistory.markAsSeen(userId, guestHistory);
-        
-        // Update Bloom Filters
-        const ids = guestHistory.map(h => h.videoId.toString());
-        await redisService.bfMAdd(userSeenKey, ids);
-        
-        const hashes = guestHistory.map(h => h.videoHash).filter(Boolean);
-        if (hashes.length > 0) await redisService.bfMAdd(userHashKey, hashes);
 
-        // Delete guest data
+        // OPTIMIZATION: bfMAdd already calls EXPIRE internally
+        const ids = guestHistory.map(h => h.videoId.toString());
+        const hashes = guestHistory.map(h => h.videoHash).filter(Boolean);
+
         await Promise.all([
+          redisService.bfMAdd(userSeenKey, ids),
+          hashes.length > 0 ? redisService.bfMAdd(userHashKey, hashes) : Promise.resolve(),
           redisService.del(guestSeenKey),
           redisService.del(guestHashKey),
           FeedHistory.deleteMany({ userId: deviceId })

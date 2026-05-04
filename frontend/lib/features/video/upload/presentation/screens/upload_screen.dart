@@ -186,6 +186,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final ValueNotifier<List<String>> _selectedPlatforms = ValueNotifier<List<String>>([]);
   final ValueNotifier<List<QuizModel>> _quizzes = ValueNotifier<List<QuizModel>>([]);
   final ValueNotifier<double> _videoDuration = ValueNotifier<double>(0.0);
+  final ValueNotifier<List<String>> _selectedSubscribers = ValueNotifier<List<String>>([]);
 
   // **UNIFIED PROGRESS TRACKING METHODS**
 
@@ -581,6 +582,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           cancelToken: _uploadCancelToken,
           crossPostPlatforms: crossPostPlatforms,
           quizzes: _quizzes.value,
+          allowedSubscribers: _selectedSubscribers.value,
         ),
         zoneValues: {
           'upload_metadata': {
@@ -2195,6 +2197,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               onMakeEpisode: _handleMakeEpisode,
               quizzes: _quizzes,
               selectedPlatforms: _selectedPlatforms,
+              selectedSubscribers: _selectedSubscribers,
               videoDuration: _videoDuration.value,
             ),
           ),

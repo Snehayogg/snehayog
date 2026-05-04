@@ -390,6 +390,70 @@ class UserService {
       rethrow;
     }
   }
+
+  /// Get creator's subscribers (for subscriber-only content)
+  Future<List<Subscriber>> getSubscribers() async {
+    try {
+      final token = (await _authService.getUserData())?['token'];
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await httpClientService.get(
+        Uri.parse('${NetworkHelper.usersEndpoint}/subscribers'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> subscribersList = data['subscribers'] ?? [];
+        AppLogger.log('✅ UserService: Fetched ${subscribersList.length} subscribers');
+        return subscribersList.map((json) => Subscriber.fromJson(json)).toList();
+      } else {
+        AppLogger.log('Failed to fetch subscribers. Status: ${response.statusCode}');
+        throw Exception('Failed to fetch subscribers');
+      }
+    } catch (e) {
+      AppLogger.log('Error fetching subscribers: $e');
+      rethrow;
+    }
+  }
+}
+
+/// Subscriber model for subscriber-only content
+class Subscriber {
+  final String id;
+  final String name;
+  final String email;
+  final String? profilePic;
+
+  Subscriber({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.profilePic,
+  });
+
+  factory Subscriber.fromJson(Map<String, dynamic> json) {
+    return Subscriber(
+      id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      profilePic: json['profilePic']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'profilePic': profilePic,
+    };
+  }
 }
 
 /// **NEW: FollowManager for better follow state management**
