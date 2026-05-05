@@ -32,7 +32,6 @@ class BannerAdWidget extends StatefulWidget {
 }
 
 class _BannerAdWidgetState extends State<BannerAdWidget> {
-  bool _imageLoadFailed = false;
   bool _hasTrackedView = false; // Prevent duplicate view tracking
   DateTime? _viewStartTime; // Track when ad became visible
   Timer? _viewTrackingTimer; // Timer to check view duration
@@ -149,69 +148,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     final String imageUrl = _ensureAbsoluteUrl(
         rawImage is String ? rawImage : rawImage?.toString() ?? '');
 
-    // **FIX: If no image or image failed, show text-only fallback instead of hiding**
-    if (imageUrl.isEmpty || imageUrl.trim() == '' || _imageLoadFailed) {
-      final reason = _imageLoadFailed ? 'image load failed' : 'no image URL';
-      AppLogger.log('⚠️ BannerAdWidget: $reason, rendering text-only fallback');
-      // Render compact sponsored bar with title and CTA
-      return Align(
-        alignment: Alignment.topLeft,
-        child: Container(
-          width: double.infinity,
-          height: 50,
-          margin: const EdgeInsets.only(top: 1),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _handleAdClick(context),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.adData['title'] ?? 'Sponsored',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade600.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.white24, width: 0.5),
-                      ),
-                      child: const Text(
-                        'Learn More',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+    // **MODIFIED: Removed text-only fallback to maintain consistent layout**
+    // The widget will now always render the standard image-based layout, 
+    // ensuring elements like the 'Sponsored' label never disappear and 
+    // the layout remains stable even if the image fails or is missing.
 
     // **NEW: Track ad impression when widget is built**
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -261,17 +201,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                     errorBuilder: (context, error, stackTrace) {
                                       AppLogger.log(
                                           '❌ BannerAdWidget: Failed to load image: $imageUrl, Error: $error');
-                                      // **FIX: Hide entire widget when image fails to prevent grey overlay**
-                                      if (mounted) {
-                                        WidgetsBinding.instance
-                                            .addPostFrameCallback((_) {
-                                          if (mounted) {
-                                            setState(() {
-                                              _imageLoadFailed = true;
-                                            });
-                                          }
-                                        });
-                                      }
                                       return Container(
                                         color: Colors.white10,
                                         child: const Center(

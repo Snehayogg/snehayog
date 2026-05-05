@@ -1,38 +1,68 @@
-# Node.js
-node_modules
-npm-debug.log
-yarn-error.log
-
-# Frontend (Flutter/Web)
-frontend/
-.dart_tool/
-.pub-cache/
-.pub/
-build/
-
-# Local Environment
-.env
-.env.local
-.env.production
-.env.development
+# .dockerignore - Improved for smaller build context
 
 # Version Control
-.git
+.git/
 .gitignore
+.github/
 
-# IDEs
+# Node.js - Global Ignore
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.eslintcache
+package-lock.json (Keep for build? No, Dockerfile uses its own npm ci)
+# Wait, Dockerfile COPY backend/package*.json ./
+# So the root package-lock.json isn't needed.
+
+# Frontend & External Projects (The biggest source of bloat)
+frontend/
+packages/
+workers/
+terraform/
+**/build/
+**/dist/
+**/.dart_tool/
+**/.pub-cache/
+**/.pub/
+**/ios/.symlinks/
+**/ios/Pods/
+**/.flutter-plugins*
+**/*.iml
+
+# IDEs & System Files
 .vscode/
 .idea/
+.continue/
+.claude/
+.agents/
+.gemini/
+.DS_Store
+Thumbs.db
 
-# Backend Temporary Files
-backend/logs/
-backend/temp/
-backend/uploads/
-backend/node_modules/
+# Temporary Files, Logs & Data
+**/logs/
+**/*.log
+**/temp/
+**/uploads/
+**/tmp/
+**/cache/
+**/.cache/
+**/scratch/
 temp_raw_downloads/
 temp_social_uploads/
+analyzer_output.txt
+final_analyze.txt
 
-# Deployment
+# Local Configuration & Secrets
+.env*
+**/*.pem
+**/*.key
+serviceAccountKey.json
+
+# Deployment Configs (Excluded from context to prevent accidental inclusion)
 fly.toml
 Dockerfile
 .dockerignore
+nixpacks.toml
