@@ -812,66 +812,6 @@ router.post('/game', verifyToken, upload.single('game'), async (req, res) => {
   }
 });
 
-// **NEW: Get video processing status endpoint**
-router.get('/video/:videoId/status', verifyToken, async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    const userId = req.user.id;
-
-    // Validate video ID
-    if (!videoId || !mongoose.Types.ObjectId.isValid(videoId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid video ID'
-      });
-    }
-
-    // Find the video
-    const video = await Video.findById(videoId);
-    if (!video) {
-      return res.status(404).json({
-        success: false,
-        error: 'Video not found'
-      });
-    }
-
-    // **FIX: Compare against the user's ObjectId, not Google ID**
-    const owner = await User.findOne({ googleId: userId });
-    if (!owner || video.uploader.toString() !== owner._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
-    }
-
-    // Return processing status
-    const statusResponse = {
-      success: true,
-      video: {
-        _id: video._id,
-        videoName: video.videoName,
-        processingStatus: video.processingStatus || 'pending',
-        processingProgress: video.processingProgress || 0,
-        processingError: video.processingError || null,
-        videoUrl: video.videoUrl || null,
-        thumbnailUrl: video.thumbnailUrl || null,
-        uploadedAt: video.uploadedAt,
-        estimatedTime: '2-5 minutes depending on video length'
-      }
-    };
-
-    res.json(statusResponse);
-
-  } catch (error) {
-    console.error('❌ Error getting video status:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get video status',
-      details: error.message
-    });
-  }
-});
-
 // **MODERATION WEBHOOK REMOVED - Using Local Moderation Instead**
 
 export default router;

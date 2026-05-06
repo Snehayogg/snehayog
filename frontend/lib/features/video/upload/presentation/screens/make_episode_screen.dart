@@ -256,145 +256,166 @@ class _MakeEpisodeScreenState extends ConsumerState<MakeEpisodeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Make a Episode'),
-      ),
-      body: SafeArea(
-        child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Create a Series',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+      body: CustomScrollView(
+        slivers: [
+          const SliverAppBar(
+            title: Text('Make a Episode'),
+            floating: true,
+            snap: true,
+          ),
+          SliverToBoxAdapter(
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Create a Series',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select multiple episodes to upload as a sequence.',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Select multiple episodes to upload as a sequence.',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 12),
-            
-            // Video List
-            Expanded(
-              child: _selectedEpisodes.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+          ),
+          // Video List
+          if (_selectedEpisodes.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.video_library_outlined, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text('No episodes selected', style: TextStyle(color: Colors.grey[500])),
+                  ],
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final episode = _selectedEpisodes[index];
+                  final isUploadingThis = _isUploading && _currentUploadIndex == index;
+                  final isCompleted = _isUploading && _currentUploadIndex > index;
+                  
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: ListTile(
+                      leading: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: const BoxDecoration(
+                          color: Colors.black12,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: isCompleted 
+                          ? const Icon(Icons.check, color: Colors.green, size: 16)
+                          : Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                      // **NEW: Editable title display**
+                      title: Text(
+                         episode.title,
+                         style: const TextStyle(fontWeight: FontWeight.w600),
+                         maxLines: 1,
+                         overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text('Episode ${index + 1}'),
+                      // **NEW: Edit button added to trailing**
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.video_library_outlined, size: 64, color: Colors.grey[300]),
-                          const SizedBox(height: 16),
-                          Text('No episodes selected', style: TextStyle(color: Colors.grey[500])),
+                          if (!_isUploading)
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _editTitle(index),
+                              tooltip: 'Edit Title',
+                            ),
+                            
+                          if (!_isUploading)
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                              onPressed: () => _removeVideo(index),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            )
+                          else if (isUploadingThis) 
+                            const SizedBox(
+                              width: 20, 
+                              height: 20, 
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                         ],
                       ),
-                    )
-                  : ListView.separated(
-                      itemCount: _selectedEpisodes.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final episode = _selectedEpisodes[index];
-                        final isUploadingThis = _isUploading && _currentUploadIndex == index;
-                        final isCompleted = _isUploading && _currentUploadIndex > index;
-                        
-                        return ListTile(
-                          leading: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: const BoxDecoration(
-                              color: Colors.black12,
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: isCompleted 
-                              ? const Icon(Icons.check, color: Colors.green, size: 16)
-                              : Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          ),
-                          // **NEW: Editable title display**
-                          title: Text(
-                             episode.title,
-                             style: const TextStyle(fontWeight: FontWeight.w600),
-                             maxLines: 1,
-                             overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text('Episode ${index + 1}'),
-                          // **NEW: Edit button added to trailing**
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (!_isUploading)
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.blue),
-                                  onPressed: () => _editTitle(index),
-                                  tooltip: 'Edit Title',
-                                ),
-                                
-                              if (!_isUploading)
-                                IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                                  onPressed: () => _removeVideo(index),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                )
-                              else if (isUploadingThis) 
-                                const SizedBox(
-                                  width: 20, 
-                                  height: 20, 
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
                     ),
+                  );
+                },
+                childCount: _selectedEpisodes.length,
+              ),
             ),
-            
-            const SizedBox(height: 16),
-            
-            if (_isUploading)
-              Column(
+          // Bottom actions
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
                 children: [
-                   LinearProgressIndicator(value: _currentUploadIndex / _selectedEpisodes.length),
-                   const SizedBox(height: 8),
-                   Text(_currentStatus, style: const TextStyle(fontSize: 12)),
-                   const SizedBox(height: 16),
+                  if (_isUploading)
+                    Column(
+                      children: [
+                         LinearProgressIndicator(value: _currentUploadIndex / _selectedEpisodes.length),
+                         const SizedBox(height: 8),
+                         Text(_currentStatus, style: const TextStyle(fontSize: 12)),
+                         const SizedBox(height: 16),
+                      ],
+                    ),
+                  // Actions
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          onPressed: _pickVideos,
+                          isDisabled: _isUploading,
+                          icon: const Icon(Icons.add_photo_alternate),
+                          label: 'Select Episodes',
+                          variant: AppButtonVariant.primary,
+                          isFullWidth: true,
+                        ),
+                      ),
+                      if (_selectedEpisodes.isNotEmpty) ...[
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: AppButton(
+                            onPressed: _uploadOneByOne,
+                            isDisabled: _isUploading,
+                            icon: const Icon(Icons.cloud_upload),
+                            label: 'Upload All',
+                            variant: AppButtonVariant.primary,
+                            isFullWidth: true,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
-
-            // Actions
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    onPressed: _pickVideos,
-                    isDisabled: _isUploading,
-                    icon: const Icon(Icons.add_photo_alternate),
-                    label: 'Select Episodes',
-                    variant: AppButtonVariant.primary,
-                    isFullWidth: true,
-                  ),
-                ),
-                if (_selectedEpisodes.isNotEmpty) ...[
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: AppButton(
-                      onPressed: _uploadOneByOne,
-                      isDisabled: _isUploading,
-                      icon: const Icon(Icons.cloud_upload),
-                      label: 'Upload All',
-                      variant: AppButtonVariant.primary,
-                      isFullWidth: true,
-                    ),
-                  ),
-                ],
-              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    ),
     );
   }
 }

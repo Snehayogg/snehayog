@@ -100,28 +100,34 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: const Text('Manage Quizzes', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _saveAndExit,
-            child: const Text('SAVE', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: const Text('Manage Quizzes', style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              TextButton(
+                onPressed: _saveAndExit,
+                child: const Text('SAVE', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildInfoBanner(),
-          Expanded(
-            child: _quizzes.isEmpty ? _buildEmptyState() : _buildQuizList(),
-          ),
+          SliverToBoxAdapter(child: _buildInfoBanner()),
+          if (_quizzes.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyState(),
+            )
+          else
+            SliverToBoxAdapter(child: _buildQuizList()),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

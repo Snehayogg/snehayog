@@ -195,7 +195,21 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     if (_hasTrackedImpression) return;
 
     try {
-      await _carouselAdService.trackImpression(widget.carouselAd.id);
+      final userData = await _authService.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'] ?? '';
+      
+      if (widget.videoId != null && widget.videoId!.isNotEmpty && userId.isNotEmpty) {
+        // Use the robust video-specific tracking service
+        await _adImpressionService.trackCarouselAdImpression(
+          videoId: widget.videoId!,
+          adId: widget.carouselAd.id,
+          userId: userId,
+          scrollPosition: _currentSlideIndex,
+        );
+      } else {
+        // Fallback to global impression tracking
+        await _carouselAdService.trackImpression(widget.carouselAd.id);
+      }
       _hasTrackedImpression = true;
     } catch (e) {
       AppLogger.log('❌ Error tracking carousel ad impression: $e');
@@ -206,7 +220,19 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     if (_hasTrackedClick) return;
 
     try {
-      await _carouselAdService.trackClick(widget.carouselAd.id);
+      final userData = await _authService.getUserData();
+      final userId = userData?['googleId'] ?? userData?['id'] ?? '';
+
+      if (widget.videoId != null && widget.videoId!.isNotEmpty && userId.isNotEmpty) {
+        await _adImpressionService.trackCarouselAdClick(
+          videoId: widget.videoId!,
+          adId: widget.carouselAd.id,
+          userId: userId,
+        );
+      } else {
+        // Fallback to global click tracking
+        await _carouselAdService.trackClick(widget.carouselAd.id);
+      }
       _hasTrackedClick = true;
     } catch (e) {
       AppLogger.log('❌ Error tracking carousel ad click: $e');

@@ -414,35 +414,27 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: Text(
-          AppText.get('ad_create_title'),
-          style: AppTypography.headlineSmall.copyWith(
-            fontWeight: AppTypography.weightBold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        backgroundColor: AppColors.backgroundPrimary,
-        centerTitle: true,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.primary),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
       body: Consumer(
         builder: (context, ref, _) {
           final authController = ref.watch(googleSignInProvider);
           final isSignedIn = authController.isSignedIn;
 
           if (!isSignedIn) {
-            return ProfileSignInView(
-              onGoogleSignIn: () async {
-                final user = await authController.signIn();
-                if (user != null) {
-                  await LogoutService.refreshAllState(ref);
-                }
-              },
+            return CustomScrollView(
+              slivers: [
+                _buildSliverAppBar(),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: ProfileSignInView(
+                    onGoogleSignIn: () async {
+                      final user = await authController.signIn();
+                      if (user != null) {
+                        await LogoutService.refreshAllState(ref);
+                      }
+                    },
+                  ),
+                ),
+              ],
             );
           }
 
@@ -452,13 +444,37 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
     );
   }
 
+  SliverAppBar _buildSliverAppBar() {
+    return SliverAppBar(
+      title: Text(
+        AppText.get('ad_create_title'),
+        style: AppTypography.headlineSmall.copyWith(
+          fontWeight: AppTypography.weightBold,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      backgroundColor: AppColors.backgroundPrimary,
+      centerTitle: true,
+      elevation: 0,
+      floating: true,
+      snap: true,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: AppColors.primary),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+    );
+  }
+
   Widget _buildCreateAdForm() {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            children: [
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        _buildSliverAppBar(),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
               // Success/Error Messages
               if (_successMessage != null) _buildSuccessMessage(),
               if (_errorMessage != null) _buildErrorMessage(),
@@ -565,25 +581,20 @@ class _CreateAdScreenRefactoredState extends ConsumerState<CreateAdScreenRefacto
               ),
               _buildLegalAgreement(),
               _buildValidationSummary(),
-              const SizedBox(height: 100),
-            ],
-          ),
-        ),
 
-        // Bottom Fixed Submit Area
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.backgroundPrimary,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))],
-          ),
-          child: AppButton(
-            onPressed: _isLoading ? null : _submitAd,
-            icon: const Icon(Icons.flash_on_rounded, color: Colors.white),
-            label: _isLoading ? AppText.get('btn_creating_ad') : AppText.get('btn_create_ad'),
-            variant: AppButtonVariant.primary,
-            isLoading: _isLoading,
-            isFullWidth: true,
+              // Submit Button (scrolls with content)
+              Padding(
+                padding: const EdgeInsets.only(top: 16, bottom: 32),
+                child: AppButton(
+                  onPressed: _isLoading ? null : _submitAd,
+                  icon: const Icon(Icons.flash_on_rounded, color: Colors.white),
+                  label: _isLoading ? AppText.get('btn_creating_ad') : AppText.get('btn_create_ad'),
+                  variant: AppButtonVariant.primary,
+                  isLoading: _isLoading,
+                  isFullWidth: true,
+                ),
+              ),
+            ]),
           ),
         ),
       ],

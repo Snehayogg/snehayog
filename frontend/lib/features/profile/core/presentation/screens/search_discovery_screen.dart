@@ -121,14 +121,23 @@ class _SearchDiscoveryScreenState extends State<SearchDiscoveryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        automaticallyImplyLeading: false, // **BACK BUTTON REMOVAL**
-        title: _buildSearchBar(),
-        titleSpacing: 16, // Add some padding back since leading is gone
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+            automaticallyImplyLeading: false, // **BACK BUTTON REMOVAL**
+            title: _buildSearchBar(),
+            titleSpacing: 16, // Add some padding back since leading is gone
+          ),
+          SliverFillRemaining(
+            hasScrollBody: true,
+            child: _buildBody(),
+          ),
+        ],
       ),
-      body: _buildBody(),
     );
   }
 

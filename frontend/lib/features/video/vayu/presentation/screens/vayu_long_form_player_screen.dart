@@ -853,7 +853,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     try {
       final ads = await _activeAdsService.fetchActiveAds();
       final List? banner = ads['banner'] as List?;
-      if (mounted && banner != null && banner.isNotEmpty) setState(() => _bannerAdsByIndex[index] = Map<String, dynamic>.from(banner.first));
+      if (mounted && banner != null && banner.isNotEmpty) {
+        setState(() => _bannerAdsByIndex[index] = Map<String, dynamic>.from(banner[index % banner.length]));
+      }
     } catch (_) {}
   }
 
@@ -982,6 +984,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final v = _videos[index];
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     return VayuFeedItem(
+      key: ValueKey(v.id),
       index: index, video: v, controller: _controllers[index], chewie: _chewieControllers[index], isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: _showControls, isControlsLocked: _isControlsLocked, showScrubbingOverlay: _showScrubbingOverlay,
       onToggleFullScreen: _toggleFullScreen, onOpenExternalPlayer: () => _openInExternalPlayer(v), onHandleTap: _handleTap, onDoubleTapToSeek: _handleDoubleTapToSeek, onHorizontalDragEnd: _handleHorizontalDragEnd, onVerticalDragUpdate: _handleVerticalDragUpdate, onVerticalDragEnd: () {}, onUnifiedHorizontalDrag: _handleUnifiedHorizontalDrag,
       onScrollingLock: (l) => setState(() => _isScrollingLocked = l), onShowSnackBar: _showSnackBar, buildAdSection: _buildAdSection, buildVideoInfo: (_) => const SizedBox.shrink(), buildChannelRow: (_) => const SizedBox.shrink(), buildScrubbingOverlay: _buildScrubbingOverlay, buildCustomControls: (_) => const SizedBox.shrink(), buildDubbingProgress: (_) => const SizedBox.shrink(), formatDuration: _formatDuration, onQuizDismiss: () => setState(() => _activeQuiz = null), activeQuiz: index == _currentIndex ? _activeQuiz : null,

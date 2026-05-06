@@ -94,4 +94,23 @@ router.get('/analytics/:adId', asyncHandler(async (req, res) => {
   }
 }));
 
+// GET /api/ads/analytics/:adId/video-breakdown - Get granular breakdown of ad performance per video
+router.get('/analytics/:adId/video-breakdown', asyncHandler(async (req, res) => {
+  try {
+    const { adId } = req.params;
+    
+    if (!adId) {
+      return res.status(400).json({ error: 'Ad ID is required' });
+    }
+    
+    const breakdown = await adService.getAdVideoBreakdown(adId);
+    res.json(breakdown);
+  } catch (error) {
+    console.error('❌ Analytics Breakdown Route Error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to get ad video breakdown' 
+    });
+  }
+}));
+
 export default router;

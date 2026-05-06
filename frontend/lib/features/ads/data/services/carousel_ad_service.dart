@@ -304,7 +304,7 @@ class CarouselAdService {
   Future<bool> trackImpression(String adId) async {
     try {
       final response = await httpClientService.post(
-        Uri.parse('$_baseUrl/ads/carousel/$adId/impression'),
+        Uri.parse('$_baseUrl/api/ads/carousel/$adId/impression'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -322,7 +322,7 @@ class CarouselAdService {
   Future<bool> trackClick(String adId) async {
     try {
       final response = await httpClientService.post(
-        Uri.parse('$_baseUrl/ads/carousel/$adId/click'),
+        Uri.parse('$_baseUrl/api/ads/carousel/$adId/click'),
         headers: {
           'Content-Type': 'application/json',
         },

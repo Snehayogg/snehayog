@@ -170,10 +170,17 @@ class FeedQueueService {
       queuedIds.forEach(id => seenVideoIds.add(id));
       recentServed.forEach(id => seenVideoIds.add(id));
 
-      const candidates = await Video.find({
-          processingStatus: 'completed', videoType,
-          uploader: uploaderObjectId ? { $ne: uploaderObjectId } : { $exists: true }
-      }).sort({ finalScore: -1, createdAt: -1 }).limit(300).select('_id uploader createdAt score finalScore videoType videoHash vectorEmbedding').lean();
+      const matchQuery = {
+          processingStatus: 'completed', 
+          videoType,
+          uploader: uploaderObjectId ? { $ne: uploaderObjectId } : { $exists: true },
+          isSubscriberOnly: { $ne: true } // STRICT: Never show exclusive content in the main feed
+      };
+
+      const candidates = await Video.find(matchQuery)
+        .sort({ finalScore: -1, createdAt: -1 })
+        .limit(300)
+        .select('_id uploader createdAt score finalScore videoType videoHash vectorEmbedding').lean();
 
       if (candidates.length > 0) {
           const memFiltered = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
@@ -242,6 +249,7 @@ class FeedQueueService {
       const matchStage = { 
         processingStatus: 'completed',
         videoType,
+        isSubscriberOnly: { $ne: true }, // STRICT: Never show exclusive content in fallback feed
         _id: { $nin: Array.from(excludeSet).map(id => { try { return new mongoose.Types.ObjectId(id); } catch(e) { return null; } }).filter(Boolean) }
       };
 
@@ -263,7 +271,9 @@ class FeedQueueService {
           const ordered = RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 3 });
           finalIds.push(...ordered.slice(0, count).map(v => v._id.toString()));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('⚠️ FeedQueue: getFallbackIds Strategy 1 failed:', e.message);
+    }
 
     // Strategy 2: LRU Fallback
     if (finalIds.length < count && userId && userId !== 'anon') {

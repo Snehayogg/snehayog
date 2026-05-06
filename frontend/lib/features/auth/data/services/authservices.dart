@@ -1216,7 +1216,7 @@ class AuthService {
       try {
         googleSilentSignInAttempted = true;
         AppLogger.log('🔄 Attempting Google Silent Sign-In...');
-        googleToken = await _reauthenticateWithGoogle();
+         googleToken = await _reauthenticateWithGoogle();
         AppLogger.log('🔄 Google Silent Sign-In result: ${googleToken != null ? "Success" : "Failed"}');
       } catch (e) {
         AppLogger.log('⚠️ Google Silent Sign-In error (likely network): $e');

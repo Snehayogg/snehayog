@@ -116,26 +116,32 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        title: Text(
-          'Subscriptions',
-          style: AppTypography.titleLarge.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+            title: Text(
+              'Subscriptions',
+              style: AppTypography.titleLarge.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
+                onPressed: () => _loadVideos(refresh: true),
+                tooltip: 'Refresh',
+              ),
+              SizedBox(width: AppSpacing.spacing2),
+            ],
           ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
-            onPressed: () => _loadVideos(refresh: true),
-            tooltip: 'Refresh',
-          ),
-          SizedBox(width: AppSpacing.spacing2),
+          ..._buildBodySlivers(isSignedIn),
         ],
       ),
-      body: _buildBody(isSignedIn),
     );
   }
 
@@ -196,6 +202,81 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
         },
       ),
     );
+  }
+
+  List<Widget> _buildBodySlivers(bool isSignedIn) {
+    if (!isSignedIn) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _buildSignInPrompt(),
+        ),
+      ];
+    }
+
+    if (_isLoading && _videos.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _buildShimmerList(),
+        ),
+      ];
+    }
+
+    if (_errorMessage != null && _videos.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline,
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    size: 60),
+                SizedBox(height: AppSpacing.spacing4),
+                Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+                SizedBox(height: AppSpacing.spacing6),
+                AppButton(
+                  onPressed: () => _loadVideos(refresh: true),
+                  label: 'Try Again',
+                  variant: AppButtonVariant.outline,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (_videos.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _buildEmptyState(),
+        ),
+      ];
+    }
+
+    return [
+      SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
+              child: _buildVideoCard(index),
+            );
+          },
+          childCount: _videos.length,
+        ),
+      ),
+    ];
   }
 
   Widget _buildSignInPrompt() {
@@ -315,35 +396,6 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                       child: const Icon(Icons.broken_image_outlined,
                           color: Colors.white10, size: 32),
                     ),
-                  ),
-                ),
-              ),
-              // Subscriber-only badge
-              Positioned(
-                top: AppSpacing.spacing2,
-                left: AppSpacing.spacing2,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.lock_outline,
-                          color: Colors.white, size: 12),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Subscriber',
-                        style: AppTypography.labelSmall.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),

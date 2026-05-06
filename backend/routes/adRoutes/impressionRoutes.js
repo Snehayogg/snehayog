@@ -403,6 +403,9 @@ router.post('/impressions/banner/view', async (req, res) => {
         
         // **NEW: Update real-time stats**
         if (impression.creatorId) {
+          // **NEW: Increment views on AdCreative**
+          await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
+          
           await updateMonthlyStats(impression.creatorId, 'banner');
         }
       } else {
@@ -440,6 +443,9 @@ router.post('/impressions/banner/view', async (req, res) => {
       });
       
       // **NEW: Update real-time stats**
+      // **NEW: Increment views on AdCreative**
+      await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
+      
       await updateMonthlyStats(creatorId, 'banner');
       // console.log(`✅ New banner ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     }
@@ -532,6 +538,9 @@ router.post('/impressions/carousel/view', async (req, res) => {
         
         // **NEW: Update real-time stats**
         if (impression.creatorId) {
+          // **NEW: Increment views on AdCreative**
+          await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
+          
           await updateMonthlyStats(impression.creatorId, 'carousel');
         }
       } else {
@@ -568,6 +577,9 @@ router.post('/impressions/carousel/view', async (req, res) => {
       });
       
       // **NEW: Update real-time stats**
+      // **NEW: Increment views on AdCreative**
+      await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
+      
       await updateMonthlyStats(creatorId, 'carousel');
       // console.log(`✅ New carousel ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
     }

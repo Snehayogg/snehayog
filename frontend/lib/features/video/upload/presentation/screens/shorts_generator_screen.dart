@@ -334,38 +334,46 @@ class _ShortsGeneratorScreenState extends ConsumerState<ShortsGeneratorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text("Shorts Generator", style: TextStyle(fontWeight: FontWeight.bold)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 32),
-            _buildFileSelector(),
-            if (_selectedFile != null) ...[
-              const SizedBox(height: 32),
-              _buildOptions(),
-              const SizedBox(height: 40),
-              _buildActionButtons(),
-            ],
-            const SizedBox(height: 40),
-            if (_isProcessing) ...[
-              _buildProgressIndicator(),
-              const SizedBox(height: 24),
-              _buildProcessingNote(),
-            ],
-            if (_status == 'completed' && _clipUrl != null) _buildResultView(),
-          ],
-        ),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+            title: const Text("Shorts Generator", style: TextStyle(fontWeight: FontWeight.bold)),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 32),
+                  _buildFileSelector(),
+                  if (_selectedFile != null) ...[
+                    const SizedBox(height: 32),
+                    _buildOptions(),
+                    const SizedBox(height: 40),
+                    _buildActionButtons(),
+                  ],
+                  const SizedBox(height: 40),
+                  if (_isProcessing) ...[
+                    _buildProgressIndicator(),
+                    const SizedBox(height: 24),
+                    _buildProcessingNote(),
+                  ],
+                  if (_status == 'completed' && _clipUrl != null) _buildResultView(),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

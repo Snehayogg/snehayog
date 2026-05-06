@@ -166,112 +166,124 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: Text(
-          'Edit Video Details',
-          style: TextStyle(
-            fontSize: AppTypography.fontSizeLG,
-            fontWeight: AppTypography.weightSemiBold,
-          ),
-        ),
-        backgroundColor: AppColors.backgroundPrimary,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          if (_isSaving)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: SizedBox(
-                   width: 20,
-                   height: 20,
-                   child: CircularProgressIndicator(
-                     strokeWidth: 2,
-                     color: AppColors.primary,
-                   ),
-                ),
-              ),
-            )
-          else
-            TextButton(
-              onPressed: _saveChanges,
-              child: const Text(
-                'SAVE',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: AppTypography.weightBold,
-                ),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: Text(
+              'Edit Video Details',
+              style: TextStyle(
+                fontSize: AppTypography.fontSizeLG,
+                fontWeight: AppTypography.weightSemiBold,
               ),
             ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-        children: [
-          // Video Main Info Section
-          _buildSettingRow(
-            icon: Icons.info_outline_rounded,
-            title: 'Basic Information',
-            subtitle: _titleController.text.isNotEmpty 
-                ? _titleController.text 
-                : 'Title, Link, and Tags',
-            onTap: _showDetailsEditor,
-          ),
-          
-          AppSpacing.vSpace8,
-
-          // Series / Episodes Section
-          _buildSettingRow(
-            icon: Icons.layers_rounded,
-            title: 'Series & Episodes',
-            subtitle: _seriesId != null && _seriesId!.isNotEmpty
-                ? 'Part of a series • ${_episodes.length} episodes'
-                : 'Manage series and episodes',
-            onTap: _showSeriesEditor,
-          ),
-
-          AppSpacing.vSpace8,
-
-          // Quiz Management (Separate Screen as requested)
-          _buildSettingRow(
-            icon: Icons.add_task_rounded,
-            title: 'Interactive Quizzes',
-            subtitle: _quizzes.isEmpty 
-                ? 'Add questions to the video' 
-                : '${_quizzes.length} quizzes added',
-            onTap: () async {
-              final List<QuizModel>? result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CreateQuizScreen(
-                    initialQuizzes: _quizzes,
-                    videoDurationInSeconds: widget.video.duration.inSeconds.toDouble(),
+            backgroundColor: AppColors.backgroundPrimary,
+            foregroundColor: AppColors.textPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            actions: [
+              if (_isSaving)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: SizedBox(
+                       width: 20,
+                       height: 20,
+                       child: CircularProgressIndicator(
+                         strokeWidth: 2,
+                         color: AppColors.primary,
+                       ),
+                    ),
+                  ),
+                )
+              else
+                TextButton(
+                  onPressed: _saveChanges,
+                  child: const Text(
+                    'SAVE',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: AppTypography.weightBold,
+                    ),
                   ),
                 ),
-              );
-              if (result != null) {
-                setState(() {
-                  _quizzes = result;
-                });
-              }
-            },
+            ],
           ),
-          
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 24.0, left: 4.0),
-              child: Text(
-                '⚠️ $_error',
-                style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Column(
+                  children: [
+                    // Video Main Info Section
+                    _buildSettingRow(
+                      icon: Icons.info_outline_rounded,
+                      title: 'Basic Information',
+                      subtitle: _titleController.text.isNotEmpty 
+                          ? _titleController.text 
+                          : 'Title, Link, and Tags',
+                      onTap: _showDetailsEditor,
+                    ),
+                    
+                    AppSpacing.vSpace8,
+
+                    // Series / Episodes Section
+                    _buildSettingRow(
+                      icon: Icons.layers_rounded,
+                      title: 'Series & Episodes',
+                      subtitle: _seriesId != null && _seriesId!.isNotEmpty
+                          ? 'Part of a series • ${_episodes.length} episodes'
+                          : 'Manage series and episodes',
+                      onTap: _showSeriesEditor,
+                    ),
+
+                    AppSpacing.vSpace8,
+
+                    // Quiz Management (Separate Screen as requested)
+                    _buildSettingRow(
+                      icon: Icons.add_task_rounded,
+                      title: 'Interactive Quizzes',
+                      subtitle: _quizzes.isEmpty 
+                          ? 'Add questions to the video' 
+                          : '${_quizzes.length} quizzes added',
+                      onTap: () async {
+                        final List<QuizModel>? result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CreateQuizScreen(
+                              initialQuizzes: _quizzes,
+                              videoDurationInSeconds: widget.video.duration.inSeconds.toDouble(),
+                            ),
+                          ),
+                        );
+                        if (result != null) {
+                          setState(() {
+                            _quizzes = result;
+                          });
+                        }
+                      },
+                    ),
+                    
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 24.0, left: 4.0),
+                        child: Text(
+                          '⚠️ $_error',
+                          style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      
+                    AppSpacing.vSpace32,
+                  ],
+                ),
               ),
-            ),
-            
-          AppSpacing.vSpace32,
+            ]),
+          ),
         ],
       ),
     );

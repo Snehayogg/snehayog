@@ -486,6 +486,25 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 child: _buildVideoPlayer(controller, isActive, index, video),
               ),
 
+            // **NEW: Black semi-transparent overlay when paused**
+            Positioned.fill(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _getOrCreateNotifier<bool>(_userPausedVN, videoId, false),
+                builder: (context, isUserPaused, _) {
+                  return IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: isUserPaused ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
@@ -527,6 +546,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 ),
               ),
             ),
+
             Positioned.fill(
               child: IgnorePointer(
                 child: ValueListenableBuilder<bool>(
@@ -845,8 +865,26 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           _controllerPool[videoId]!.play();
         }
       },
-      onClick: () {
+      onClick: () async {
         AppLogger.log('🖱️ Banner ad clicked on video $index');
+        if (index < _videos.length && adData != null) {
+          final video = _videos[index];
+          final adId = adData['_id'] ?? adData['id'];
+          final userData = await _authService.getUserData();
+          
+          if (adId != null && userData != null && userData['id'] != video.uploader.id) {
+            try {
+              await _adImpressionService.trackAdClick(
+                videoId: video.id,
+                adId: adId.toString(),
+                userId: userData['id'],
+                adType: 'banner',
+              );
+            } catch (e) {
+              AppLogger.log('❌ Error tracking banner ad click: $e');
+            }
+          }
+        }
       },
       onImpression: () async {
         if (index < _videos.length && adData != null) {
@@ -1747,11 +1785,34 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   /// **LONG-PRESS AD OVERLAY: Show carousel ad image on long press**
-  void _showLongPressAd(int index) {
+  void _showLongPressAd(int index) async {
     final carouselAd = _carouselAdManager.getCarouselAdForIndex(index);
     if (carouselAd == null || carouselAd.slides.isEmpty) return;
 
     _showLongPressAdOverlayVN.value = true;
+
+    // **NEW: Track popup ad impression**
+    if (index < _videos.length) {
+      final video = _videos[index];
+      final adId = carouselAd.id;
+      final userData = await _authService.getUserData();
+
+      if (userData != null) {
+        // Prevent self-impressions
+        if (userData['id'] != video.uploader.id) {
+          try {
+            await _adImpressionService.trackCarouselAdImpression(
+              videoId: video.id,
+              adId: adId,
+              userId: userData['id'],
+              scrollPosition: 0, // Popup is considered position 0
+            );
+          } catch (e) {
+            AppLogger.log('❌ Error tracking popup ad impression: $e');
+          }
+        }
+      }
+    }
 
     // Auto-hide after 3 seconds
     _longPressAdAutoHideTimer?.cancel();
@@ -1806,8 +1867,25 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   );
                 },
                 child: GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     _hideLongPressAdOverlay();
+
+                    // **NEW: Track popup ad click**
+                    if (index < _videos.length) {
+                      final video = _videos[index];
+                      final userData = await _authService.getUserData();
+                      if (userData != null && userData['id'] != video.uploader.id) {
+                        try {
+                          await _adImpressionService.trackCarouselAdClick(
+                            videoId: video.id,
+                            adId: carouselAd.id,
+                            userId: userData['id'],
+                          );
+                        } catch (e) {
+                          AppLogger.log('❌ Error tracking popup ad click: $e');
+                        }
+                      }
+                    }
 
                     // Prioritize external navigation if URL is available
                     if (carouselAd.callToActionUrl.isNotEmpty) {

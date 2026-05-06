@@ -5,6 +5,7 @@ import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/quiz/presentation/screens/create_quiz_screen.dart';
 import 'package:vayug/features/profile/core/data/services/user_service.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:vayug/features/video/upload/presentation/screens/subscriber_selection_screen.dart';
 
 class UploadAdvancedSettingsScreen extends StatefulWidget {
   final TextEditingController linkController;
@@ -41,121 +42,118 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: const Text('Advanced Settings', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildSettingRow(
-                  icon: Icons.help_outline_rounded,
-                  title: 'Quizzes',
-                  subtitle: 'Add interactive questions',
-                  trailing: ValueListenableBuilder<List<QuizModel>>(
-                    valueListenable: widget.quizzes,
-                    builder: (context, current, _) {
-                      return Text(
-                        current.isEmpty ? 'None' : '${current.length} added',
-                        style: TextStyle(
-                          color: current.isEmpty ? AppColors.textTertiary : AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      );
-                    },
-                  ),
-                  onTap: () async {
-                    final List<QuizModel>? result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CreateQuizScreen(
-                          initialQuizzes: widget.quizzes.value,
-                          videoDurationInSeconds: widget.videoDuration,
-                        ),
-                      ),
-                    );
-                    if (result != null) widget.quizzes.value = result;
-                  },
-                ),
-
-                _buildSettingRow(
-                  icon: Icons.tag_rounded,
-                  title: 'Discovery Tags',
-                  subtitle: 'Help people find your video',
-                  trailing: ValueListenableBuilder<List<String>>(
-                    valueListenable: widget.tags,
-                    builder: (context, current, _) {
-                      return Text(
-                        current.isEmpty ? 'Add' : '${current.length} tags',
-                        style: TextStyle(
-                          color: current.isEmpty ? AppColors.textTertiary : AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      );
-                    },
-                  ),
-                  onTap: () => _showAddTagsBottomSheet(context),
-                ),
-                
-                _buildSettingRow(
-                  icon: Icons.link_rounded,
-                  title: 'Promotional Link',
-                  subtitle: 'Website or purchase link',
-                  trailing: AnimatedBuilder(
-                    animation: widget.linkController,
-                    builder: (context, _) {
-                      final hasLink = widget.linkController.text.isNotEmpty;
-                      return Text(
-                        hasLink ? 'Added' : 'None',
-                        style: TextStyle(
-                          color: !hasLink ? AppColors.textTertiary : AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      );
-                    },
-                  ),
-                  onTap: () => _showLinkEditor(context),
-                ),
-
-                _buildSettingRow(
-                  icon: Icons.video_collection_outlined,
-                  title: 'Make an Episode',
-                  subtitle: 'Add to a series or playlist',
-                  onTap: widget.onMakeEpisode,
-                ),
-
-                _buildSubscriberOnlyTile(),
-
-                _buildCrossPostingTile(),
-                
-                const SizedBox(height: 40),
-              ],
-            ),
+      body: CustomScrollView(
+        slivers: [
+          const SliverAppBar(
+            title: Text('Advanced Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+            centerTitle: true,
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
           ),
-          
-          Container(
-            padding: const EdgeInsets.all(24.0),
-            decoration: BoxDecoration(
-              color: AppColors.backgroundPrimary,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    _buildSettingRow(
+                      icon: Icons.help_outline_rounded,
+                      title: 'Quizzes',
+                      subtitle: 'Add interactive questions',
+                      trailing: ValueListenableBuilder<List<QuizModel>>(
+                        valueListenable: widget.quizzes,
+                        builder: (context, current, _) {
+                          return Text(
+                            current.isEmpty ? 'None' : '${current.length} added',
+                            style: TextStyle(
+                              color: current.isEmpty ? AppColors.textTertiary : AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          );
+                        },
+                      ),
+                      onTap: () async {
+                        final List<QuizModel>? result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CreateQuizScreen(
+                              initialQuizzes: widget.quizzes.value,
+                              videoDurationInSeconds: widget.videoDuration,
+                            ),
+                          ),
+                        );
+                        if (result != null) widget.quizzes.value = result;
+                      },
+                    ),
+
+                    _buildSettingRow(
+                      icon: Icons.tag_rounded,
+                      title: 'Discovery Tags',
+                      subtitle: 'Help people find your video',
+                      trailing: ValueListenableBuilder<List<String>>(
+                        valueListenable: widget.tags,
+                        builder: (context, current, _) {
+                          return Text(
+                            current.isEmpty ? 'Add' : '${current.length} tags',
+                            style: TextStyle(
+                              color: current.isEmpty ? AppColors.textTertiary : AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
+                      ),
+                      onTap: () => _showAddTagsBottomSheet(context),
+                    ),
+                    
+                    _buildSettingRow(
+                      icon: Icons.link_rounded,
+                      title: 'Promotional Link',
+                      subtitle: 'Website or purchase link',
+                      trailing: AnimatedBuilder(
+                        animation: widget.linkController,
+                        builder: (context, _) {
+                          final hasLink = widget.linkController.text.isNotEmpty;
+                          return Text(
+                            hasLink ? 'Added' : 'None',
+                            style: TextStyle(
+                              color: !hasLink ? AppColors.textTertiary : AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
+                      ),
+                      onTap: () => _showLinkEditor(context),
+                    ),
+
+                    _buildSettingRow(
+                      icon: Icons.video_collection_outlined,
+                      title: 'Make an Episode',
+                      subtitle: 'Add to a series or playlist',
+                      onTap: widget.onMakeEpisode,
+                    ),
+
+                    _buildSubscriberOnlyTile(),
+
+                    _buildCrossPostingTile(),
+                    
+                    const SizedBox(height: 40),
+                  ],
                 ),
-              ],
-            ),
-            child: AppButton(
-              onPressed: () => Navigator.pop(context),
-              label: 'Done',
-              variant: AppButtonVariant.primary,
-              isFullWidth: true,
+              ),
+            ]),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: AppButton(
+                onPressed: () => Navigator.pop(context),
+                label: 'Done',
+                variant: AppButtonVariant.primary,
+                isFullWidth: true,
+              ),
             ),
           ),
         ],
@@ -443,333 +441,19 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
                     ),
                   ),
                 ),
-          onTap: () => _showSubscriberSelectionBottomSheet(context),
+          onTap: () => _navigateToSubscriberSelection(context),
         );
       },
     );
   }
 
-  void _showSubscriberSelectionBottomSheet(BuildContext context) {
+  void _navigateToSubscriberSelection(BuildContext context) {
     Navigator.push(
       context,
-        MaterialPageRoute(
-          builder: (context) => SubscriberSelectionSheet(
-            selectedSubscribers: widget.selectedSubscribers,
-          ),
-      ),
-    );
-  }
-}
-
-class SubscriberSelectionSheet extends StatefulWidget {
-  final ValueNotifier<List<String>> selectedSubscribers;
-
-  const SubscriberSelectionSheet({
-    super.key,
-    required this.selectedSubscribers,
-  });
-
-  @override
-  State<SubscriberSelectionSheet> createState() => _SubscriberSelectionSheetState();
-}
-
-class _SubscriberSelectionSheetState extends State<SubscriberSelectionSheet> {
-  final TextEditingController _searchController = TextEditingController();
-  final ValueNotifier<List<Subscriber>> _subscribers = ValueNotifier<List<Subscriber>>([]);
-  final ValueNotifier<bool> _isLoading = ValueNotifier<bool>(true);
-  final ValueNotifier<String?> _error = ValueNotifier<String?>(null);
-  final UserService _userService = UserService();
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchSubscribers();
-  }
-
-  Future<void> _fetchSubscribers() async {
-    try {
-      _isLoading.value = true;
-      _error.value = null;
-
-      AppLogger.log('📡 Fetching subscribers from backend...');
-      final subscribers = await _userService.getSubscribers();
-      _subscribers.value = subscribers;
-      AppLogger.log('✅ Fetched ${subscribers.length} subscribers');
-    } catch (e) {
-      AppLogger.log('❌ Failed to fetch subscribers: $e');
-      _error.value = 'Failed to load subscribers: $e';
-    } finally {
-      _isLoading.value = false;
-    }
-  }
-
-  List<Subscriber> get _filteredSubscribers {
-    final query = _searchController.text.toLowerCase().trim();
-    if (query.isEmpty) return _subscribers.value;
-
-    return _subscribers.value.where((sub) {
-      return sub.name.toLowerCase().contains(query) ||
-             sub.email.toLowerCase().contains(query);
-    }).toList();
-  }
-
-  bool _isSelected(String subscriberId) {
-    return widget.selectedSubscribers.value.contains(subscriberId);
-  }
-
-  void _toggleSelection(String subscriberId) {
-    final current = List<String>.from(widget.selectedSubscribers.value);
-    if (current.contains(subscriberId)) {
-      current.remove(subscriberId);
-    } else {
-      current.add(subscriberId);
-    }
-    widget.selectedSubscribers.value = current;
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _subscribers.dispose();
-    _isLoading.dispose();
-    _error.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.borderPrimary),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.lock_person, color: AppColors.primary),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Select Subscribers',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-          ),
-
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search by name or email',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: AppColors.backgroundSecondary,
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-
-          // Selected subscribers chips
-          ValueListenableBuilder<List<String>>(
-            valueListenable: widget.selectedSubscribers,
-            builder: (context, selected, _) {
-              if (selected.isEmpty) return const SizedBox.shrink();
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Selected',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: selected.map((id) {
-                    final subscriber = _subscribers.value.firstWhere(
-                      (s) => s.id == id,
-                      orElse: () => Subscriber(id: id, name: 'Unknown', email: '', profilePic: null),
-                    );
-                    return Chip(
-                      label: Text(subscriber.name),
-                      deleteIcon: const Icon(Icons.close, size: 18),
-                      onDeleted: () => _toggleSelection(id),
-                      avatar: subscriber.profilePic != null
-                          ? CircleAvatar(
-                              backgroundImage: NetworkImage(subscriber.profilePic!),
-                              radius: 12,
-                            )
-                          : CircleAvatar(
-                              radius: 12,
-                              child: Text(
-                                subscriber.name.isNotEmpty ? subscriber.name[0].toUpperCase() : '?',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            ),
-                    );
-                  }).toList(),
-                ),
-                    const Divider(height: 24),
-                  ],
-                ),
-              );
-            },
-          ),
-
-          // Subscribers list
-          Expanded(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _isLoading,
-              builder: (context, loading, _) {
-                if (loading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                return ValueListenableBuilder<String?>(
-                  valueListenable: _error,
-                  builder: (context, error, _) {
-                    if (error != null) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                            const SizedBox(height: 16),
-                            Text(error, textAlign: TextAlign.center),
-                            const SizedBox(height: 16),
-                            AppButton(
-                              onPressed: _fetchSubscribers,
-                              label: 'Retry',
-                              variant: AppButtonVariant.outline,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final filtered = _filteredSubscribers;
-
-                    if (filtered.isEmpty) {
-                      return const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search_off, size: 48, color: AppColors.textSecondary),
-                            SizedBox(height: 16),
-                             Text('No subscribers found'),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final subscriber = filtered[index];
-                        final isSelected = _isSelected(subscriber.id);
-
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: subscriber.profilePic != null
-                                ? NetworkImage(subscriber.profilePic!)
-                                : null,
-                            child: subscriber.profilePic == null
-                                ? Text(
-                                    subscriber.name.isNotEmpty ? subscriber.name[0].toUpperCase() : '?',
-                                  )
-                                : null,
-                          ),
-                          title: Text(subscriber.name),
-                          subtitle: Text(subscriber.email),
-                          trailing: Checkbox(
-                            value: isSelected,
-                            onChanged: (_) => _toggleSelection(subscriber.id),
-                          ),
-                          onTap: () => _toggleSelection(subscriber.id),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-
-          // Bottom action bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: AppColors.backgroundPrimary,
-              border: Border(
-                top: BorderSide(color: AppColors.borderPrimary),
-              ),
-            ),
-            child: ValueListenableBuilder<List<String>>(
-              valueListenable: widget.selectedSubscribers,
-              builder: (context, selected, _) {
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${selected.length} subscriber${selected.length == 1 ? '' : 's'} selected',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    AppButton(
-                      onPressed: selected.isEmpty ? null : () => Navigator.pop(context),
-                      label: 'Done',
-                      variant: AppButtonVariant.primary,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
+      MaterialPageRoute(
+        builder: (context) => SubscriberSelectionScreen(
+          selectedSubscribers: widget.selectedSubscribers,
+        ),
       ),
     );
   }

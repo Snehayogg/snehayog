@@ -136,133 +136,141 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          AppText.get('edit_profile_title', fallback: 'Edit Profile'),
-          style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          if (_isSaving || _isPhotoLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-            )
-          else
-            TextButton(
-              onPressed: _handleSave,
-              child: Text(
-                AppText.get('btn_save', fallback: 'Save'),
-                style: AppTypography.bodyMedium.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+            leading: IconButton(
+              icon: const HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01, color: AppColors.textPrimary),
+              onPressed: () => Navigator.pop(context),
             ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(AppSpacing.spacing4),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Profile Photo Section
-              Center(
-                child: Column(
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundColor: AppColors.backgroundSecondary,
-                          backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
-                          child: profilePic.isEmpty
-                              ? const HugeIcon(icon: HugeIcons.strokeRoundedUser, size: 40, color: AppColors.textTertiary)
-                              : null,
-                        ),
-                        if (_isPhotoLoading)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Center(child: CircularProgressIndicator()),
-                            ),
-                          ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: _isPhotoLoading ? null : _handlePhotoChange,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const HugeIcon(icon: HugeIcons.strokeRoundedCamera01, size: 16, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ],
+            title: Text(
+              AppText.get('edit_profile_title', fallback: 'Edit Profile'),
+              style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w700),
+            ),
+            actions: [
+              if (_isSaving || _isPhotoLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                )
+              else
+                TextButton(
+                  onPressed: _handleSave,
+                  child: Text(
+                    AppText.get('btn_save', fallback: 'Save'),
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _isPhotoLoading ? null : _handlePhotoChange,
-                      child: Text(
-                        AppText.get('profile_change_photo', fallback: 'Change Photo'),
-                        style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  ),
+                ),
+            ],
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.spacing4),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Profile Photo Section
+                    Center(
+                      child: Column(
+                        children: [
+                          Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 50,
+                                backgroundColor: AppColors.backgroundSecondary,
+                                backgroundImage: profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                                child: profilePic.isEmpty
+                                    ? const HugeIcon(icon: HugeIcons.strokeRoundedUser, size: 40, color: AppColors.textTertiary)
+                                    : null,
+                              ),
+                              if (_isPhotoLoading)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.5),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Center(child: CircularProgressIndicator()),
+                                  ),
+                                ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: _isPhotoLoading ? null : _handlePhotoChange,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const HugeIcon(icon: HugeIcons.strokeRoundedCamera01, size: 16, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: _isPhotoLoading ? null : _handlePhotoChange,
+                            child: Text(
+                              AppText.get('profile_change_photo', fallback: 'Change Photo'),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(height: 32),
+                    _buildSectionTitle(AppText.get('edit_profile_name_label', fallback: 'Display Name')),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: _inputDecoration('Enter your name'),
+                      validator: (value) => value == null || value.isEmpty ? 'Please enter your name' : null,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionTitle(AppText.get('edit_profile_website_label', fallback: 'Website Link')),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _websiteController,
+                      keyboardType: TextInputType.url,
+                      decoration: _inputDecoration('e.g. snehayog.site').copyWith(
+                        prefixIcon: const Icon(Icons.link, size: 20, color: AppColors.textTertiary),
+                      ),
+                      validator: (value) {
+                        if (value != null && value.isNotEmpty) {
+                          if (!value.contains('.')) return 'Please enter a valid URL';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 40),
+                    AppButton(
+                      onPressed: _isSaving ? null : _handleSave,
+                      label: _isSaving ? 'Saving...' : 'Save Changes',
+                      variant: AppButtonVariant.primary,
+                      isLoading: _isSaving,
+                      isFullWidth: true,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              _buildSectionTitle(AppText.get('edit_profile_name_label', fallback: 'Display Name')),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _nameController,
-                decoration: _inputDecoration('Enter your name'),
-                validator: (value) => value == null || value.isEmpty ? 'Please enter your name' : null,
-              ),
-              const SizedBox(height: 24),
-              _buildSectionTitle(AppText.get('edit_profile_website_label', fallback: 'Website Link')),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _websiteController,
-                keyboardType: TextInputType.url,
-                decoration: _inputDecoration('e.g. snehayog.site').copyWith(
-                  prefixIcon: const Icon(Icons.link, size: 20, color: AppColors.textTertiary),
-                ),
-                validator: (value) {
-                  if (value != null && value.isNotEmpty) {
-                    if (!value.contains('.')) return 'Please enter a valid URL';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 40),
-              AppButton(
-                onPressed: _isSaving ? null : _handleSave,
-                label: _isSaving ? 'Saving...' : 'Save Changes',
-                variant: AppButtonVariant.primary,
-                isLoading: _isSaving,
-                isFullWidth: true,
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

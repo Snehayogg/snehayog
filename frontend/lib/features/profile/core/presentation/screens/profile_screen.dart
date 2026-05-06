@@ -923,7 +923,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               Scaffold(
                 key: _scaffoldKey,
                 backgroundColor: AppColors.backgroundPrimary,
-                appBar: _buildAppBar(isViewingOwnProfile, activeManager),
                 drawer: isViewingOwnProfile
                     ? ProfileMenuWidget(
                         stateManager: activeManager,
@@ -945,7 +944,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         onCheckPaymentSetupStatus: _checkPaymentSetupStatus,
                       )
                     : null,
-                body: _buildBody(activeManager, globalAuthState),
+                body: _buildBody(activeManager, globalAuthState, isViewingOwnProfile),
               ),
               // **NEW: Signing In Overlay**
               if (_isSigningIn)
@@ -1000,18 +999,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildBody(ProfileStateManager manager, GoogleSignInController authController) {
+  Widget _buildBody(ProfileStateManager manager, GoogleSignInController authController, bool isViewingOwnProfile) {
     // **FIXED: If auth is still loading, show skeleton instead of sign-in UI**
     if (authController.isLoading) {
-      return const ProfileSkeleton();
+      return _wrapWithSliverAppBar(const ProfileSkeleton(), isViewingOwnProfile, manager);
     }
 
     // **FIXED: Check authentication status first**
     if (widget.userId == null && !authController.isSignedIn) {
       final isSessionExpired = authController.error?.contains('expired') == true;
-      return ProfileSignInView(
-        onGoogleSignIn: _handleGoogleSignIn,
-        sessionExpired: isSessionExpired,
+      return _wrapWithSliverAppBar(
+        ProfileSignInView(
+          onGoogleSignIn: _handleGoogleSignIn,
+          sessionExpired: isSessionExpired,
+        ),
+        isViewingOwnProfile,
+        manager,
       );
     }
 
@@ -1020,7 +1023,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       valueListenable: _isLoading,
       builder: (context, isLoading, _) {
         if (isLoading || manager.isLoading) {
-          return const ProfileSkeleton();
+          return _wrapWithSliverAppBar(const ProfileSkeleton(), isViewingOwnProfile, manager);
         }
 
         return ValueListenableBuilder<String?>(
@@ -1035,86 +1038,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               // If viewing own profile and auth error, show proper sign-in
               if (widget.userId == null && isAuthError) {
                 final isSessionExpired = error.contains('expired');
-                return ProfileSignInView(
-                  onGoogleSignIn: _handleGoogleSignIn,
-                  sessionExpired: isSessionExpired,
+                return _wrapWithSliverAppBar(
+                  ProfileSignInView(
+                    onGoogleSignIn: _handleGoogleSignIn,
+                    sessionExpired: isSessionExpired,
+                  ),
+                  isViewingOwnProfile,
+                  manager,
                 );
               }
               
               // **FIX: Allow viewing other profiles even if not signed in**
               if (widget.userId == null && !authController.isSignedIn) {
                 final isSessionExpired = authController.error?.contains('expired') == true;
-                return ProfileSignInView(
-                  onGoogleSignIn: _handleGoogleSignIn,
-                  sessionExpired: isSessionExpired,
+                return _wrapWithSliverAppBar(
+                  ProfileSignInView(
+                    onGoogleSignIn: _handleGoogleSignIn,
+                    sessionExpired: isSessionExpired,
+                  ),
+                  isViewingOwnProfile,
+                  manager,
                 );
               }
 
               // Otherwise show error with retry
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
-                        size: 64,
-                        color: Colors.red[300],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        AppText.get('error_load_profile'),
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        error,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      AppButton(
-                        onPressed: () => _loadData(forceRefresh: true),
-                        icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
-                        label: AppText.get('btn_retry', fallback: 'Retry'),
-                        variant: AppButtonVariant.primary,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            // Check if we have user data
-            if (manager.userData == null) {
-              if (widget.userId == null && !authController.isSignedIn) {
-                return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
-              }
-              // If viewing someone else's profile, we might not have data yet
-              if (widget.userId != null) {
-                return Center(
+              return _wrapWithSliverAppBar(
+                Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
+                        HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
                           size: 64,
-                          color: AppColors.textSecondary,
+                          color: Colors.red[300],
                         ),
                         const SizedBox(height: 16),
                         Text(
                           AppText.get('error_load_profile'),
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 18,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: AppColors.error,
                             fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          error,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -1128,16 +1100,66 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       ],
                     ),
                   ),
+                ),
+                isViewingOwnProfile,
+                manager,
+              );
+            }
+
+            // Check if we have user data
+            if (manager.userData == null) {
+              if (widget.userId == null && !authController.isSignedIn) {
+                return _wrapWithSliverAppBar(ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn), isViewingOwnProfile, manager);
+              }
+              // If viewing someone else's profile, we might not have data yet
+              if (widget.userId != null) {
+                return _wrapWithSliverAppBar(
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const HugeIcon(icon: HugeIcons.strokeRoundedAlertCircle,
+                            size: 64,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            AppText.get('error_load_profile'),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          AppButton(
+                            onPressed: () => _loadData(forceRefresh: true),
+                            icon: const HugeIcon(icon: HugeIcons.strokeRoundedRefresh),
+                            label: AppText.get('btn_retry', fallback: 'Retry'),
+                            variant: AppButtonVariant.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  isViewingOwnProfile,
+                  manager,
                 );
               }
-              return ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn);
+              return _wrapWithSliverAppBar(ProfileSignInView(onGoogleSignIn: _handleGoogleSignIn), isViewingOwnProfile, manager);
             }
 
             // SUCCESS STATE: Show profile data
             return NestedScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               headerSliverBuilder: (context, innerBoxIsScrolled) {
-                return _buildProfileHeaderSlivers(context, manager, authController);
+                return [
+                  _buildSliverAppBar(isViewingOwnProfile, manager),
+                  ..._buildProfileHeaderSlivers(context, manager, authController),
+                ];
               },
               body: RefreshIndicator(
                 onRefresh: _refreshData,
@@ -1336,70 +1358,82 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
 
-  PreferredSizeWidget _buildAppBar(bool isViewingOwnProfile, ProfileStateManager stateManager) {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
-      child: AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        titleSpacing: 0,
-        leadingWidth: 40,
-        title: stateManager.isSelecting &&
-                stateManager.selectedVideoIds.isNotEmpty
-            ? Text(
-                '${stateManager.selectedVideoIds.length}',
-                style: AppTypography.titleMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              )
-            : (stateManager.isEditing
-                ? TextField(
-                    controller: stateManager.nameController,
-                    style: const TextStyle(
-                      color: Color(0xFF1A1A1A),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    decoration: const InputDecoration(
-                      border: UnderlineInputBorder(),
-                      hintText: 'Enter your name',
-                    ),
-                    autofocus: true,
-                  )
-                : Text(
-                    stateManager.userData?['name'] ??
-                        AppText.get('profile_title'),
-                    style: AppTypography.titleLarge.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
-                  )),
-        leading: isViewingOwnProfile
-            ? IconButton(
-                icon: const HugeIcon(icon: HugeIcons.strokeRoundedMenu01,
-                    color: Colors.white, size: 20),
-                tooltip: 'Menu',
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
-              )
-            : IconButton(
-                icon: const HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01,
-                    color: Colors.white, size: 20),
-                tooltip: 'Back',
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
+  /// Wraps a non-scrollable widget in a CustomScrollView with a SliverAppBar
+  /// so the app bar hides on scroll even in loading/error/sign-in states.
+  Widget _wrapWithSliverAppBar(Widget child, bool isViewingOwnProfile, ProfileStateManager manager) {
+    return CustomScrollView(
+      slivers: [
+        _buildSliverAppBar(isViewingOwnProfile, manager),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: child,
+        ),
+      ],
+    );
+  }
+
+  SliverAppBar _buildSliverAppBar(bool isViewingOwnProfile, ProfileStateManager stateManager) {
+    return SliverAppBar(
+      backgroundColor: AppColors.backgroundPrimary,
+      elevation: 0,
+      floating: true,
+      snap: true,
+      surfaceTintColor: Colors.transparent,
+      titleSpacing: 0,
+      leadingWidth: 40,
+      title: stateManager.isSelecting &&
+              stateManager.selectedVideoIds.isNotEmpty
+          ? Text(
+              '${stateManager.selectedVideoIds.length}',
+              style: AppTypography.titleMedium.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-        actions: _buildAppBarActions(stateManager, isViewingOwnProfile),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: AppColors.borderPrimary,
-          ),
+            )
+          : (stateManager.isEditing
+              ? TextField(
+                  controller: stateManager.nameController,
+                  style: const TextStyle(
+                    color: Color(0xFF1A1A1A),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: const InputDecoration(
+                    border: UnderlineInputBorder(),
+                    hintText: 'Enter your name',
+                  ),
+                  autofocus: true,
+                )
+              : Text(
+                  stateManager.userData?['name'] ??
+                      AppText.get('profile_title'),
+                  style: AppTypography.titleLarge.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
+                )),
+      leading: isViewingOwnProfile
+          ? IconButton(
+              icon: const HugeIcon(icon: HugeIcons.strokeRoundedMenu01,
+                  color: Colors.white, size: 20),
+              tooltip: 'Menu',
+              onPressed: () {
+                _scaffoldKey.currentState?.openDrawer();
+              },
+            )
+          : IconButton(
+              icon: const HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01,
+                  color: Colors.white, size: 20),
+              tooltip: 'Back',
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+      actions: _buildAppBarActions(stateManager, isViewingOwnProfile),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          height: 1,
+          color: AppColors.borderPrimary,
         ),
       ),
     );

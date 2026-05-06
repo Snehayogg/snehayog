@@ -1086,6 +1086,11 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
         AppLogger.log('⏸️ Successfully paused video at index $index');
 
+        // **NEW: Trigger popup ad on pause for Yug tab**
+        if (widget.videoType == 'yog') {
+          _showLongPressAd(index);
+        }
+
         // **NEW: Stop view tracking when user pauses**
         if (index < _videos.length) {
           final currentVideo = _videos[index];
@@ -1110,6 +1115,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
         _controllerStates[videoId] = true;
         _userPaused[videoId] = false; // hide when playing
         _userPausedVN[videoId]?.value = false;
+        _hideLongPressAdOverlay();
 
         _lifecyclePaused = false;
 

@@ -272,6 +272,11 @@ class AdModel {
   bool get isDraft => status == 'draft';
   bool get isPaused => status == 'paused';
   bool get isCompleted => status == 'completed';
+  
+  bool get isExpired {
+    if (endDate == null) return false;
+    return DateTime.now().isAfter(endDate!);
+  }
 
   // **ENHANCED: Performance metrics**
   double get cpm => impressions > 0 ? (spend / impressions) * 1000 : 0.0;

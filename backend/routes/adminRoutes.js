@@ -6,7 +6,6 @@ import User from '../models/User.js';
 import Video from '../models/Video.js';
 import CreatorPayout from '../models/CreatorPayout.js';
 import AdImpression from '../models/AdImpression.js';
-import View from '../models/View.js';
 import Notice from '../models/Notice.js';
 import RemovedVideoRecord from '../models/RemovedVideoRecord.js';
 import { AD_CONFIG } from '../constants/index.js';
@@ -761,7 +760,7 @@ router.get('/user-behavior/stats', requireAdminDashboardKey, async (req, res) =>
         { googleId: { $in: userIds } },
         { _id: { $in: userIds.filter(id => mongoose.Types.ObjectId.isValid(id)) } }
       ]
-    }).select('name email googleId appVersion').lean();
+    }).select('name email googleId appVersion location').lean();
 
     const userMap = new Map();
     users.forEach(u => {
@@ -775,7 +774,8 @@ router.get('/user-behavior/stats', requireAdminDashboardKey, async (req, res) =>
         name: userData.name,
         email: userData.email,
         googleId: userData.googleId || u._id,
-        appVersion: userData.appVersion || 'unknown'
+        appVersion: userData.appVersion || 'unknown',
+        location: userData.location || null
       };
     });
 

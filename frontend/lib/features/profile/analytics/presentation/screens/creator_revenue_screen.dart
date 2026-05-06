@@ -125,50 +125,58 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Creator Dashboard"),
-          centerTitle: true,
-          elevation: 0,
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: "Engagement"),
-              Tab(text: "Analytics"),
-            ],
-            indicatorColor: AppColors.primary,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textSecondary,
-          ),
-          actions: [
-            IconButton(
-              onPressed: () => _loadAllData(forceRefresh: true),
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
-        body: FutureBuilder<Map<String, dynamic>?>(
-          future: _authService.getUserData(),
-          builder: (context, snapshot) {
-            final isSignedIn = snapshot.hasData && snapshot.data != null;
-
-            if (!isSignedIn) {
-              return _buildLoginPrompt();
-            }
-
-            if (_isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (_errorMessage != null) {
-              return _buildErrorView();
-            }
-
-            return TabBarView(
-              children: [
-                _buildRevenueTab(),
-                _buildAnalyticsTab(),
-              ],
-            );
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) {
+            return [
+              SliverAppBar(
+                title: const Text("Creator Dashboard"),
+                centerTitle: true,
+                floating: true,
+                snap: true,
+                elevation: 0,
+                bottom: const TabBar(
+                  tabs: [
+                    Tab(text: "Engagement"),
+                    Tab(text: "Analytics"),
+                  ],
+                  indicatorColor: AppColors.primary,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.textSecondary,
+                ),
+                actions: [
+                  IconButton(
+                    onPressed: () => _loadAllData(forceRefresh: true),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+            ];
           },
+          body: FutureBuilder<Map<String, dynamic>?>(
+            future: _authService.getUserData(),
+            builder: (context, snapshot) {
+              final isSignedIn = snapshot.hasData && snapshot.data != null;
+
+              if (!isSignedIn) {
+                return _buildLoginPrompt();
+              }
+
+              if (_isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (_errorMessage != null) {
+                return _buildErrorView();
+              }
+
+              return TabBarView(
+                children: [
+                  _buildRevenueTab(),
+                  _buildAnalyticsTab(),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

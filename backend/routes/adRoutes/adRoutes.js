@@ -894,10 +894,11 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
 
     // Build AdModel-shaped entries from creatives (banner, carousel, video feeds)
     const ads = creatives.map(creative => {
-      const parentCampaign = campaigns.find(c => c._id.toString() === creative.campaignId.toString());
+      const parentCampaign = campaigns.find(c => c._id.toString() === creative.campaignId?.toString());
+      const adId = parentCampaign?._id?.toString() || creative._id.toString();
       return {
-        _id: creative._id.toString(),
-        id: creative._id.toString(),
+        _id: adId,
+        id: adId,
         title: parentCampaign?.name || 'Untitled Ad',
         description: parentCampaign?.objective || '',
         imageUrl: creative.adType === 'carousel ads' ? (creative.slides?.[0]?.thumbnail || creative.slides?.[0]?.mediaUrl || null) : (creative.thumbnail || creative.cloudinaryUrl || null),
@@ -909,6 +910,8 @@ router.get('/user/:userId', verifyToken, async (req, res) => {
         targetKeywords: [],
         startDate: parentCampaign?.startDate,
         endDate: parentCampaign?.endDate,
+        campaignId: parentCampaign?._id?.toString() || creative.campaignId?.toString(),
+        creativeId: creative._id.toString(),
         status: parentCampaign?.status || (creative.isActive ? 'active' : 'draft'),
         impressions: creative.impressions || 0,
         clicks: creative.clicks || 0,
@@ -1031,10 +1034,11 @@ router.delete('/:adId', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Access denied - not your ad' });
     }
 
-    // Delete associated creative if exists
-    if (campaign.creative) {
-      await AdCreative.findByIdAndDelete(campaign.creative);
-    }
+    // Delete associated creatives
+    await AdCreative.deleteMany({ campaignId: adId });
+    
+    // Also try deleting by _id in case adId was a creativeId
+    await AdCreative.findByIdAndDelete(adId);
 
     // Delete associated invoices
     await Invoice.deleteMany({ campaignId: adId });
@@ -1120,27 +1124,14 @@ router.get('/serve', async (req, res) => {
     
     console.log('   Creatives matching filters:', creatives.length);
     
-    // **FIX: Create a map of campaignId -> creative for quick lookup**
-    const creativeMap = new Map();
-    creatives.forEach(creative => {
-      // Handle both ObjectId and string formats
-      const campaignId = creative.campaignId ? creative.campaignId.toString() : null;
-      if (campaignId && !creativeMap.has(campaignId)) {
-        creativeMap.set(campaignId, creative);
-      }
-    });
-    
-    // **FIX: Match campaigns with creatives**
-    const validCampaigns = campaigns
-      .map(campaign => {
-        const campaignIdStr = campaign._id.toString();
-        const creative = creativeMap.get(campaignIdStr);
-        if (!creative) {
-          console.log('⚠️ Campaign missing creative:', {
-            campaignId: campaignIdStr,
-            campaignName: campaign.name,
-            campaignStatus: campaign.status,
-            availableCreativeIds: Array.from(creativeMap.keys())
+    // **FIX: Match all creatives with their campaigns**
+    const validAds = creatives
+      .map(creative => {
+        const campaign = campaigns.find(c => c._id.toString() === creative.campaignId.toString());
+        if (!campaign) {
+          console.log('⚠️ Creative missing campaign:', {
+            creativeId: creative._id,
+            campaignId: creative.campaignId
           });
           return null;
         }
@@ -1149,7 +1140,7 @@ router.get('/serve', async (req, res) => {
       .filter(item => item !== null);
     
     // Convert to ad format for frontend
-    const ads = validCampaigns.map(({ campaign, creative }) => {
+    const ads = validAds.map(({ campaign, creative }) => {
       // **DEBUG: Log banner ad details**
       if (creative.adType === 'banner') {
         console.log('🔍 Banner Ad Debug:');

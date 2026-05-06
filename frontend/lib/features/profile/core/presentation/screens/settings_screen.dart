@@ -35,59 +35,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: Text(AppText.get('settings_title', fallback: 'Settings')),
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing2, vertical: AppSpacing.spacing1),
-              itemCount: 3,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: 1.0),
-              itemBuilder: (context, index) {
-                if (index == 0) {
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: Text(AppText.get('settings_title', fallback: 'Settings')),
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+          ),
+          if (_isLoading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  if (index == 0) {
+                    return _buildActionTile(
+                      title: AppText.get('settings_saved_videos', fallback: 'Saved Videos'),
+                      icon: Icons.bookmark_outlined,
+                      color: AppColors.textPrimary,
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedVideosScreen()));
+                      },
+                    );
+                  } else if (index == 1) {
+                    return _buildActionTile(
+                      title: AppText.get('settings_linked_accounts', fallback: 'Linked Accounts'),
+                      icon: Icons.link,
+                      color: AppColors.textPrimary,
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const LinkedAccountsScreen()));
+                      },
+                    );
+                  }
                   return _buildActionTile(
-                    title: AppText.get('settings_saved_videos',
-                        fallback: 'Saved Videos'),
-                    icon: Icons.bookmark_outlined,
-                    color: AppColors.textPrimary,
+                    title: AppText.get('btn_logout', fallback: 'Logout'),
+                    icon: Icons.logout,
+                    color: AppColors.error,
                     onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const SavedVideosScreen()),
-                      );
+                      context.read<GoogleSignInController>().signOut();
+                      Navigator.of(context).pop();
                     },
                   );
-                } else if (index == 1) {
-                  return _buildActionTile(
-                    title: AppText.get('settings_linked_accounts',
-                        fallback: 'Linked Accounts'),
-                    icon: Icons.link,
-                    color: AppColors.textPrimary,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const LinkedAccountsScreen()),
-                      );
-                    },
-                  );
-                }
-                return _buildActionTile(
-                  title: AppText.get('btn_logout', fallback: 'Logout'),
-                  icon: Icons.logout,
-                  color: AppColors.error,
-                  onTap: () {
-                    context.read<GoogleSignInController>().signOut();
-                    Navigator.of(context).pop();
-                  },
-                );
-              },
+                },
+                childCount: 3,
+              ),
             ),
+        ],
+      ),
     );
   }
 

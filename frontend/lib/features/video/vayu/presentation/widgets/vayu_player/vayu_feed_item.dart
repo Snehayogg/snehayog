@@ -88,7 +88,10 @@ class VayuFeedItem extends ConsumerStatefulWidget {
   ConsumerState<VayuFeedItem> createState() => _VayuFeedItemState();
 }
 
-class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
+class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   double _scale = 1.0;
   Offset _offset = Offset.zero;
   double _baseScale = 1.0;
@@ -103,14 +106,52 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final orientation = MediaQuery.of(context).orientation;
     final isFull = orientation == Orientation.landscape || widget.isFullScreenManual;
     final lateralPadding = orientation == Orientation.landscape ? 60.0 : 14.0;
 
-    if (isFull) {
-      return Stack(
-        children: [
-          _buildVideoSection(orientation),
+    // We use a Stack as the root to maintain widget tree stability across orientation changes
+    return Stack(
+      children: [
+        // Background Video Section
+        if (isFull)
+          _buildVideoSection(orientation)
+        else
+          Column(
+            children: [
+              _buildVideoSection(orientation),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        widget.buildAdSection(widget.index),
+                        widget.metadataSection,
+                        widget.channelInfo,
+                        if (widget.activeQuiz != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: QuizOverlay(
+                              quiz: widget.activeQuiz!,
+                              onDismiss: widget.onQuizDismiss,
+                              onBack: (widget.onQuizBack != null) ? widget.onQuizBack : null,
+                              onAnswered: (idx) {},
+                            ),
+                          ),
+                        widget.dubbingOverlay,
+                        const SizedBox(height: 48),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+        // Overlays that appear in BOTH modes (using Positioned to layer over the Column if in portrait)
+        if (isFull) ...[
           if (widget.activeQuiz != null)
             Positioned(
               bottom: 80,
@@ -130,38 +171,8 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> {
             child: widget.dubbingOverlay,
           ),
         ],
-      );
-    }
-
-    return Column(children: [
-      _buildVideoSection(orientation),
-      Expanded(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                widget.buildAdSection(widget.index),
-                widget.metadataSection,
-                widget.channelInfo,
-                if (widget.activeQuiz != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: QuizOverlay(
-                      quiz: widget.activeQuiz!,
-                      onDismiss: widget.onQuizDismiss,
-                      onBack: (widget.onQuizBack != null) ? widget.onQuizBack : null,
-                      onAnswered: (idx) {},
-                    ),
-                  ),
-                widget.dubbingOverlay,
-                const SizedBox(height: 48),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ]);
+      ],
+    );
   }
 
   Widget _buildVideoSection(Orientation orientation) {

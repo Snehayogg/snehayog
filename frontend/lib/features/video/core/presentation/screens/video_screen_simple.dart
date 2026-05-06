@@ -87,31 +87,52 @@ class _VideoScreenSimpleState extends State<VideoScreenSimple> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text(
-          'Videos',
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _refreshVideos,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            backgroundColor: Colors.black,
+            floating: true,
+            snap: true,
+            title: const Text(
+              'Videos',
+              style: TextStyle(color: Colors.white),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                onPressed: _refreshVideos,
+              ),
+            ],
           ),
+          if (_isLoading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            )
+          else if (_videos.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text(
+                  'No videos available',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final video = _videos[index];
+                  return _buildVideoCard(video, index);
+                },
+                childCount: _videos.length,
+              ),
+            ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : _videos.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No videos available',
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                )
-              : _buildVideoList(),
     );
   }
 

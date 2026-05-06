@@ -289,7 +289,8 @@ npm test
 **Frontend:**
 ```bash
 cd frontend
-flutter test
+flutter test              # Standard testing
+./scripts/fast_test.bat   # Centralized fast testing (Windows)
 ```
 
 ## Documentation

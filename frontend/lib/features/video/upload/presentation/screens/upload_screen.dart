@@ -1304,71 +1304,70 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         final isSignedIn = authController.isSignedIn;
 
         return Scaffold(
-          appBar: AppBar(
-            title: Text(AppText.get('upload_title')),
-            centerTitle: true,
-            leading: ValueListenableBuilder<File?>(
-              valueListenable: _selectedVideo,
-              builder: (context, video, _) {
-                if (video == null) return const SizedBox.shrink();
-                return IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: _deselectVideo,
-                  tooltip: 'Cancel selection',
-                );
-              },
-            ),
-            actions: [
-              if (isSignedIn)
-                IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AdManagementScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.campaign),
-                  tooltip: AppText.get('btn_manage_ads'),
-                ),
-            ],
-          ),
-          body: Stack(
-            children: [
-              // 1. Layer: Main Content
-              ValueListenableBuilder<bool>(
+          backgroundColor: AppColors.backgroundPrimary,
+          body: ValueListenableBuilder<bool>(
+            valueListenable: _isProcessing,
+            builder: (context, isProcessing, _) {
+              return ValueListenableBuilder<bool>(
                 valueListenable: _isUploading,
                 builder: (context, isUploading, _) {
                   return ValueListenableBuilder<File?>(
                     valueListenable: _selectedVideo,
                     builder: (context, selectedVideo, _) {
-                      // State 1: Nothing selected yet → show choice cards
-                      if (!isUploading && selectedVideo == null) {
-                        return _buildInitialChoiceView(
-                            context, isSignedIn, authController);
-                      }
-                      // State 2: Upload progress dashboard
-                      return _buildUploadProgressDashboard(context);
+                      return CustomScrollView(
+                        slivers: [
+                          SliverAppBar(
+                            title: Text(AppText.get('upload_title')),
+                            centerTitle: true,
+                            floating: true,
+                            snap: true,
+                            elevation: 0,
+                            backgroundColor: AppColors.backgroundPrimary,
+                            leading: selectedVideo != null
+                                ? IconButton(
+                                    icon: const Icon(Icons.close),
+                                    onPressed: _deselectVideo,
+                                    tooltip: 'Cancel selection',
+                                  )
+                                : null,
+                            actions: [
+                              if (isSignedIn)
+                                IconButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const AdManagementScreen(),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.campaign),
+                                  tooltip: AppText.get('btn_manage_ads'),
+                                ),
+                            ],
+                          ),
+                          if (isProcessing)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: _buildAnalyzingVideoView(context),
+                            )
+                          else if (!isUploading && selectedVideo == null)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: _buildInitialChoiceView(
+                                  context, isSignedIn, authController),
+                            )
+                          else
+                            SliverToBoxAdapter(
+                              child: _buildUploadProgressDashboard(context),
+                            ),
+                        ],
+                      );
                     },
                   );
                 },
-              ),
-
-              // 2. Layer: Analyzing Overlay (prevents assertion failure from framework by keeping tree stable)
-              ValueListenableBuilder<bool>(
-                valueListenable: _isProcessing,
-                builder: (context, isProcessing, _) {
-                  if (!isProcessing) return const SizedBox.shrink();
-                  return Positioned.fill(
-                    child: Container(
-                      color: AppColors.backgroundPrimary,
-                      child: _buildAnalyzingVideoView(context),
-                    ),
-                  );
-                },
-              ),
-            ],
+              );
+            },
           ),
         );
       },
@@ -1579,7 +1578,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   }
 
   Widget _buildUploadProgressDashboard(BuildContext context) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         children: [

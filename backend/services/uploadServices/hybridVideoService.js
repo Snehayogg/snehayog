@@ -275,13 +275,14 @@ class HybridVideoService {
   /**
    * **NEW: Pure HLS Processing - 100% FREE!**
    * Upload → FFmpeg (Local, FREE) → HLS (.m3u8 + .ts) → R2 (FREE bandwidth)
-   * Single 480p quality only for cost optimization
+   * Single quality (original or 1080p max)
    */
-  async processVideoToHLS(videoPath, videoName, userId) {
+  async processVideoToHLS(videoPath, videoName, userId, options = {}) {
+    const { onProgress = null, videoId: mongoVideoId = null } = options;
+    
     try {
       console.log('🚀 Starting Pure HLS Processing (FFmpeg → R2)...');
       console.log('💰 Cost: $0 processing + $0.015/GB storage + $0 bandwidth = 100% FREE!');
-      console.log('📹 Quality: Single 480p (no multiple qualities)');
       
       // Step 1: Validate video
       const validation = await this.validateVideo(videoPath);
@@ -289,65 +290,74 @@ class HybridVideoService {
         throw new Error(`Video validation failed: ${validation.error}`);
       }
       
-      // **FIX: Get original video info to preserve aspect ratio**
+      // Step 2: Get original video info to preserve aspect ratio
       console.log('📊 Getting original video dimensions...');
       const originalVideoInfo = await this.getOriginalVideoInfo(videoPath);
-      console.log('📊 Original video info:', {
-        width: originalVideoInfo.width,
-        height: originalVideoInfo.height,
-        aspectRatio: originalVideoInfo.aspectRatio
-      });
       
-      // Step 2: Use LOCAL FFmpeg to create HLS segments (preserves original aspect ratio)
-      console.log('🎬 Converting to HLS with FFmpeg (preserving original aspect ratio)...');
+      // **NEW STEP 3: Generate and Upload Thumbnail EARLY**
+      // This ensures the user sees something immediately, even if HLS takes time
+      console.log('📸 [Step 3/6] Generating thumbnail early...');
+      let thumbnailUrl = '';
+      try {
+        const thumbnailPath = await this.generateThumbnailWithFFmpeg(videoPath, videoName, userId);
+        if (thumbnailPath) {
+          thumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
+          console.log(`✅ Early Thumbnail uploaded: ${thumbnailUrl}`);
+          
+          // Update DB immediately if videoId provided
+          if (mongoVideoId) {
+             const Video = (await import('../../models/Video.js')).default;
+             await Video.findByIdAndUpdate(mongoVideoId, { 
+               thumbnailUrl,
+               processingProgress: 20 
+             });
+          }
+          
+          if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
+        }
+      } catch (thumbError) {
+        console.warn('⚠️ Early thumbnail step failed (non-fatal):', thumbError.message);
+      }
+
+      // Step 4: Use LOCAL FFmpeg to create HLS segments
+      console.log('🎬 [Step 4/6] Converting to HLS with FFmpeg (original aspect ratio)...');
       const videoId = `${videoName}_${Date.now()}`;
+      
       const hlsResult = await hlsEncodingService.convertToHLS(
         videoPath,
         videoId,
         {
-          quality: 'medium',    // 480p quality preset
-          resolution: '480p',   // Max height 480p (aspect ratio preserved)
-          segmentDuration: 3,   // 3-second segments for fast startup
-          codec: 'h265',        // Enable H.265 for ~50% bandwidth savings
-          originalVideoInfo: originalVideoInfo // Pass original info for aspect ratio preservation
+          quality: 'medium',
+          codec: 'h265',
+          originalVideoInfo: originalVideoInfo,
+          onProgress: (percent) => {
+            // Map 0-100% of encoding to 20-80% of total progress
+            const mappedPercent = 20 + Math.round(percent * 0.6);
+            if (onProgress) onProgress(mappedPercent);
+          }
         }
       );
       
-      // Step 3: Upload ALL HLS files to R2 (playlist + segments)
+      // Step 5: Upload ALL HLS files to R2 (playlist + segments)
+      console.log('📤 [Step 5/6] Uploading HLS directory to R2...');
+      if (onProgress) onProgress(85);
+      
       const r2HLSResult = await cloudflareR2Service.uploadHLSDirectoryToR2(
         hlsResult.outputDir,
         videoId,
         userId
       );
-
-      
-      // Step 4: Generate thumbnail using FFmpeg (optional)
-      console.log('📸 Generating thumbnail...');
-      const thumbnailPath = await this.generateThumbnailWithFFmpeg(videoPath, videoName, userId);
-      
-      // Step 5: Upload thumbnail to R2 (if generated)
-      let thumbnailUrl = '';
-      if (thumbnailPath) {
-        thumbnailUrl = await this.uploadThumbnailImageToR2(
-          thumbnailPath,
-          videoName,
-          userId
-        );
-        console.log(`✅ Thumbnail uploaded: ${thumbnailUrl}`);
-      } else {
-        console.log('⚠️ No thumbnail generated, using default');
-        thumbnailUrl = 'https://via.placeholder.com/320x180/000000/FFFFFF?text=Video+Thumbnail';
-      }
       
       // Step 6: Cleanup local files
-      console.log('🧹 Cleaning up local files...');
-      await this.cleanupLocalFiles(videoPath, hlsResult.outputDir, thumbnailPath);
+      console.log('🧹 [Step 6/6] Cleaning up local files...');
+      if (onProgress) onProgress(95);
+      await this.cleanupLocalFiles(videoPath, hlsResult.outputDir, null);
+
       return {
         success: true,
         videoUrl: r2HLSResult.playlistUrl,
         thumbnailUrl: thumbnailUrl,
         format: 'HLS (HTTP Live Streaming)',
-        quality: '480p (max height, aspect ratio preserved)',
         segments: r2HLSResult.segments,
         totalFiles: r2HLSResult.totalFiles,
         storage: 'Cloudflare R2',
@@ -356,7 +366,6 @@ class HybridVideoService {
         hlsPlaylistUrl: r2HLSResult.playlistUrl,
         isHLSEncoded: true,
         duration: originalVideoInfo.duration || 0,
-        // **FIX: Include original video dimensions to preserve aspect ratio**
         aspectRatio: originalVideoInfo.aspectRatio,
         width: originalVideoInfo.width,
         height: originalVideoInfo.height,

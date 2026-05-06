@@ -110,7 +110,14 @@ export const getUserVideos = async (req, res) => {
     const requestingGoogleId = req.user?.googleId || req.user?.id;
     const isOwner = requestingGoogleId === googleId;
 
-    const [videos, totalValidVideos, rank, cachedEarnings] = await Promise.all([
+    // ENFORCE: Subscriber-Only Filtering (STRICT)
+    // Only the owner can see exclusive content on the profile.
+    // Everyone else only sees public content.
+    if (!isOwner) {
+      query.isSubscriberOnly = { $ne: true };
+    }
+
+    const [videos, rank, cachedEarnings] = await Promise.all([
       Video.find(query)
         .populate('uploader', 'name profilePic googleId')
         .sort({ createdAt: -1 })
@@ -118,7 +125,6 @@ export const getUserVideos = async (req, res) => {
         .limit(limit)
         .select('-description -shares')
         .lean(),
-      Video.countDocuments(query),
       (!isOwner) ? RecommendationService.getGlobalCreatorRank(user._id) : Promise.resolve(0),
       (isOwner && redisService.getConnectionStatus()) ? redisService.get(`creator:earnings:${user._id}`) : Promise.resolve(null)
     ]);
@@ -284,23 +290,8 @@ export const getFeed = async (req, res) => {
         processingStatus: 'completed'
       };
 
-      // **NEW: Filter subscriber-only videos**
-      // If video is subscriber-only, only show if user is in allowedSubscribers
-      if (userId) {
-        const user = await User.findOne({ googleId: userId }).select('_id').lean();
-        if (user) {
-          query.$or = [
-            { isSubscriberOnly: { $ne: true } }, // Public videos
-            { isSubscriberOnly: true, allowedSubscribers: user._id } // Subscriber-only videos user has access to
-          ];
-        } else {
-          // If user not found, only show public videos
-          query.isSubscriberOnly = { $ne: true };
-        }
-      } else {
-        // Anonymous users only see public videos
-        query.isSubscriberOnly = { $ne: true };
-      }
+      // STRICT: Main feed NEVER shows subscriber-only videos
+      query.isSubscriberOnly = { $ne: true };
 
       if (cursor) {
         query.createdAt = { $lt: new Date(cursor) };
@@ -319,8 +310,8 @@ export const getFeed = async (req, res) => {
       finalVideos = await videosQuery.lean();
     }
 
-    hasMore = finalVideos.length > 0;
-    total = 9999;
+    // SECONDARY SAFETY: Strictly filter out any exclusive content from the main feed results
+    finalVideos = finalVideos.filter(v => !v.isSubscriberOnly);
     
     finalVideos = RecommendationService.enforceMaxConsecutive(finalVideos, 2);
     await populateEpisodesForVideos(finalVideos);

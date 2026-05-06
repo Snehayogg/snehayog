@@ -85,9 +85,9 @@ RefreshTokenSchema.statics.createForDevice = async function(userId, deviceId, de
   const rawToken = this.generateToken();
   const tokenHash = this.hashToken(rawToken);
   
-  // Set expiry to 10 years (effectively forever)
+  // Set expiry to 5 minutes (for debugging)
   const expiresAt = new Date();
-  expiresAt.setFullYear(expiresAt.getFullYear() + 10);
+  expiresAt.setMinutes(expiresAt.getMinutes() + 5);
 
   // Create and save
   const refreshToken = new this({
@@ -129,9 +129,9 @@ RefreshTokenSchema.statics.verifyAndRotate = async function(rawToken) {
   const newRawToken = this.generateToken();
   const newTokenHash = this.hashToken(newRawToken);
 
-  // Set expiry to 10 years (effectively forever)
+  // Set expiry to 5 minutes (for debugging)
   const expiresAt = new Date();
-  expiresAt.setFullYear(expiresAt.getFullYear() + 10);
+  expiresAt.setMinutes(expiresAt.getMinutes() + 5);
 
   const newToken = new this({
     userId: existingToken.userId._id,

@@ -168,6 +168,115 @@ class AdImpressionService {
     }
   }
 
+  /// **NEW: Track carousel ad click**
+  Future<void> trackCarouselAdClick({
+    required String videoId,
+    required String adId,
+    required String userId,
+  }) async {
+    try {
+      AppLogger.log('🖱️ AdImpressionService: Tracking carousel ad click:');
+      AppLogger.log('   Video ID: $videoId');
+      AppLogger.log('   Ad ID: $adId');
+      AppLogger.log('   User ID: $userId');
+
+      final url = '${NetworkHelper.adsEndpoint}/clicks/carousel';
+      final response = await httpClientService.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${await _getToken()}',
+        },
+        body: json.encode({
+          'videoId': videoId,
+          'adId': adId,
+          'userId': userId,
+          'adType': 'carousel',
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        AppLogger.log('✅ AdImpressionService: Carousel ad click tracked successfully');
+      } else {
+        AppLogger.log('❌ AdImpressionService: Failed to track carousel ad click: ${response.body}');
+        _queueOfflineImpression({
+          'videoId': videoId,
+          'adId': adId,
+          'userId': userId,
+          'adType': 'carousel',
+          'timestamp': DateTime.now().toIso8601String(),
+          'impressionType': 'click',
+        });
+      }
+    } catch (e) {
+      AppLogger.log('❌ AdImpressionService: Error tracking carousel ad click: $e');
+      _queueOfflineImpression({
+        'videoId': videoId,
+        'adId': adId,
+        'userId': userId,
+        'adType': 'carousel',
+        'timestamp': DateTime.now().toIso8601String(),
+        'impressionType': 'click',
+      });
+    }
+  }
+
+  /// **NEW: Track general ad click (for banner/popup)**
+  Future<void> trackAdClick({
+    required String videoId,
+    required String adId,
+    required String userId,
+    required String adType,
+  }) async {
+    try {
+      AppLogger.log('🖱️ AdImpressionService: Tracking $adType ad click:');
+      AppLogger.log('   Video ID: $videoId');
+      AppLogger.log('   Ad ID: $adId');
+      AppLogger.log('   User ID: $userId');
+
+      final url = '${NetworkHelper.adsEndpoint}/clicks/$adType';
+      final response = await httpClientService.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${await _getToken()}',
+        },
+        body: json.encode({
+          'videoId': videoId,
+          'adId': adId,
+          'userId': userId,
+          'adType': adType,
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        AppLogger.log('✅ AdImpressionService: $adType ad click tracked successfully');
+      } else {
+        AppLogger.log('❌ AdImpressionService: Failed to track $adType ad click: ${response.body}');
+        _queueOfflineImpression({
+          'videoId': videoId,
+          'adId': adId,
+          'userId': userId,
+          'adType': adType,
+          'timestamp': DateTime.now().toIso8601String(),
+          'impressionType': 'click',
+        });
+      }
+    } catch (e) {
+      AppLogger.log('❌ AdImpressionService: Error tracking $adType ad click: $e');
+      _queueOfflineImpression({
+        'videoId': videoId,
+        'adId': adId,
+        'userId': userId,
+        'adType': adType,
+        'timestamp': DateTime.now().toIso8601String(),
+        'impressionType': 'click',
+      });
+    }
+  }
+
   /// Get total ad impressions for a video
   Future<Map<String, int>> getVideoAdImpressions(String videoId) async {
     try {
@@ -571,6 +680,35 @@ class AdImpressionService {
       }
     } catch (e) {
       AppLogger.log('❌ AdImpressionService: Error during offline sync: $e');
+    }
+  }
+
+  /// **NEW: Get granular breakdown of ad performance per video**
+  Future<List<Map<String, dynamic>>> getAdVideoBreakdown(String adId) async {
+    try {
+      AppLogger.log('📊 AdImpressionService: Getting video breakdown for ad: $adId');
+
+      final userData = await _authService.getUserData();
+      if (userData == null) return [];
+
+      final url = '${NetworkHelper.adsEndpoint}/analytics/$adId/video-breakdown';
+      final response = await httpClientService.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer ${userData['token']}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data);
+      } else {
+        AppLogger.log('❌ AdImpressionService: Failed to get ad breakdown - Status: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      AppLogger.log('❌ AdImpressionService: Error getting ad video breakdown: $e');
+      return [];
     }
   }
 }

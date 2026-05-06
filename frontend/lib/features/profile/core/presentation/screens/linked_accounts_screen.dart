@@ -72,45 +72,58 @@ class _LinkedAccountsScreenState extends ConsumerState<LinkedAccountsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        title: Text(AppText.get('linked_accounts_title', fallback: 'Linked Accounts')),
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: EdgeInsets.all(AppSpacing.spacing4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: AppSpacing.spacing3),     
-            // YouTube Account Tile
-            _buildAccountTile(
-              context: context,
-              icon: HugeIcons.strokeRoundedYoutube,
-              title: AppText.get('linked_accounts_youtube', fallback: 'YouTube'),
-              description: AppText.get('linked_accounts_youtube_desc', fallback: 'Cross-post your videos to your YouTube channel automatically.'),
-              isConnected: isYouTubeConnected,
-              statusText: isYouTubeConnected 
-                  ? (channelTitle ?? AppText.get('linked_accounts_connected', fallback: 'Connected'))
-                  : AppText.get('linked_accounts_not_connected', fallback: 'Not Connected'),
-              onActionTap: isYouTubeConnected ? null : _connectYouTube,
-              isLoading: _isConnecting,
-              color: const Color(0xFFFF0000),
-            ),
-            
-            const Spacer(),
-            
-            if (isYouTubeConnected)
-              Center(
-                child: Text(
-                  AppText.get('linked_accounts_refresh_hint', fallback: 'Refresh your profile after connecting to see the updated status.'),
-                  style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
-                  textAlign: TextAlign.center,
-                ),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: Text(AppText.get('linked_accounts_title', fallback: 'Linked Accounts')),
+            backgroundColor: AppColors.backgroundPrimary,
+            floating: true,
+            snap: true,
+            elevation: 0,
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.spacing4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: AppSpacing.spacing3),     
+                  // YouTube Account Tile
+                  _buildAccountTile(
+                    context: context,
+                    icon: HugeIcons.strokeRoundedYoutube,
+                    title: AppText.get('linked_accounts_youtube', fallback: 'YouTube'),
+                    description: AppText.get('linked_accounts_youtube_desc', fallback: 'Cross-post your videos to your YouTube channel automatically.'),
+                    isConnected: isYouTubeConnected,
+                    statusText: isYouTubeConnected 
+                        ? (channelTitle ?? AppText.get('linked_accounts_connected', fallback: 'Connected'))
+                        : AppText.get('linked_accounts_not_connected', fallback: 'Not Connected'),
+                    onActionTap: isYouTubeConnected ? null : _connectYouTube,
+                    isLoading: _isConnecting,
+                    color: const Color(0xFFFF0000),
+                  ),
+                ],
               ),
-            SizedBox(height: AppSpacing.spacing4),
-          ],
-        ),
+            ),
+          ),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Column(
+              children: [
+                const Spacer(),
+                if (isYouTubeConnected)
+                  Center(
+                    child: Text(
+                      AppText.get('linked_accounts_refresh_hint', fallback: 'Refresh your profile after connecting to see the updated status.'),
+                      style: AppTypography.labelSmall.copyWith(color: AppColors.textTertiary),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                SizedBox(height: AppSpacing.spacing4),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -339,6 +339,7 @@
                             <th>User Details</th>
                             <th>Watch Time</th>
                             <th>Videos</th>
+                            <th>Location</th>
                             <th>App Version</th>
                             <th>Last Active</th>
                             <th>Engagement Level</th>
@@ -397,6 +398,17 @@
             const h = Math.floor(m / 60);
             const rm = m % 60;
             return `${h}h ${rm}m`;
+        }
+
+        function formatLocation(loc) {
+            if (!loc) return '<span style="color: #666;">Not Provided</span>';
+            const parts = [];
+            if (loc.city) parts.push(loc.city);
+            if (loc.state) parts.push(loc.state);
+            if (loc.country) parts.push(loc.country);
+            
+            if (parts.length === 0) return '<span style="color: #666;">Unknown</span>';
+            return `<span>📍 ${parts.join(', ')}</span>`;
         }
 
         function getEngagementBadge(duration) {
@@ -534,6 +546,7 @@
                     </td>
                     <td style="font-weight: 600;">${formatDuration(u.totalWatchTime)}</td>
                     <td>${u.videoCount}</td>
+                    <td>${formatLocation(u.location)}</td>
                     <td><span class="status-badge badge-info" style="font-family: monospace;">v${u.appVersion}</span></td>
                     <td>${new Date(u.lastActivity).toLocaleDateString()}</td>
                     <td>${getEngagementBadge(u.totalWatchTime)}</td>

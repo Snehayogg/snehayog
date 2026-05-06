@@ -228,164 +228,197 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        title: Row(
-          children: [
-            const VayuLogo(fontSize: 22),
-            if (_isOfflineMode) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                  border:
-                      Border.all(color: Colors.orange.withValues(alpha: 0.5)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.cloud_off, size: 12, color: Colors.orange),
-                    const SizedBox(width: 4),
-                    Text(
-                      'OFFLINE',
-                      style: AppTypography.labelSmall.copyWith(
-                        color: Colors.orange,
-                        fontWeight: AppTypography.weightBold,
-                        fontSize: 10,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await _loadVideos(refresh: true);
+        },
+        color: Colors.white,
+        backgroundColor: AppColors.primary,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              backgroundColor: AppColors.backgroundPrimary,
+              elevation: 0,
+              floating: true,
+              snap: true,
+              automaticallyImplyLeading: false,
+              title: Row(
+                children: [
+                  const VayuLogo(fontSize: 22),
+                  if (_isOfflineMode) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cloud_off,
+                              size: 12, color: Colors.orange),
+                          const SizedBox(width: 4),
+                          Text(
+                            'OFFLINE',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: Colors.orange,
+                              fontWeight: AppTypography.weightBold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-            ],
+              actions: [
+                IconButton(
+                  icon: const HugeIcon(
+                    icon: HugeIcons.strokeRoundedSearch01,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SearchDiscoveryScreen(),
+                      ),
+                    );
+                  },
+                  tooltip: 'Search',
+                ),
+                SizedBox(width: AppSpacing.spacing2),
+              ],
+            ),
+            ..._buildSliverBody(),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const HugeIcon(
-              icon: HugeIcons.strokeRoundedSearch01,
-              color: Colors.white,
-              size: 20,
-            ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SearchDiscoveryScreen(),
-                ),
-              );
-            },
-            tooltip: 'Search',
-          ),
-          SizedBox(width: AppSpacing.spacing2),
-        ],
       ),
-      body: _buildBody(),
     );
   }
 
-  Widget _buildBody() {
+  List<Widget> _buildSliverBody() {
     if (_isLoading && _videos.isEmpty) {
-      return _buildShimmerList();
+      return [
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
+              child: _buildShimmerItem(),
+            ),
+            childCount: 4,
+          ),
+        ),
+      ];
     }
 
     if (_errorMessage != null && _videos.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.wifi_off,
-                color: AppColors.textSecondary.withValues(alpha: 0.7),
-                size: 60),
-            SizedBox(height: AppSpacing.spacing4),
-            Text(
-              _errorMessage!,
-              style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary.withValues(alpha: 0.9),
-              ),
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.wifi_off,
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
+                    size: 60),
+                SizedBox(height: AppSpacing.spacing4),
+                Text(
+                  _errorMessage!,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+                SizedBox(height: AppSpacing.spacing6),
+                AppButton(
+                  onPressed: () => _loadVideos(refresh: true),
+                  label: 'Try Again',
+                  variant: AppButtonVariant.outline,
+                ),
+              ],
             ),
-            SizedBox(height: AppSpacing.spacing6),
-            AppButton(
-              onPressed: () => _loadVideos(refresh: true),
-              label: 'Try Again',
-              variant: AppButtonVariant.outline,
-            ),
-          ],
+          ),
         ),
-      );
+      ];
     }
 
     if (_videos.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.video_library_outlined,
-                color: AppColors.textSecondary.withValues(alpha: 0.4),
-                size: 80),
-            SizedBox(height: AppSpacing.spacing6),
-            Text(
-              'No long-form videos yet',
-              style: AppTypography.headlineLarge.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: AppTypography.weightBold),
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.video_library_outlined,
+                    color: AppColors.textSecondary.withValues(alpha: 0.4),
+                    size: 80),
+                SizedBox(height: AppSpacing.spacing6),
+                Text(
+                  'No long-form videos yet',
+                  style: AppTypography.headlineLarge.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: AppTypography.weightBold),
+                ),
+                SizedBox(height: AppSpacing.spacing2),
+                Text(
+                  'Browse through your personal video collection',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary.withValues(alpha: 0.9),
+                  ),
+                ),
+                SizedBox(height: AppSpacing.spacing6),
+                AppButton(
+                  onPressed: () => _loadVideos(refresh: true),
+                  isLoading: _isLoading,
+                  isDisabled: _isLoading,
+                  label: 'Refresh',
+                  variant: AppButtonVariant.primary,
+                ),
+              ],
             ),
-            SizedBox(height: AppSpacing.spacing2),
-            Text(
-              'Browse through your personal video collection',
-              style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.textSecondary.withValues(alpha: 0.9),
-              ),
-            ),
-            SizedBox(height: AppSpacing.spacing6),
-            AppButton(
-              onPressed: () => _loadVideos(refresh: true),
-              isLoading: _isLoading,
-              isDisabled: _isLoading,
-              label: 'Refresh',
-              variant: AppButtonVariant.primary,
-            ),
-          ],
+          ),
         ),
-      );
+      ];
     }
 
     // Calculate total items: just videos + loader
     final int totalItems =
         _videos.length + (_isLoading && _videos.isNotEmpty ? 1 : 0);
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        await _loadVideos(refresh: true);
-      },
-      color: Colors.white,
-      backgroundColor: AppColors.primary,
-      child: ListView.builder(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: totalItems,
-        itemBuilder: (context, index) {
-          if (index >= _videos.length) {
-            return Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing8),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
+    return [
+      SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            if (index >= _videos.length) {
+              return Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing8),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
+              );
+            }
+            return Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
+              child: _buildVideoCard(index),
             );
-          }
-          return Padding(
-            padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
-            child: _buildVideoCard(index),
-          );
-        },
+          },
+          childCount: totalItems,
+        ),
       ),
-    );
+    ];
   }
 
   Widget _buildVideoCard(int index) {

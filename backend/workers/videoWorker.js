@@ -49,33 +49,37 @@ async function handleVideoProcessing(job) {
 
   try {
     // 1. Initial Status Update
+    console.log(`👷 Worker: Starting job for video ${videoId}`);
     await Video.findByIdAndUpdate(videoId, { 
         processingStatus: 'processing',
-        processingProgress: 10 
+        processingProgress: 5 
     });
 
-    // 2. Download from R2 (unless it's already a local path from fallback upload)
-    if (rawVideoKey.startsWith('http')) {
-        console.log('👷 Worker: Downloading raw video from URL:', rawVideoKey);
-        // Handle axios download if needed, or assume cloudflareR2Service handles URLs
-        // For simplicity, let's assume rawVideoKey is usually an R2 Key
-        await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
-    } else {
-        console.log('👷 Worker: Downloading raw video from R2 Key:', rawVideoKey);
-        await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
-    }
+    // 2. Download from R2
+    console.log(`👷 Worker: [Step 1/4] Downloading source from ${rawVideoKey.startsWith('http') ? 'URL' : 'R2'}...`);
+    await cloudflareR2Service.downloadFile(rawVideoKey, localRawPath);
     
-    await Video.findByIdAndUpdate(videoId, { processingProgress: 30 });
+    await Video.findByIdAndUpdate(videoId, { processingProgress: 15 });
 
-    // 3. Process Video to HLS
-    // Note: processVideoToHLS handles FFmpeg encoding and R2 upload of segments
+    // 3. Process Video to HLS (with real-time progress)
+    console.log(`👷 Worker: [Step 2/4] Processing HLS encoding for ${videoId}...`);
     const hlsResult = await hybridVideoService.processVideoToHLS(
         localRawPath,
         videoName,
-        userId
-    );
+        userId,
+        {
+          videoId: videoId, // Pass ID for early thumbnail update
+          onProgress: async (percent) => {
+            // Throttled progress update to database
+            if (percent % 5 === 0) {
+              await Video.findByIdAndUpdate(videoId, { processingProgress: percent });
+            }
+          }
+        }
+      );
 
-    // 4. Update Video Record with Results
+    // 4. Update Video Record with Final Results
+    console.log(`👷 Worker: [Step 3/4] Finalizing video record for ${videoId}...`);
     const video = await Video.findById(videoId);
     if (video) {
         video.videoUrl = hlsResult.videoUrl;
@@ -85,7 +89,8 @@ async function handleVideoProcessing(job) {
         if (thumbnailKey) {
             video.thumbnailUrl = cloudflareR2Service.getPublicUrl(thumbnailKey);
         } else {
-            video.thumbnailUrl = hlsResult.thumbnailUrl;
+            // Already updated early in processVideoToHLS, but ensure it's set
+            video.thumbnailUrl = hlsResult.thumbnailUrl || video.thumbnailUrl;
         }
 
         video.processingStatus = 'completed';
@@ -97,7 +102,6 @@ async function handleVideoProcessing(job) {
         if (hlsResult.width) video.originalResolution = { width: hlsResult.width, height: hlsResult.height };
         if (hlsResult.duration) video.duration = hlsResult.duration;
 
-        // **SOURCE OF TRUTH: Always update videoType based on aspect ratio**
         if (hlsResult.aspectRatio) {
             video.videoType = hlsResult.aspectRatio > 1.0 ? 'vayu' : 'yog';
         }
@@ -113,11 +117,11 @@ async function handleVideoProcessing(job) {
         });
         
         await video.save();
-        console.log(`✅ Worker: Video ${videoId} processed and saved.`);
+        console.log(`✅ Worker: Video ${videoId} processing completed.`);
 
-        // 5. Trigger Social Cross-Posting if requested
+        // 5. Trigger Social Cross-Posting
         if (crossPostPlatforms && Array.isArray(crossPostPlatforms) && crossPostPlatforms.length > 0) {
-            console.log(`📡 Worker: Triggering cross-posting for ${videoId}`);
+            console.log(`📡 Worker: [Step 4/4] Triggering cross-posting for ${videoId}...`);
             for (const platform of crossPostPlatforms) {
                 try {
                     await addSocialJob(platform, {
@@ -133,9 +137,8 @@ async function handleVideoProcessing(job) {
             }
         }
 
-        // 6. Local Moderation (AI Scan)
-        try {
-            const moderationResult = await moderationService.moderateVideo(localRawPath);
+        // 6. Local Moderation (Async)
+        moderationService.moderateVideo(localRawPath).then(async (moderationResult) => {
             const updatedVideo = await Video.findById(videoId);
             if (updatedVideo) {
                 updatedVideo.moderationResult = {
@@ -151,13 +154,12 @@ async function handleVideoProcessing(job) {
                 }
                 await updatedVideo.save();
             }
-        } catch (modError) {
+        }).catch(modError => {
             console.error('⚠️ Worker: Local moderation failed:', modError.message);
-        }
+        });
 
         // 7. Cache Invalidation
         try {
-            // **FIX: Search by googleId for cache invalidation**
             const user = await User.findOne({ googleId: userId });
             if (user && user.googleId) {
                 await invalidateCache([
@@ -166,29 +168,25 @@ async function handleVideoProcessing(job) {
                     VideoCacheKeys.user(user.googleId),
                     VideoCacheKeys.all()
                 ]);
-                console.log('🧹 Worker: Cache invalidated for user feed.');
+                console.log('🧹 Worker: Cache invalidated.');
             }
         } catch (cacheError) {
             console.error('❌ Worker: Cache invalidation failed:', cacheError.message);
         }
     }
 
-    // Moved Cleanup AFTER Moderation and Cache logic
     // 8. Cleanup
-    // **COST OPTIMIZATION: Delete raw video from R2 after HLS success**
     if (rawVideoKey && video && video.isHLSEncoded) {
         try {
-            console.log(`🧹 Worker: Deleting original R2 source to save costs: ${rawVideoKey}`);
+            console.log(`🧹 Worker: Deleting original source to save costs: ${rawVideoKey}`);
             await cloudflareR2Service.deleteVideoFromR2(rawVideoKey);
         } catch (e) {
-            console.warn('⚠️ Worker: Failed to delete R2 source (non-fatal):', e.message);
+            console.warn('⚠️ Worker: Failed to delete source (non-fatal):', e.message);
         }
     }
 
-    // Always cleanup local temp file
     if (fs.existsSync(localRawPath)) {
         fs.unlinkSync(localRawPath);
-        console.log('🧹 Worker: Cleaned up local temp file.');
     }
 
     return { status: 'completed', videoId };
