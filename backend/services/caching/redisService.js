@@ -243,41 +243,69 @@ class RedisService {
   async bfMAdd(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return false;
     try {
-      const allPositions = items.flatMap(item => this._getBitPositions(item));
-      const script = `
-        for i, pos in ipairs(ARGV) do
-          redis.call('SETBIT', KEYS[1], pos, 1)
-        end
-        redis.call('EXPIRE', KEYS[1], 1296000)
-        return true
-      `;
-      await this.client.eval(script, [key], allPositions);
+      const p = this.client.pipeline();
+      // We chunk items to prevent "too many arguments" in a single HTTP REST request
+      // 100 items = 400 positions = 1200 arguments for BITFIELD
+      const chunkSize = 100;
+      for (let i = 0; i < items.length; i += chunkSize) {
+        const chunk = items.slice(i, i + chunkSize);
+        const chunkPositions = chunk.flatMap(item => this._getBitPositions(item));
+        
+        const args = [];
+        for (const pos of chunkPositions) {
+          args.push('SET', 'u1', pos, 1);
+        }
+        
+        if (args.length > 0) {
+           p.bitfield(key, ...args);
+        }
+      }
+      p.expire(key, 1296000);
+      await p.exec();
       return true;
-    } catch (error) { return false; }
+    } catch (error) { 
+      console.error('❌ Redis: bfMAdd failed:', error?.message);
+      return false; 
+    }
   }
 
   async bfMExists(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return items.map(() => false);
     try {
-      const allPositions = items.flatMap(item => this._getBitPositions(item));
-      const script = `
-        local results = {}
-        local key = KEYS[1]
-        for i=1, #ARGV, 4 do
-          local isPresent = 1
-          if redis.call('GETBIT', key, ARGV[i]) == 0 then isPresent = 0
-          elseif redis.call('GETBIT', key, ARGV[i+1]) == 0 then isPresent = 0
-          elseif redis.call('GETBIT', key, ARGV[i+2]) == 0 then isPresent = 0
-          elseif redis.call('GETBIT', key, ARGV[i+3]) == 0 then isPresent = 0
-          end
-          table.insert(results, isPresent)
-        end
-        return results
-      `;
-      const results = await this.client.eval(script, [key], allPositions);
-      if (!Array.isArray(results)) return items.map(() => false);
-      return results.map(r => r === 1);
-    } catch (error) { return items.map(() => false); }
+      const results = [];
+      const chunkSize = 100;
+      
+      for (let i = 0; i < items.length; i += chunkSize) {
+        const chunk = items.slice(i, i + chunkSize);
+        const chunkPositions = chunk.flatMap(item => this._getBitPositions(item));
+        
+        const args = [];
+        for (const pos of chunkPositions) {
+          args.push('GET', 'u1', pos);
+        }
+        
+        let rawResults = [];
+        if (args.length > 0) {
+           rawResults = await this.client.bitfield(key, ...args);
+        }
+        
+        for (let j = 0; j < chunk.length; j++) {
+           if (!rawResults || rawResults.length <= j * 4) { 
+               results.push(false); 
+               continue; 
+           }
+           const p1 = rawResults[j * 4];
+           const p2 = rawResults[j * 4 + 1];
+           const p3 = rawResults[j * 4 + 2];
+           const p4 = rawResults[j * 4 + 3];
+           results.push(p1 === 1 && p2 === 1 && p3 === 1 && p4 === 1);
+        }
+      }
+      return results;
+    } catch (error) { 
+      console.error('❌ Redis: bfMExists failed:', error?.message);
+      return items.map(() => false); 
+    }
   }
 
   // --- APP SPECIFIC HELPERS ---

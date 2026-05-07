@@ -171,7 +171,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   Widget _buildSectionHeader(String title) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(AppSpacing.spacing4, AppSpacing.spacing6, AppSpacing.spacing4, AppSpacing.spacing3),
+        padding: EdgeInsets.fromLTRB(AppSpacing.spacing3, AppSpacing.spacing3, AppSpacing.spacing3, AppSpacing.spacing1),
         child: Row(
           children: [
             Text(
@@ -210,7 +210,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             height: 90,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing3),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing1),
               itemCount: _creators.length,
               itemBuilder: (context, index) {
                 final creator = _creators[index];
@@ -284,7 +284,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             height: 200,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing1),
               itemCount: _exclusiveVideos.length,
               itemBuilder: (context, index) {
                 final video = _exclusiveVideos[index];
@@ -352,7 +352,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
 
   Widget _buildCompactFeed() {
     return SliverPadding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing1),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -505,11 +505,11 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
       child: ListView.builder(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.only(bottom: AppSpacing.spacing8),
+        padding: EdgeInsets.only(bottom: AppSpacing.spacing3),
         itemCount: _videos.length,
         itemBuilder: (context, index) {
           return Padding(
-            padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
+            padding: EdgeInsets.only(bottom: AppSpacing.spacing3),
             child: _buildVideoCard(index),
           );
         },
@@ -582,7 +582,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             return Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
+              padding: EdgeInsets.only(bottom: AppSpacing.spacing3),
               child: _buildVideoCard(index),
             );
           },
@@ -741,7 +741,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
           // 2. Info Section (Below Thumbnail)
           Padding(
             padding: EdgeInsets.fromLTRB(AppSpacing.spacing1,
-                AppSpacing.spacing3, AppSpacing.spacing1, AppSpacing.spacing2),
+                AppSpacing.spacing1, AppSpacing.spacing1, AppSpacing.spacing1),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
