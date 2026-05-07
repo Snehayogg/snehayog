@@ -11,9 +11,9 @@ import mongoose from 'mongoose';
  */
 class FeedQueueService {
   constructor() {
-    this.QUEUE_SIZE_LIMIT = 60;  
-    this.REFILL_THRESHOLD = 40;  
-    this.BATCH_SIZE = 50;        
+    this.QUEUE_SIZE_LIMIT = 150;  // Max videos to hold in Redis per user
+    this.REFILL_THRESHOLD = 40;   // Trigger refill when videos drop below this number
+    this.BATCH_SIZE = 110;        // Number of videos to fetch during refill (Threshold + Batch = Limit)
   }
 
   getQueueKey(userId, videoType = 'yog') {
@@ -32,8 +32,16 @@ class FeedQueueService {
     }
   }
 
-  async popFromQueue(userId, videoType = 'yog', count = 10) {
+  async popFromQueue(userId, videoType = 'yog', limit = 5) {
+    // OPTIMIZATION: Skip Redis entirely for anonymous users to save commands.
+    // Anonymous users get a standard non-personalized feed from MongoDB.
+    if (!userId || userId === 'anon' || userId === 'anonymous' || userId === 'undefined') {
+
+      return [];
+    }
+
     const queueKey = this.getQueueKey(userId, videoType);
+
     const videos = [];
     const tStart = Date.now();
     let currentLength = 0;
@@ -55,7 +63,8 @@ class FeedQueueService {
         return {len, unpack(result)}
       `;
       // Use fixed call method that handles EVAL correctly
-      const result = await redisService.call('EVAL', script, 1, queueKey, count);
+      const result = await redisService.eval(script, [queueKey], [limit]);
+
       if (Array.isArray(result) && result.length > 0) {
         currentLength = result[0] || 0;
         poppedIds = result.slice(1).filter(Boolean);
@@ -79,15 +88,15 @@ class FeedQueueService {
       this.generateAndPushFeed(userId, videoType).catch(() => {});
     }
 
-    // Fallback if queue empty - OPTIMIZATION: Skip lRange if we have enough videos
-    if (videos.length < count) {
-       const needed = count - videos.length;
-       // OPTIMIZATION: Only fetch remaining if queue is not empty
+    if (videos.length < limit) {
+       const needed = limit - videos.length;
        const remainingQueued = projectedLength > 0 ? await redisService.lRange(queueKey, 0, -1) : [];
+
        const initialExcludes = new Set([...videos, ...remainingQueued]);
 
        const fallbackIds = await this.getFallbackIds(userId, videoType, needed, Array.from(initialExcludes));
        if (fallbackIds.length > 0) {
+          console.log(`⚠️ Served ${fallbackIds.length} videos from MongoDB Fallback for user ${userId}`);
           videos.push(...fallbackIds);
        }
     }
@@ -114,7 +123,7 @@ class FeedQueueService {
   }
 
   async ensureBloomFilterSeeded(userId) {
-    if (!userId || userId === 'anon' || userId === 'undefined' || userId === 'null') return;
+    if (!userId || userId === 'anon' || userId === 'anonymous' || userId === 'undefined' || userId === 'null') return;
     const seededKey = `user:bf_seeded:${userId}`;
     if (await redisService.exists(seededKey)) return;
 
@@ -144,7 +153,7 @@ class FeedQueueService {
   }
 
   async generateAndPushFeed(userId, videoType = 'yog') {
-    if (userId === 'undefined' || userId === 'null') userId = 'anon';
+    if (!userId || userId === 'anon' || userId === 'anonymous' || userId === 'undefined' || userId === 'null') return 0;
     const lockKey = `lock:refill:${userId}:${videoType}`;
 
     if (!(await redisService.setLock(lockKey, '1', 15))) return 0;

@@ -14,6 +14,7 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/shared/widgets/interactive_scale_button.dart';
+import 'package:vayug/shared/widgets/vayu_logo.dart';
 import 'package:hugeicons/hugeicons.dart';
 
 class SubscriptionsScreen extends ConsumerStatefulWidget {
@@ -28,9 +29,14 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   final ScrollController _scrollController = ScrollController();
 
   List<VideoModel> _videos = [];
+  List<VideoModel> _exclusiveVideos = [];
+  List<VideoModel> _feedVideos = [];
+  List<Uploader> _creators = [];
+  
   bool _isLoading = true;
   String? _errorMessage;
   bool? _wasSignedIn;
+  Uploader? _selectedCreator;
 
   @override
   void initState() {
@@ -57,8 +63,25 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
 
       if (!mounted) return;
 
+      // Extract unique creators for the Hub
+      final creatorsMap = <String, Uploader>{};
+      for (var v in videos) {
+        creatorsMap[v.uploader.id] = v.uploader;
+      }
+
       setState(() {
         _videos = videos;
+        // Logic for separation: 
+        // 1. Exclusive: Specific for that user (using a heuristic/flag)
+        // 2. Feed: Available to all
+        // For now, let's assume videos with "Exclusive" in name or certain tags are exclusive
+        _exclusiveVideos = videos.where((v) => 
+          v.videoName.toLowerCase().contains('exclusive') || 
+          (v.tags?.contains('exclusive') ?? false)
+        ).toList();
+        
+        _feedVideos = videos.where((v) => !_exclusiveVideos.contains(v)).toList();
+        _creators = creatorsMap.values.toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -123,13 +146,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             floating: true,
             snap: true,
             elevation: 0,
-            title: Text(
-              'Subscriptions',
-              style: AppTypography.titleLarge.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            title: const VayuLogo(fontSize: 22),
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
@@ -139,7 +156,303 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
               SizedBox(width: AppSpacing.spacing2),
             ],
           ),
-          ..._buildBodySlivers(isSignedIn),
+          if (isSignedIn && !_isLoading && _videos.isNotEmpty) ...[
+            _buildCreatorHub(),
+            if (_exclusiveVideos.isNotEmpty) _buildExclusiveShelf(),
+            _buildSectionHeader('Latest from Subscriptions'),
+            _buildCompactFeed(),
+          ] else
+            ..._buildBodySlivers(isSignedIn),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(AppSpacing.spacing4, AppSpacing.spacing6, AppSpacing.spacing4, AppSpacing.spacing3),
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: AppTypography.titleMedium.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            if (title.contains('Exclusive'))
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                ),
+                child: Text(
+                  'PREMIUM',
+                  style: AppTypography.labelSmall.copyWith(color: Colors.amber, fontSize: 10),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreatorHub() {
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 90,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing3),
+              itemCount: _creators.length,
+              itemBuilder: (context, index) {
+                final creator = _creators[index];
+                final isSelected = _selectedCreator?.id == creator.id;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCreator = isSelected ? null : creator;
+                      if (_selectedCreator != null) {
+                        _feedVideos = _videos.where((v) => v.uploader.id == creator.id).toList();
+                      } else {
+                        _feedVideos = _videos.where((v) => !_exclusiveVideos.contains(v)).toList();
+                      }
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected ? AppColors.primary : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 28,
+                            backgroundImage: creator.profilePic.isNotEmpty 
+                                ? CachedNetworkImageProvider(creator.profilePic) 
+                                : null,
+                            child: creator.profilePic.isEmpty ? const Icon(Icons.person) : null,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            creator.name,
+                            style: AppTypography.labelSmall.copyWith(
+                              color: isSelected ? AppColors.primary : Colors.white70,
+                              fontSize: 10,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const Divider(color: Colors.white10, height: 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExclusiveShelf() {
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Exclusive For You'),
+          SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+              itemCount: _exclusiveVideos.length,
+              itemBuilder: (context, index) {
+                final video = _exclusiveVideos[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12.0),
+                  child: InteractiveScaleButton(
+                    onTap: () => _navigateToVideo(_videos.indexOf(video)),
+                    child: Container(
+                      width: 280,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CachedNetworkImage(
+                              imageUrl: video.thumbnailUrl,
+                              fit: BoxFit.cover,
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 8,
+                              left: 8,
+                              right: 8,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    video.videoName,
+                                    style: AppTypography.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    video.uploader.name,
+                                    style: AppTypography.labelSmall.copyWith(color: Colors.white70),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactFeed() {
+    return SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.7, // Portrait focus
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final video = _feedVideos[index];
+            if (video.videoType == 'vayu') {
+              return _buildCompactVayuCard(video);
+            } else {
+              return _buildPortraitYugCard(video);
+            }
+          },
+          childCount: _feedVideos.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPortraitYugCard(VideoModel video) {
+    return InteractiveScaleButton(
+      onTap: () => _navigateToVideo(_videos.indexOf(video)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CachedNetworkImage(
+                    imageUrl: video.thumbnailUrl,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                    child: const Icon(Icons.bolt, color: Colors.amber, size: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            video.videoName,
+            style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '${FormatUtils.formatViews(video.views)} views',
+            style: AppTypography.labelSmall.copyWith(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactVayuCard(VideoModel video) {
+    return InteractiveScaleButton(
+      onTap: () => _navigateToVideo(_videos.indexOf(video)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: CachedNetworkImage(
+                imageUrl: video.thumbnailUrl,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            video.videoName,
+            style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Row(
+            children: [
+              const Icon(Icons.play_circle_outline, color: Colors.white54, size: 10),
+              const SizedBox(width: 4),
+              Text(
+                FormatUtils.formatDuration(video.duration),
+                style: AppTypography.labelSmall.copyWith(color: Colors.white54, fontSize: 10),
+              ),
+            ],
+          ),
         ],
       ),
     );

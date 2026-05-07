@@ -6,18 +6,19 @@ const router = express.Router();
 // Submit feedback
 router.post('/submit', async (req, res) => {
   try {
-    const { rating, comments, userEmail, userId, type } = req.body;
+    const { rating, comments, userEmail, userId, type, videoId } = req.body;
 
     console.log('📝 Feedback submission attempt:', { 
       rating, 
       userEmail, 
       userId, 
       type,
+      videoId,
       commentsLength: comments?.length 
     });
 
     // Validate required fields
-    if (!rating || rating < 1 || rating > 5) {
+    if (type !== 'suggestion' && (!rating || rating < 1 || rating > 5)) {
       console.log('⚠️ Invalid rating:', rating);
       return res.status(400).json({
         success: false,
@@ -35,9 +36,10 @@ router.post('/submit', async (req, res) => {
 
     // Create feedback entry
     const feedback = new Feedback({
-      rating,
+      rating: type === 'suggestion' ? (rating || 5) : rating,
       comments: comments || '',
       type: type || 'general',
+      videoId: videoId || null,
       userEmail: userEmail.trim().toLowerCase(),
       userId: userId || null,
       userAgent: req.headers['user-agent'] || '',

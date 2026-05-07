@@ -276,8 +276,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
                           '⚠️ $_error',
                           style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
                         ),
-                      ),
-                      
+                      ),                   
                     AppSpacing.vSpace32,
                   ],
                 ),

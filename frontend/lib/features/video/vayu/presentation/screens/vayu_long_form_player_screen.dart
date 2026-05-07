@@ -6,6 +6,7 @@ import 'package:chewie/chewie.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'dart:async';
+import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
@@ -706,10 +707,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     );
   }
 
-  void _showShareSuggestionBottomSheet(VideoModel video) {
+  void _showShareSuggestionBottomSheet(VideoModel video) async {
     final TextEditingController controller = TextEditingController();
+    final authState = ref.read(googleSignInProvider);
+    final userEmail = authState.userData?['email'] ?? 'anonymous@vayug.com';
+    final userId = authState.userData?['googleId'] ?? authState.userData?['id'] ?? 'anonymous';
+
     VayuBottomSheet.show<void>(
-      context: context, title: 'Share Suggestion',
+      context: context, 
+      title: 'Share Suggestion',
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -717,9 +723,53 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           children: [
             Text('Did you face any problem while watching this video? share with us', style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary)),
             const SizedBox(height: 16),
-            TextField(controller: controller, maxLines: 4, decoration: InputDecoration(hintText: 'Type here...', filled: true, fillColor: AppColors.backgroundSecondary, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
+            TextField(
+              controller: controller, 
+              maxLines: 4, 
+              decoration: InputDecoration(
+                hintText: 'Type here...', 
+                filled: true, 
+                fillColor: AppColors.backgroundSecondary, 
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+              )
+            ),
             const SizedBox(height: 20),
-            AppButton(onPressed: () { Navigator.pop(context); _showSnackBar('Suggestion shared!'); }, label: 'Share Suggestion'),
+            AppButton(
+              onPressed: () async {
+                final suggestionText = controller.text.trim();
+                if (suggestionText.isEmpty) {
+                  _showSnackBar('Please type something', type: VayuSnackBarType.error);
+                  return;
+                }
+                
+                Navigator.pop(context);
+                _showSnackBar('Submitting suggestion...');
+
+                try {
+                  final response = await _videoService.httpClientService.post(
+                    Uri.parse('${NetworkHelper.apiBaseUrl}/feedback/submit'),
+                    body: {
+                      'type': 'suggestion',
+                      'comments': suggestionText,
+                      'userEmail': userEmail,
+                      'userId': userId,
+                      'videoId': video.id,
+                      'rating': 5, // Default rating for suggestions
+                    },
+                  );
+
+                  if (response.statusCode == 201) {
+                    _showSnackBar('Suggestion shared! Thank you.', type: VayuSnackBarType.success);
+                  } else {
+                    _showSnackBar('Failed to share suggestion', type: VayuSnackBarType.error);
+                  }
+                } catch (e) {
+                  AppLogger.error('Error submitting suggestion', e);
+                  _showSnackBar('Network error. Try again later.', type: VayuSnackBarType.error);
+                }
+              }, 
+              label: 'Share Suggestion'
+            ),
           ],
         ),
       ),

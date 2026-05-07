@@ -30,7 +30,8 @@ router.get('/feedback', requireAdminDashboardKey, async (req, res) => {
       search,
       sort = 'desc',
       unread,
-      replied
+      replied,
+      type
     } = req.query;
 
     const query = {};
@@ -40,6 +41,10 @@ router.get('/feedback', requireAdminDashboardKey, async (req, res) => {
       if (!Number.isNaN(parsedRating)) {
         query.rating = parsedRating;
       }
+    }
+
+    if (type) {
+      query.type = type;
     }
 
     if (unread === 'true') {

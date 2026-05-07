@@ -3,19 +3,23 @@ import mongoose from 'mongoose';
 const feedbackSchema = new mongoose.Schema({
   rating: {
     type: Number,
-    required: true,
+    required: function() { return this.type !== 'suggestion'; },
     min: 1,
     max: 5
   },
   comments: {
     type: String,
-    maxlength: 1000,
+    maxlength: 2000,
     trim: true
   },
   type: {
     type: String,
-    enum: ['general', 'bug', 'feature', 'performance', 'ui', 'other'],
+    enum: ['general', 'bug', 'feature', 'performance', 'ui', 'suggestion', 'other'],
     default: 'general'
+  },
+  videoId: {
+    type: String,
+    trim: true
   },
   userEmail: {
     type: String,
@@ -90,14 +94,18 @@ feedbackSchema.methods.addReply = function(reply) {
 feedbackSchema.statics.getStats = async function() {
   const total = await this.countDocuments();
   const unread = await this.countDocuments({ isRead: false });
+  const unreadFeedback = await this.countDocuments({ isRead: false, type: { $ne: 'suggestion' } });
+  const unreadSuggestions = await this.countDocuments({ isRead: false, type: 'suggestion' });
   const replied = await this.countDocuments({ isReplied: true });
   
   const avgRatingResult = await this.aggregate([
+    { $match: { type: { $ne: 'suggestion' } } },
     { $group: { _id: null, avgRating: { $avg: '$rating' } } }
   ]);
   const avgRating = avgRatingResult.length > 0 ? avgRatingResult[0].avgRating : 0;
 
   const ratingDistribution = await this.aggregate([
+    { $match: { type: { $ne: 'suggestion' } } },
     { $group: { _id: '$rating', count: { $sum: 1 } } },
     { $sort: { _id: -1 } }
   ]);
@@ -105,6 +113,8 @@ feedbackSchema.statics.getStats = async function() {
   return {
     total,
     unread,
+    unreadFeedback,
+    unreadSuggestions,
     replied,
     avgRating: Math.round(avgRating * 10) / 10,
     ratingDistribution

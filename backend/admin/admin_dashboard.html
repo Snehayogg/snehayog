@@ -407,6 +407,12 @@
                 <div class="stat-label">Unread Feedback</div>
             </div>
 
+            <div class="stat-card primary" onclick="document.getElementById('suggestionsSection').scrollIntoView({behavior: 'smooth'})" style="cursor: pointer; border-left-color: #007bff;">
+                <div class="stat-icon">💡</div>
+                <div class="stat-number" id="unreadSuggestions">-</div>
+                <div class="stat-label">Unread Suggestions</div>
+            </div>
+
             <div class="stat-card danger" onclick="document.getElementById('recommenderSection').scrollIntoView({behavior: 'smooth'})" style="cursor: pointer;">
                 <div class="stat-icon">⏭️</div>
                 <div class="stat-number" id="globalSkipRate">-</div>
@@ -550,6 +556,18 @@
             <h2 class="section-title">⚠️ Reported Videos (User Flags)</h2>
             <div id="reportedVideosList">
                 <p>Loading reported videos...</p>
+            </div>
+        </div>
+
+        <div class="dashboard-section" id="suggestionsSection">
+            <h2 class="section-title">💡 User Suggestions (Video Player)</h2>
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="loadSuggestions()">
+                    📥 Load Suggestions
+                </button>
+            </div>
+            <div id="suggestionsList">
+                <p>Click "Load Suggestions" to view video-specific user suggestions</p>
             </div>
         </div>
 
@@ -1571,7 +1589,7 @@
         async function loadFeedback() {
             try {
                 setLoading(true);
-                const response = await authorizedFetch(`${API_BASE}/admin/feedback`);
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback?type=general`);
                 if (response.ok) {
                     const data = await response.json();
                     displayFeedback(data.feedback || []);
@@ -1584,6 +1602,68 @@
             } finally {
                 setLoading(false);
             }
+        }
+
+        async function loadSuggestions() {
+            try {
+                setLoading(true);
+                const container = document.getElementById('suggestionsList');
+                container.innerHTML = '<p>Loading suggestions...</p>';
+
+                const response = await authorizedFetch(`${API_BASE}/admin/feedback?type=suggestion`);
+                if (response.ok) {
+                    const data = await response.json();
+                    displaySuggestions(data.feedback || []);
+                } else {
+                    showError('Failed to load suggestions');
+                    container.innerHTML = '<p class="error-message">Failed to load suggestions</p>';
+                }
+            } catch (error) {
+                console.error('Error loading suggestions:', error);
+                showError('Error loading suggestions: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function displaySuggestions(suggestions) {
+            const container = document.getElementById('suggestionsList');
+
+            if (suggestions.length === 0) {
+                container.innerHTML = '<p>No suggestions found</p>';
+                return;
+            }
+
+            const html = suggestions.map(s => `
+                <div class="feedback-card" style="border-left: 5px solid #007bff;">
+                    <div class="feedback-header">
+                        <div style="font-weight: bold; color: #007bff;">
+                            Suggestion #${s._id.substring(s._id.length - 6)}
+                        </div>
+                        <div class="feedback-meta">
+                            ${new Date(s.createdAt).toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="feedback-content">
+                        <strong>User:</strong> ${s.userName || s.userEmail || 'Anonymous'}<br>
+                        ${s.videoId ? `<strong>Video ID:</strong> <code style="background: #eee; padding: 2px 5px; border-radius: 4px;">${s.videoId}</code><br>` : ''}
+                        <div style="margin-top: 10px; background: #fff; padding: 15px; border-radius: 8px; border-left: 3px solid #667eea;">
+                            "${s.comments}"
+                        </div>
+                    </div>
+                    <div class="feedback-actions">
+                        <button class="btn btn-primary btn-sm" onclick="viewFeedbackDetails('${s._id}')">
+                            👁️ View Details
+                        </button>
+                        ${!s.isRead ? `
+                        <button class="btn btn-success btn-sm" onclick="markAsRead('${s._id}', 'suggestion')">
+                            ✅ Mark as Seen
+                        </button>` : '<span class="status-badge status-paid">Read</span>'}
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = html;
         }
 
         function displayFeedback(feedbackList) {
@@ -1724,17 +1804,19 @@
             }
         }
 
-        async function markAsRead(feedbackId) {
+        async function markAsRead(feedbackId, type = 'feedback') {
             try {
                 const response = await authorizedFetch(`${API_BASE}/admin/feedback/${feedbackId}/read`, { method: 'PUT' });
                 if (response.ok) {
-                    showSuccess('Feedback marked as read');
-                    loadFeedback(); // Refresh the list
+                    showSuccess('Marked as read');
+                    if (type === 'suggestion') loadSuggestions();
+                    else loadFeedback();
+                    loadFeedbackStats(); // Update counters
                 } else {
-                    showError('Failed to mark feedback as read');
+                    showError('Failed to mark as read');
                 }
             } catch (error) {
-                showError('Error marking feedback as read: ' + error.message);
+                showError('Error marking as read: ' + error.message);
             }
         }
 
@@ -1800,6 +1882,7 @@
                 await loadReportedVideos();
 
                 // Load feedback automatically
+                await loadSuggestions();
                 await loadFeedback();
                 await loadFeedbackStats();
 
@@ -1869,7 +1952,8 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success && data.stats) {
-                        document.getElementById('unreadFeedback').textContent = data.stats.unread || 0;
+                        document.getElementById('unreadFeedback').textContent = data.stats.unreadFeedback || 0;
+                        document.getElementById('unreadSuggestions').textContent = data.stats.unreadSuggestions || 0;
                     }
                 }
             } catch (error) {

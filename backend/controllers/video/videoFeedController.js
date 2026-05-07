@@ -330,6 +330,9 @@ export const getFeed = async (req, res) => {
       nextCursor = lastVideo.createdAt || lastVideo.uploadedAt;
       if (nextCursor instanceof Date) nextCursor = nextCursor.toISOString();
     }
+    
+    // Fix: set hasMore to true if we returned videos, so frontend asks for more
+    hasMore = finalVideos.length > 0;
 
     res.json({
       videos: serializedVideos,

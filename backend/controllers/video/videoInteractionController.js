@@ -8,6 +8,46 @@ import { updateCreatorDailyStats } from '../../utils/analyticsUtils.js';
 import { convertLikedByToGoogleIds } from '../../utils/videoUtils.js';
 import { serializeVideos } from '../../utils/serializers/videoSerializer.js';
 
+// --- BATCH PROCESSING BUFFERS (Write-Behind Caching) ---
+const viewBuffer = new Map(); // videoId -> count
+const creatorBuffer = new Map(); // creatorId -> count
+
+const flushViewsBatch = async () => {
+  if (viewBuffer.size === 0 && creatorBuffer.size === 0) return;
+
+  // Swap buffers so incoming requests can keep queueing
+  const currentViewBuffer = new Map(viewBuffer);
+  const currentCreatorBuffer = new Map(creatorBuffer);
+  viewBuffer.clear();
+  creatorBuffer.clear();
+
+  try {
+    // Batch MongoDB Update for Videos
+    if (currentViewBuffer.size > 0) {
+      const bulkOps = Array.from(currentViewBuffer.entries()).map(([id, count]) => ({
+        updateOne: {
+          filter: { _id: id },
+          update: { $inc: { views: count } }
+        }
+      }));
+      await Video.bulkWrite(bulkOps, { ordered: false }).catch(() => {});
+    }
+
+    // Batch MongoDB Update for Creator Stats
+    if (currentCreatorBuffer.size > 0) {
+      for (const [creatorId, count] of currentCreatorBuffer.entries()) {
+         updateCreatorDailyStats(creatorId, { views: count }).catch(() => {});
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error flushing views:', error);
+  }
+};
+
+// Start the 30-second background flush timer
+setInterval(flushViewsBatch, 30000);
+// --------------------------------------------------------
+
 /**
  * Watch History Controllers
  */
@@ -130,30 +170,10 @@ export const trackWatch = async (req, res) => {
       if (redisService.getConnectionStatus()) await redisService.addToLongTermWatchHistory(identityId, [videoId.toString()]);
     }
 
-    if (redisService.getConnectionStatus()) {
-      const clearCache = async () => {
-        try {
-          const types = ['all', 'yog', 'vayu', 'reel', 'short', 'long'];
-          const keysToDel = [];
-          
-          types.forEach(type => {
-            keysToDel.push(`feed:${identityId}:${type}`);
-            keysToDel.push(`videos:unwatched:ids:${identityId}:${type}`);
-            keysToDel.push(`videos:feed:user:${identityId}:${type}`);
-          });
-          
-          keysToDel.push(`watch:history:${identityId}`);
-          
-          if (keysToDel.length > 0) {
-            await Promise.all(keysToDel.map(k => redisService.del(k)));
-          }
-        } catch (e) {
-          console.log('ℹ️ Redis: Background cleanup error (ignored):', e.message);
-        }
-      };
-      
-      clearCache();
-    }
+    // OPTIMIZATION: Removed aggressive clearCache on every view.
+    // The Bloom Filter already handles "unwatched" logic, so we don't need 
+    // to hammer Redis with 20+ DEL commands on every single watch event.
+
 
     res.json({ success: true, message: 'Watch tracked successfully' });
   } catch (error) {
@@ -192,7 +212,8 @@ export const trackSkip = async (req, res) => {
       const types = ['all', 'yog', 'vayu', 'reel', 'short', 'long'];
       const keysToDel = types.map(type => `feed:${userId}:${type}`);
       keysToDel.push(`videos:unwatched:ids:${userId}:all`);
-      await Promise.all(keysToDel.map(k => redisService.del(k)));
+      // BATCH: Use single DEL command instead of multiple parallel calls
+      await redisService.delMany(keysToDel);
     }
 
     res.json({ success: true, message: 'Skip tracked successfully' });
@@ -512,42 +533,27 @@ export const deleteLike = async (req, res) => {
 export const incrementView = async (req, res) => {
   try {
     const videoId = req.params.id;
-    const { deviceId } = req.body;
-    const googleId = req.user?.googleId;
 
     if (!videoId) return res.status(400).json({ error: 'Video ID is required' });
 
-    const userIdentifier = googleId || deviceId || 'anonymous';
-    const updatedVideo = await Video.findByIdAndUpdate(videoId, { $inc: { views: 1 } }, { new: true });
-    if (!updatedVideo) return res.status(404).json({ error: 'Video not found' });
+    // 1. FAST RESPONSE: Don't wait for database, just return success
+    res.json({ success: true, message: 'View queued for batch update' });
 
-    if (updatedVideo.uploader) {
-      updateCreatorDailyStats(updatedVideo.uploader, { views: 1 }).catch(err => console.error('DailyStats Error:', err));
-    }
+    // 2. IN-MEMORY BATCH: Queue the video view
+    viewBuffer.set(videoId, (viewBuffer.get(videoId) || 0) + 1);
 
-    if (userIdentifier && redisService.getConnectionStatus()) {
-      const clearCache = async () => {
-        try {
-          const types = ['all', 'yog', 'vayu'];
-          const keysToDel = [];
-          
-          types.forEach(type => {
-            keysToDel.push(`videos:unwatched:ids:${userIdentifier}:${type}`);
-            keysToDel.push(`videos:feed:user:${userIdentifier}:${type}`);
-          });
-          
-          if (keysToDel.length > 0) {
-            await Promise.all(keysToDel.map(k => redisService.del(k)));
-          }
-        } catch (e) {}
-      };
-      
-      clearCache();
-    }
+    // 3. BACKGROUND TASK: Find uploader and queue creator stats update
+    Video.findById(videoId).select('uploader').lean().then(v => {
+        if (v && v.uploader) {
+           const cId = v.uploader.toString();
+           creatorBuffer.set(cId, (creatorBuffer.get(cId) || 0) + 1);
+        }
+    }).catch(() => {});
 
-    res.json({ success: true, views: updatedVideo.views });
   } catch (error) {
     console.error('❌ Error incrementing views:', error);
-    res.status(500).json({ error: 'Failed to increment views' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to increment views' });
+    }
   }
 };
