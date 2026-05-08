@@ -198,6 +198,9 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   final ValueNotifier<bool> _showLongPressAdOverlayVN = ValueNotifier<bool>(false);
   Timer? _longPressAdAutoHideTimer;
 
+  // **Pause-triggered ad overlay state (no auto-hide — hides when video plays)**
+  final ValueNotifier<bool> _showPauseAdOverlayVN = ValueNotifier<bool>(false);
+
   // Screen visibility
   bool _isScreenVisible =
       false; // **FIX: Start as false, only set true when Yug tab is actually visible**

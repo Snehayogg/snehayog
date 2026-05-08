@@ -32,12 +32,11 @@ class ShareService {
   String _generateVideoShareText(VideoModel video) {
     final appDeepLink = 'snehayog://video/${video.id}';
     final webLink = 'https://snehayog.site/video/${video.id}';
-        return 'This isn’t just another video app.\n'
-    'Vayug lets creators earn rewards from day one 💰\n'
+        return
+    'Vayug lets creators to monetize thier content from day one 💰\n'
     'And viewers enjoy smooth, ad-free watching.\n\n'
     'Discover it here: $webLink\n'
-    'Open instantly: $appDeepLink\n\n'
-    'Early creators build the biggest empires.';
+    'Open instantly: $appDeepLink\n';
   }
 
   String _generateAdShareText(CarouselAdModel ad) {

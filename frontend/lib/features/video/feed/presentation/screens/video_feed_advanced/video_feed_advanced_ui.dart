@@ -429,12 +429,30 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
       return _buildVideoErrorState(index, _videoErrors[videoId]!);
     }
 
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: AppColors.backgroundPrimary,
-      child: RepaintBoundary(
-        child: Stack(
+    return RepaintBoundary(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // **AMBIENT BACKGROUND: Blurred thumbnail — isolated repaint layer**
+          RepaintBoundary(
+            child: video.thumbnailUrl.isNotEmpty
+                ? ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28, tileMode: TileMode.clamp),
+                    child: CachedNetworkImage(
+                      imageUrl: video.thumbnailUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 180, // Low-res cache — background doesn't need quality
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  )
+                : Container(color: AppColors.backgroundPrimary),
+          ),
+          // **DARK OVERLAY: Ensures video stays as the clear primary focus**
+          Container(color: Colors.black.withValues(alpha: 0.55)),
+          // **VIDEO + ALL OVERLAYS on top**
+          RepaintBoundary(
+            child: Stack(
           children: [
             // **THUMBNAIL LAYER: Hides once video starts playing**
             ValueListenableBuilder<VideoPlayerValue>(
@@ -693,11 +711,26 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               },
             ),
 
+            // **PAUSE AD: IgnorePointer so taps pass through to play/pause GestureDetector**
+            ValueListenableBuilder<bool>(
+              valueListenable: _showPauseAdOverlayVN,
+              builder: (context, showOverlay, _) {
+                if (!showOverlay || index != _currentIndex) {
+                  return const SizedBox.shrink();
+                }
+                return IgnorePointer(
+                  child: _buildLongPressAdOverlay(index),
+                );
+              },
+            ),
+
             // Quiz Overlay is now handled inside _buildVideoOverlay for proper bottom alignment
 
           ],
         ),
-      ),
+      ), // closes inner RepaintBoundary (video + overlays)
+        ], // closes ambient Stack children
+      ), // closes outer RepaintBoundary
     );
   }
 
@@ -1825,6 +1858,17 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     _showLongPressAdOverlayVN.value = false;
     _longPressAdAutoHideTimer?.cancel();
     _longPressAdAutoHideTimer = null;
+  }
+
+  /// **PAUSE AD: Show ad on pause — no auto-hide, hides only when video plays**
+  void _showPauseAd(int index) {
+    final carouselAd = _carouselAdManager.getCarouselAdForIndex(index);
+    if (carouselAd == null || carouselAd.slides.isEmpty) return;
+    _showPauseAdOverlayVN.value = true;
+  }
+
+  void _hidePauseAdOverlay() {
+    _showPauseAdOverlayVN.value = false;
   }
 
   Widget _buildLongPressAdOverlay(int index) {

@@ -243,25 +243,23 @@ class RedisService {
   async bfMAdd(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return false;
     try {
-      const p = this.client.pipeline();
-      // We chunk items to prevent "too many arguments" in a single HTTP REST request
-      // 100 items = 400 positions = 1200 arguments for BITFIELD
       const chunkSize = 100;
+      const script = `
+        local key = KEYS[1]
+        for i=1, #ARGV do
+          redis.call('SETBIT', key, ARGV[i], 1)
+        end
+        redis.call('EXPIRE', key, 1296000)
+        return 1
+      `;
+      
       for (let i = 0; i < items.length; i += chunkSize) {
         const chunk = items.slice(i, i + chunkSize);
         const chunkPositions = chunk.flatMap(item => this._getBitPositions(item));
-        
-        const args = [];
-        for (const pos of chunkPositions) {
-          args.push('SET', 'u1', pos, 1);
-        }
-        
-        if (args.length > 0) {
-           p.bitfield(key, ...args);
+        if (chunkPositions.length > 0) {
+          await this.eval(script, [key], chunkPositions);
         }
       }
-      p.expire(key, 1296000);
-      await p.exec();
       return true;
     } catch (error) { 
       console.error('❌ Redis: bfMAdd failed:', error?.message);
@@ -275,30 +273,35 @@ class RedisService {
       const results = [];
       const chunkSize = 100;
       
+      const script = `
+        local key = KEYS[1]
+        local numItems = math.floor(#ARGV / 4)
+        local res = {}
+        for i=0, numItems-1 do
+          local p1 = redis.call('GETBIT', key, ARGV[(i*4) + 1])
+          local p2 = redis.call('GETBIT', key, ARGV[(i*4) + 2])
+          local p3 = redis.call('GETBIT', key, ARGV[(i*4) + 3])
+          local p4 = redis.call('GETBIT', key, ARGV[(i*4) + 4])
+          if p1 == 1 and p2 == 1 and p3 == 1 and p4 == 1 then
+            table.insert(res, 1)
+          else
+            table.insert(res, 0)
+          end
+        end
+        return res
+      `;
+      
       for (let i = 0; i < items.length; i += chunkSize) {
         const chunk = items.slice(i, i + chunkSize);
         const chunkPositions = chunk.flatMap(item => this._getBitPositions(item));
         
-        const args = [];
-        for (const pos of chunkPositions) {
-          args.push('GET', 'u1', pos);
-        }
-        
-        let rawResults = [];
-        if (args.length > 0) {
-           rawResults = await this.client.bitfield(key, ...args);
-        }
-        
-        for (let j = 0; j < chunk.length; j++) {
-           if (!rawResults || rawResults.length <= j * 4) { 
-               results.push(false); 
-               continue; 
-           }
-           const p1 = rawResults[j * 4];
-           const p2 = rawResults[j * 4 + 1];
-           const p3 = rawResults[j * 4 + 2];
-           const p4 = rawResults[j * 4 + 3];
-           results.push(p1 === 1 && p2 === 1 && p3 === 1 && p4 === 1);
+        if (chunkPositions.length > 0) {
+          const rawResults = await this.eval(script, [key], chunkPositions);
+          if (rawResults && Array.isArray(rawResults)) {
+              results.push(...rawResults.map(r => r === 1));
+          } else {
+              results.push(...chunk.map(() => false));
+          }
         }
       }
       return results;

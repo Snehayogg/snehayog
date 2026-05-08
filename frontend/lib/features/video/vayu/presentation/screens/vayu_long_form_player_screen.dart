@@ -41,6 +41,7 @@ import 'package:vayug/core/providers/auth_providers.dart';
 import 'package:vibration/vibration.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/core/providers/navigation_providers.dart';
+import 'package:vayug/features/video/vayu/presentation/screens/vayu_player_gestures_mixin.dart';
 
 class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   final VideoModel video;
@@ -58,8 +59,11 @@ class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   ConsumerState<VayuLongFormPlayerScreen> createState() => _VayuLongFormPlayerScreenState();
 }
 
-class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScreen> with WidgetsBindingObserver {
+class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScreen> with WidgetsBindingObserver, VayuPlayerGesturesMixin {
 
+
+    @override
+  VideoPlayerController? get currentVideoController => _controllers[_currentIndex];
 
   // Video Feed State
   final List<VideoModel> _videos = [];
@@ -83,27 +87,14 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   final ActiveAdsService _activeAdsService = ActiveAdsService();
   final Map<int, Map<String, dynamic>> _bannerAdsByIndex = {};
 
-  // Controls State
-  bool _showControls = true;
-  bool _showScrubbingOverlay = false;
-  Duration _scrubbingTargetTime = Duration.zero;
-  Duration _scrubbingDelta = Duration.zero;
-  double _horizontalDragTotal = 0.0;
-  bool _isForward = true;
-  Timer? _controlsTimer;
-  bool _isScrollingLocked = false;
 
-  // Gesture state
-  double _brightnessValue = 0.5;
-  double _volumeValue = 0.5;
-  Timer? _overlayTimer;
   SharedPreferences? _prefs;
   String? _currentUserId;
 
   bool _isSaving = false;
   double _playbackSpeed = 1.0;
   final List<double> _playbackSpeedOptions = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-  bool _isControlsLocked = false;
+  
   bool _wakelockEnabled = false;
   bool _isFullScreenManual = false;
 
@@ -418,8 +409,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     controller.addListener(_errorListeners[index]!);
     if (index == _currentIndex) {
       _enableWakelock(); _resumePlayback(index);
-      if (_showControls) _startHideControlsTimer();
-      try { _brightnessValue = await ScreenBrightness().application; final vol = await FlutterVolumeController.getVolume(); if (vol != null) _volumeValue = vol; } catch (_) {}
+      if (showControls) startHideControlsTimer(MediaQuery.of(context).orientation);
+      try { brightnessValue = await ScreenBrightness().application; final vol = await FlutterVolumeController.getVolume(); if (vol != null) volumeValue = vol; } catch (_) {}
     }
   }
 
@@ -477,7 +468,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _controllers.forEach((index, c) { try { c.removeListener(_onPositionChanged); c.pause(); c.setVolume(0.0); } catch (_) {} });
     _chewieControllers.forEach((index, c) => c?.dispose());
     _pageController.dispose();
-    _controlsTimer?.cancel(); _overlayTimer?.cancel();
+    controlsTimer?.cancel(); overlayTimer?.cancel();
     _stopViewTracking(_currentIndex); _poolDisposalSubscription?.cancel();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
@@ -503,60 +494,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _viewTracker.stopViewTracking(_videos[index].id);
   }
 
-  void _handleUnifiedHorizontalDrag(double deltaX) {
-    if (_isControlsLocked || !_controllers.containsKey(_currentIndex)) return;
-    _horizontalDragTotal += deltaX;
-    final controller = _controllers[_currentIndex]!;
-    final seekOffset = Duration(milliseconds: (_horizontalDragTotal * 500).toInt());
-    var targetPosition = controller.value.position + seekOffset;
-    if (targetPosition < Duration.zero) targetPosition = Duration.zero;
-    if (targetPosition > controller.value.duration) targetPosition = controller.value.duration;
-    setState(() { _showScrubbingOverlay = true; _scrubbingTargetTime = targetPosition; _scrubbingDelta = seekOffset; _isForward = deltaX > 0; });
-  }
 
-  void _handleHorizontalDragEnd() {
-    if (!_controllers.containsKey(_currentIndex)) return;
-    _controllers[_currentIndex]!.seekTo(_scrubbingTargetTime);
-    setState(() { _showScrubbingOverlay = false; _horizontalDragTotal = 0.0; _showControls = true; });
-  }
-
-  void _handleVerticalDragUpdate(double primaryDelta, Offset localPosition) {
-    if (_isControlsLocked) return;
-    final size = MediaQuery.of(context).size;
-    final isLeftSide = localPosition.dx < size.width / 2;
-    final delta = primaryDelta / size.height * 1.5;
-    if (isLeftSide) {
-      _brightnessValue = (_brightnessValue - delta).clamp(0.0, 1.0);
-      ScreenBrightness().setApplicationScreenBrightness(_brightnessValue);
-    } else {
-      _volumeValue = (_volumeValue - delta).clamp(0.0, 1.0);
-      FlutterVolumeController.setVolume(_volumeValue);
-    }
-    setState(() { _showScrubbingOverlay = false; _showControls = false; });
-    _resetOverlayTimer();
-    _controlsTimer?.cancel();
-  }
-
-
-  void _resetOverlayTimer() { _overlayTimer?.cancel(); }
-
-  void _handleTap() {
-    setState(() => _showControls = !_showControls);
-    if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      SystemChrome.setEnabledSystemUIMode(_showControls ? SystemUiMode.manual : SystemUiMode.immersiveSticky, overlays: SystemUiOverlay.values);
-    }
-    if (_showControls) _startHideControlsTimer();
-  }
-
-  void _startHideControlsTimer() {
-    _controlsTimer?.cancel();
-    _controlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() => _showControls = false);
-        if (MediaQuery.of(context).orientation == Orientation.landscape) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      }
-    });
-  }
 
   void _savePlaybackPosition(int index) async {
     final controller = _controllers[index];
@@ -577,27 +515,14 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     }
   }
 
-  void _togglePlay() {
-    final controller = _controllers[_currentIndex];
-    if (controller == null) return;
-    Vibration.vibrate(duration: 50, amplitude: 128);
-    setState(() {
-      if (controller.value.isPlaying) { controller.pause(); } else { controller.play(); _hideControlsWithDelay(); }
-    });
-  }
+
 
   void _showSnackBar(String message, {Duration? duration, VayuSnackBarType type = VayuSnackBarType.info}) {
     if (!mounted) return;
     VayuSnackBar.show(context, message, duration: duration ?? const Duration(seconds: 3), type: type);
   }
 
-  void _hideControlsWithDelay() {
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _controllers[_currentIndex]?.value.isPlaying == true && _showControls) {
-        setState(() => _showControls = false);
-      }
-    });
-  }
+
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
     if (video.episodes == null || video.episodes!.isEmpty) return;
@@ -665,21 +590,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     );
   }
 
-  void _handleDoubleTapToSeek(TapDownDetails details) {
-    final controller = _controllers[_currentIndex];
-    if (controller == null || !controller.value.isInitialized) return;
-    final size = MediaQuery.of(context).size;
-    final isLeftSide = details.localPosition.dx < size.width / 2;
-    final seekOffset = Duration(seconds: isLeftSide ? -10 : 10);
-    var target = controller.value.position + seekOffset;
-    if (target < Duration.zero) target = Duration.zero;
-    if (target > controller.value.duration) target = controller.value.duration;
-    controller.seekTo(target);
-    setState(() { _showControls = true; _showScrubbingOverlay = true; _scrubbingTargetTime = target; _scrubbingDelta = seekOffset; _isForward = !isLeftSide; });
-    _startHideControlsTimer();
-    _overlayTimer?.cancel();
-    _overlayTimer = Timer(const Duration(milliseconds: 700), () { if (mounted) setState(() => _showScrubbingOverlay = false); });
-  }
+
 
   void _showShareOptions(VideoModel video) {
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
@@ -817,12 +728,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final controller = _controllers[_currentIndex];
     final aspectRatio = controller?.value.aspectRatio ?? 1.0;
     if (aspectRatio < 1.0) {
-      setState(() { _isFullScreenManual = !_isFullScreenManual; _showControls = true; });
+      setState(() { _isFullScreenManual = !_isFullScreenManual; showControls = true; });
     } else {
       SystemChrome.setPreferredOrientations(isPortrait ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight] : [DeviceOrientation.portraitUp]);
-      setState(() { _isFullScreenManual = false; _showControls = true; });
+      setState(() { _isFullScreenManual = false; showControls = true; });
     }
-    _startHideControlsTimer();
+    startHideControlsTimer(MediaQuery.of(context).orientation);
   }
 
   Future<void> _showMoreOptions() async {
@@ -835,7 +746,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         children: [
           ListTile(dense: true, leading: const Icon(Icons.speed_rounded), title: const Text('Playback Speed'), trailing: Text('${_playbackSpeed}x'), onTap: () { Navigator.pop(context); _showPlaybackSpeedOptions(); }),
           if (_currentIndex < _videos.length) ListTile(dense: true, leading: const Icon(Icons.language_rounded), title: const Text('Audio Language'), onTap: () { Navigator.pop(context); _showLanguageSelector(context, _videos[_currentIndex]); }),
-          ListTile(dense: true, leading: Icon(_isControlsLocked ? Icons.lock_rounded : Icons.lock_open_rounded), title: Text(_isControlsLocked ? 'Unlock' : 'Lock'), onTap: () { Navigator.pop(context); setState(() => _isControlsLocked = !_isControlsLocked); }),
+          ListTile(dense: true, leading: Icon(isControlsLocked ? Icons.lock_rounded : Icons.lock_open_rounded), title: Text(isControlsLocked ? 'Unlock' : 'Lock'), onTap: () { Navigator.pop(context); setState(() => isControlsLocked = !isControlsLocked); }),
           ListTile(dense: true, leading: const Icon(Icons.report_problem_rounded), title: const Text('Report'), onTap: () { Navigator.pop(context); _openReportDialog(); }),
         ],
       ),
@@ -976,13 +887,13 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   Widget _buildScrubbingOverlay() {
     return Align(
-      alignment: _isForward ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isForward ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(_isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: 32),
+          Icon(isForward ? Icons.keyboard_double_arrow_right_rounded : Icons.keyboard_double_arrow_left_rounded, color: Colors.white, size: 32),
           const SizedBox(height: 8),
-          Text('${_isForward ? "+" : ""}${_scrubbingDelta.inSeconds.abs()}s', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          Text('${isForward ? "+" : ""}${scrubbingDelta.inSeconds.abs()}s', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
         ]),
       ),
     );
@@ -1012,7 +923,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         body: Stack(children: [
           PageView.builder(
             controller: _pageController,
-            physics: _isScrollingLocked ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
+            physics: isScrollingLocked ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
             scrollDirection: Axis.vertical,
             onPageChanged: _onPageChanged,
             itemCount: _videos.length,
@@ -1035,12 +946,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     return VayuFeedItem(
       key: ValueKey(v.id),
-      index: index, video: v, controller: _controllers[index], chewie: _chewieControllers[index], isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: _showControls, isControlsLocked: _isControlsLocked, showScrubbingOverlay: _showScrubbingOverlay,
-      onToggleFullScreen: _toggleFullScreen, onOpenExternalPlayer: () => _openInExternalPlayer(v), onHandleTap: _handleTap, onDoubleTapToSeek: _handleDoubleTapToSeek, onHorizontalDragEnd: _handleHorizontalDragEnd, onVerticalDragUpdate: _handleVerticalDragUpdate, onVerticalDragEnd: () {}, onUnifiedHorizontalDrag: _handleUnifiedHorizontalDrag,
-      onScrollingLock: (l) => setState(() => _isScrollingLocked = l), onShowSnackBar: _showSnackBar, buildAdSection: _buildAdSection, buildVideoInfo: (_) => const SizedBox.shrink(), buildChannelRow: (_) => const SizedBox.shrink(), buildScrubbingOverlay: _buildScrubbingOverlay, buildCustomControls: (_) => const SizedBox.shrink(), buildDubbingProgress: (_) => const SizedBox.shrink(), formatDuration: _formatDuration, onQuizDismiss: () => setState(() => _activeQuiz = null), activeQuiz: index == _currentIndex ? _activeQuiz : null,
+      index: index, video: v, controller: _controllers[index], chewie: _chewieControllers[index], isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: showControls, isControlsLocked: isControlsLocked, showScrubbingOverlay: showScrubbingOverlay,
+      onToggleFullScreen: _toggleFullScreen, onOpenExternalPlayer: () => _openInExternalPlayer(v), onHandleTap: () => handleTap(MediaQuery.of(context).orientation), onDoubleTapToSeek: (details) => handleDoubleTapToSeek(details, MediaQuery.of(context).size, MediaQuery.of(context).orientation), onHorizontalDragEnd: handleHorizontalDragEnd, onVerticalDragUpdate: (dy, lp) => handleVerticalDragUpdate(dy, lp, MediaQuery.of(context).size), onVerticalDragEnd: () {}, onUnifiedHorizontalDrag: handleUnifiedHorizontalDrag,
+      onScrollingLock: (l) => setState(() => isScrollingLocked = l), onShowSnackBar: _showSnackBar, buildAdSection: _buildAdSection, buildVideoInfo: (_) => const SizedBox.shrink(), buildChannelRow: (_) => const SizedBox.shrink(), buildScrubbingOverlay: _buildScrubbingOverlay, buildCustomControls: (_) => const SizedBox.shrink(), buildDubbingProgress: (_) => const SizedBox.shrink(), formatDuration: _formatDuration, onQuizDismiss: () => setState(() => _activeQuiz = null), activeQuiz: index == _currentIndex ? _activeQuiz : null,
       metadataSection: VayuMetadataSection(video: v, isPortrait: isPortrait, onShare: () => _showShareOptions(v), onSave: () => _handleToggleSave(index), onVisitLink: () async { final u = Uri.parse(_sanitizeUrl(v.link!)); if (await canLaunchUrl(u)) launchUrl(u, mode: LaunchMode.externalApplication); }, onMoreOptions: _showMoreOptions, onEpisodes: () => _showEpisodeList(context, v), onSuggestion: () => _showShareSuggestionBottomSheet(v), onShowError: (m) => _showSnackBar(m, type: VayuSnackBarType.error)),
       channelInfo: VayuChannelInfo(video: v, isPortrait: isPortrait),
-      playerOverlay: VayuPlayerOverlay(controller: _controllers[index], showControls: _showControls, isControlsLocked: _isControlsLocked, isPortrait: isPortrait, isFullScreenManual: _isFullScreenManual, onTogglePlay: _togglePlay, onMoreOptions: _showMoreOptions, onNext: _nextVideo, onPrevious: _previousVideo),
+      playerOverlay: VayuPlayerOverlay(controller: _controllers[index], showControls: showControls, isControlsLocked: isControlsLocked, isPortrait: isPortrait, isFullScreenManual: _isFullScreenManual, onTogglePlay: togglePlay, onMoreOptions: _showMoreOptions, onNext: _nextVideo, onPrevious: _previousVideo),
       dubbingOverlay: _buildDubbingOverlay(index),
     );
   }

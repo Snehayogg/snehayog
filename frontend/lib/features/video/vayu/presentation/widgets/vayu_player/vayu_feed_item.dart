@@ -114,6 +114,30 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
     // We use a Stack as the root to maintain widget tree stability across orientation changes
     return Stack(
       children: [
+        // ── LAYER 1: Ambient blurred thumbnail (ONLY in landscape/fullscreen) ──────────
+        if (isFull && widget.video.thumbnailUrl.isNotEmpty)
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28, tileMode: TileMode.clamp),
+                child: Image.network(
+                  widget.video.thumbnailUrl,
+                  fit: BoxFit.cover,
+                  cacheWidth: 180,
+                  errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.transparent),
+                ),
+              ),
+            ),
+          )
+        else if (isFull)
+          const Positioned.fill(child: ColoredBox(color: Colors.transparent)),
+
+        // ── LAYER 2: Dark overlay — keeps foreground content readable ──────────
+        if (isFull)
+          const Positioned.fill(
+            child: ColoredBox(color: Color.fromRGBO(0, 0, 0, 0.55)),
+          ),
+
         // Background Video Section
         if (isFull)
           _buildVideoSection(orientation)
@@ -195,35 +219,40 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
     final leftPadding = orientation == Orientation.landscape ? 24.0 : 14.0;
     final rightPadding = orientation == Orientation.landscape ? 64.0 : 14.0;
 
-    return Container(
-      width: size.width,
-      height: isFull ? size.height : size.width * (9 / 16),
-      color: Colors.black,
+    return RepaintBoundary(
       child: Stack(
+        fit: StackFit.passthrough,
         children: [
-          // 1. VIDEO LAYER
-          if (controllerIsHealthy && chewie != null)
-            Positioned.fill(
-              child: Center(
-                child: ClipRect(
-                  child: Transform.translate(
-                    offset: _offset,
-                    child: Transform.scale(
-                      scale: _scale,
-                      child: Hero(
-                        tag: 'video_${widget.video.id}',
-                        child: AspectRatio(
-                          aspectRatio: 16 / 9,
-                          child: Chewie(controller: chewie),
+          // Background handled at the root uild level. 
+          // Layer 3: Actual video container + all overlays
+          SizedBox(
+            width: size.width,
+            height: isFull ? size.height : size.width * (9 / 16),
+            child: Stack(
+              children: [
+                // 1. VIDEO LAYER
+                if (controllerIsHealthy && chewie != null)
+                  Positioned.fill(
+                    child: Center(
+                      child: ClipRect(
+                        child: Transform.translate(
+                          offset: _offset,
+                          child: Transform.scale(
+                            scale: _scale,
+                            child: Hero(
+                              tag: 'video_${widget.video.id}',
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: Chewie(controller: chewie),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-            )
-          else
-            const Center(child: CircularProgressIndicator(color: Colors.white24)),
+                  )
+                else
+                  const Center(child: CircularProgressIndicator(color: Colors.white24)),
 
           // 2. GESTURE LAYER
           Positioned.fill(
@@ -442,8 +471,11 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
                 ],
               ),
             ),
-        ],
+          ],
+        ),
       ),
-    );
+    ],
+  ),
+);
   }
 }

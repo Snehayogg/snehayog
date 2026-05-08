@@ -9,7 +9,7 @@ class AppConfig {
   static const String kApiVersion = '2026-04-02';
 
   // Set to true to force local development server
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
   
   // Set to true to use production Cloudflare worker even in development
   static const bool useProductionWorker = true; 

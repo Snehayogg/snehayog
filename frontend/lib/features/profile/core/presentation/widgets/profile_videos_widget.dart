@@ -17,6 +17,7 @@ import 'package:vayug/features/video/edit/presentation/screens/edit_video_detail
 import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
 import 'package:vayug/shared/widgets/episode_grid_widget.dart';
 
+import 'package:vayug/shared/widgets/unified_video_card.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -350,313 +351,94 @@ class ProfileVideosWidget extends StatelessWidget {
 
     return RepaintBoundary(
       child: GestureDetector(
-        onTap: () async {
-          if (isProcessing && !manager.isSelecting) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Video is still processing. It will be playable shortly.'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-            return;
-          }
-
-          if (isSeries && video.episodes != null && video.episodes!.isNotEmpty && !manager.isSelecting) {
-            AppLogger.log('🎬 ProfileVideosWidget: Series detected: ${video.id}. Opening episode list.');
-            _showEpisodeList(context, video);
-            return;
-          }
-
-          if (!manager.isSelecting) {
-            final sharedPool = SharedVideoControllerPool();
-            sharedPool.pauseAllControllers();
-
-            if (_normalizedVideoType(video) == 'vayu') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VayuLongFormPlayerScreen(
-                    video: video,
-                    relatedVideos: displayVideos,
-                    parentTabIndex: 3, // Profile tab index
-                  ),
+        child: UnifiedVideoCard(
+          video: video,
+          cardType: _normalizedVideoType(video) == 'vayu' ? UnifiedVideoCardType.vayu : UnifiedVideoCardType.yug,
+          onTap: () async {
+            if (isProcessing && !manager.isSelecting) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Video is still processing. It will be playable shortly.'),
+                  duration: Duration(seconds: 2),
                 ),
               );
-            } else {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => VideoScreen(
-                    initialVideos: displayVideos,
-                    initialVideoId: video.id,
-                    parentTabIndex: 3, // Profile tab index
-                  ),
-                ),
-              );
+              return;
             }
-          } else if (manager.isSelecting && canSelectVideo) {
-            manager.toggleVideoSelection(video.id);
-          }
-        },
-        onLongPress: () {
-          if (manager.isOwner &&
-              manager.userData != null &&
-              !manager.isSelecting) {
-            manager.enterSelectionMode();
-            manager.toggleVideoSelection(video.id);
-          }
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              children: [
-                Hero(
-                  tag: 'video_player_${video.id}',
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    color: isProcessing
-                        ? AppColors.backgroundSecondary
-                        : const Color(0xFFF3F4F6),
-                    child: video.thumbnailUrl.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: video.thumbnailUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            errorWidget: (context, url, error) {
-                              return const Center(
-                                child: Icon(
-                                  Icons.video_library,
-                                  color: Color(0xFF9CA3AF),
-                                  size: 32,
-                                ),
-                              );
-                            },
-                          )
-                        : const Center(
-                            child: Icon(
-                              Icons.video_library,
-                              color: Color(0xFF9CA3AF),
-                              size: 32,
-                            ),
-                          ),
+
+            if (isSeries && video.episodes != null && video.episodes!.isNotEmpty && !manager.isSelecting) {
+              AppLogger.log('🎬 ProfileVideosWidget: Series detected: ${video.id}. Opening episode list.');
+              _showEpisodeList(context, video);
+              return;
+            }
+
+            if (!manager.isSelecting) {
+              final sharedPool = SharedVideoControllerPool();
+              sharedPool.pauseAllControllers();
+
+              if (_normalizedVideoType(video) == 'vayu') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VayuLongFormPlayerScreen(
+                      video: video,
+                      relatedVideos: displayVideos,
+                      parentTabIndex: 3, // Profile tab index
+                    ),
+                  ),
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VideoScreen(
+                      initialVideos: displayVideos,
+                      initialVideoId: video.id,
+                      parentTabIndex: 3, // Profile tab index
+                    ),
+                  ),
+                );
+              }
+            } else if (manager.isSelecting && canSelectVideo) {
+              manager.toggleVideoSelection(video.id);
+            }
+          },
+          onLongPress: () {
+            if (manager.isOwner && manager.userData != null && !manager.isSelecting) {
+              manager.enterSelectionMode();
+              manager.toggleVideoSelection(video.id);
+            }
+          },
+          isSelected: isSelected,
+          isSelecting: manager.isSelecting,
+          showSelectionCheckbox: manager.isSelecting && canSelectVideo,
+          onSelect: () => stateManager.toggleVideoSelection(video.id),
+          topTrailingWidget: (manager.isOwner && !manager.isSelecting && _normalizedVideoType(video) == 'vayu') 
+            ? GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push<Map<String, dynamic>>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditVideoDetails(video: video),
+                    ),
+                  );
+                  if (result != null) {
+                    manager.refreshData();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.edit_outlined,
+                    color: Colors.white,
+                    size: 16,
                   ),
                 ),
-
-                if (isSeries)
-                  Positioned(
-                    top: 8,
-                    right: (manager.isOwner && !manager.isSelecting && _normalizedVideoType(video) == 'vayu') ? 36 : 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            width: 0.5),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.layers, color: Colors.white, size: 12),
-                          SizedBox(width: 4),
-                          Text(
-                            'SERIES',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                if (isProcessing)
-                  Positioned.fill(
-                    child: Container(
-                      color:
-                          AppColors.backgroundPrimary.withValues(alpha: 0.72),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                value: video.processingProgress.clamp(0, 100) /
-                                    100.0,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                    AppColors.primary),
-                                backgroundColor: AppColors.borderPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _processingLabel(video),
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                if (!isProcessing && video.crossPostStatus != null)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: _buildCrossPostStatus(video),
-                  ),
-                
-                if (manager.isOwner && !manager.isSelecting && _normalizedVideoType(video) == 'vayu')
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: GestureDetector(
-                      onTap: () async {
-                        final result = await Navigator.push<Map<String, dynamic>>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EditVideoDetails(video: video),
-                          ),
-                        );
-                        
-                          if (result != null) {
-                            manager.refreshData();
-                         }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.edit_outlined,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                if (isSelected)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.zero,
-                        border: Border.all(
-                          color: const Color(0xFFEF4444),
-                          width: 3,
-                        ),
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFEF4444),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                if (!isProcessing)
-                  Positioned(
-                    bottom: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.play_arrow_outlined,
-                              color: Colors.white, size: 12),
-                          const SizedBox(width: 2),
-                          Text(
-                            FormatUtils.formatViews(video.views),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                if (manager.isSelecting && canSelectVideo)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: GestureDetector(
-                      onTap: () {
-                        stateManager.toggleVideoSelection(video.id);
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xFFEF4444)
-                              : Colors.white.withValues(alpha: 0.8),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected
-                                ? const Color(0xFFEF4444)
-                                : Colors.white,
-                            width: 2,
-                          ),
-                        ),
-                        child: isSelected
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : null,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+              ) 
+            : null,
         ),
       ),
     );

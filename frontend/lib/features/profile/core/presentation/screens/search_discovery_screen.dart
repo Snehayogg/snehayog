@@ -13,6 +13,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
+import 'package:vayug/shared/widgets/unified_video_card.dart';
 
 class SearchDiscoveryScreen extends StatefulWidget {
   const SearchDiscoveryScreen({Key? key}) : super(key: key);
@@ -461,23 +462,29 @@ class _SearchDiscoveryScreenState extends State<SearchDiscoveryScreen> {
   }
 
   Widget _buildShortsGrid(List<VideoModel> yog, List<VideoModel> all) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.7,
-      ),
-      itemCount: yog.length,
-      itemBuilder: (context, index) {
-        final v = yog[index];
-        return GestureDetector(
-          onTap: () => _navigateToVideo(v, all),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: CachedNetworkImage(imageUrl: v.thumbnailUrl, fit: BoxFit.cover),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        const columns = 3;
+        final width = (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        final height = width * 2; // matches profile childAspectRatio: 0.5
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: yog.map((v) {
+              return SizedBox(
+                width: width,
+                height: height,
+                child: UnifiedVideoCard(
+                  video: v,
+                  cardType: UnifiedVideoCardType.yug,
+                  onTap: () => _navigateToVideo(v, all),
+                ),
+              );
+            }).toList(),
           ),
         );
       },

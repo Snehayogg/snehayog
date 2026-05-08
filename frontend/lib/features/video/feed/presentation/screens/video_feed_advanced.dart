@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui';
+import 'dart:ui' show ImageFilter;
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -1086,9 +1086,9 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
 
         AppLogger.log('⏸️ Successfully paused video at index $index');
 
-        // **NEW: Trigger popup ad on pause for Yug tab**
+        // **NEW: Trigger popup ad on pause for Yug tab (separate from long-press)**
         if (widget.videoType == 'yog') {
-          _showLongPressAd(index);
+          _showPauseAd(index);
         }
 
         // **NEW: Stop view tracking when user pauses**
@@ -1116,6 +1116,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
         _userPaused[videoId] = false; // hide when playing
         _userPausedVN[videoId]?.value = false;
         _hideLongPressAdOverlay();
+        _hidePauseAdOverlay(); // **NEW: Hide pause ad when video plays**
 
         _lifecyclePaused = false;
 
@@ -1797,6 +1798,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _forceShowOverlayVN.clear();
 
     _showLongPressAdOverlayVN.dispose();
+    _showPauseAdOverlayVN.dispose();
 
     // DISPOSE PAGE CONTROLLERS LAST
     _pageController.dispose();

@@ -10,11 +10,11 @@ import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
+import 'package:vayug/shared/widgets/unified_video_card.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/shared/widgets/interactive_scale_button.dart';
-import 'package:vayug/shared/widgets/vayu_logo.dart';
 import 'package:hugeicons/hugeicons.dart';
 
 class SubscriptionsScreen extends ConsumerStatefulWidget {
@@ -146,7 +146,10 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             floating: true,
             snap: true,
             elevation: 0,
-            title: const VayuLogo(fontSize: 22),
+            title: Text(
+              'Subscriptions',
+              style: AppTypography.titleLarge.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white, size: 22),
@@ -157,9 +160,8 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             ],
           ),
           if (isSignedIn && !_isLoading && _videos.isNotEmpty) ...[
-            _buildCreatorHub(),
+            _buildExplanationNote(),
             if (_exclusiveVideos.isNotEmpty) _buildExclusiveShelf(),
-            _buildSectionHeader('Latest from Subscriptions'),
             _buildCompactFeed(),
           ] else
             ..._buildBodySlivers(isSignedIn),
@@ -201,75 +203,29 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
     );
   }
 
-  Widget _buildCreatorHub() {
+  Widget _buildExplanationNote() {
     return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: 90,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing1),
-              itemCount: _creators.length,
-              itemBuilder: (context, index) {
-                final creator = _creators[index];
-                final isSelected = _selectedCreator?.id == creator.id;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedCreator = isSelected ? null : creator;
-                      if (_selectedCreator != null) {
-                        _feedVideos = _videos.where((v) => v.uploader.id == creator.id).toList();
-                      } else {
-                        _feedVideos = _videos.where((v) => !_exclusiveVideos.contains(v)).toList();
-                      }
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected ? AppColors.primary : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                          child: CircleAvatar(
-                            radius: 28,
-                            backgroundImage: creator.profilePic.isNotEmpty 
-                                ? CachedNetworkImageProvider(creator.profilePic) 
-                                : null,
-                            child: creator.profilePic.isEmpty ? const Icon(Icons.person) : null,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        SizedBox(
-                          width: 60,
-                          child: Text(
-                            creator.name,
-                            style: AppTypography.labelSmall.copyWith(
-                              color: isSelected ? AppColors.primary : Colors.white70,
-                              fontSize: 10,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+      child: Container(
+        margin: EdgeInsets.all(AppSpacing.spacing3),
+        padding: EdgeInsets.all(AppSpacing.spacing3),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Ye exclusive videos hain jo creators ne specially aapke liye publish kiye hain. Ye videos kisi aur ko nahi dikhenge kahli unko dekenge jinke liye creator ne publish kiye hain.',
+                style: AppTypography.bodySmall.copyWith(color: Colors.white70),
+              ),
             ),
-          ),
-          const Divider(color: Colors.white10, height: 1),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -351,109 +307,35 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   }
 
   Widget _buildCompactFeed() {
-    return SliverPadding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing1),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.7, // Portrait focus
-        ),
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final video = _feedVideos[index];
-            if (video.videoType == 'vayu') {
-              return _buildCompactVayuCard(video);
-            } else {
-              return _buildPortraitYugCard(video);
-            }
-          },
-          childCount: _feedVideos.length,
-        ),
-      ),
-    );
-  }
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing2),
+        child: Builder(
+          builder: (context) {
+            final screenWidth = MediaQuery.of(context).size.width;
+            final padding = AppSpacing.spacing2 * 2;
+            final availableWidth = screenWidth - padding;
 
-  Widget _buildPortraitYugCard(VideoModel video) {
-    return InteractiveScaleButton(
-      onTap: () => _navigateToVideo(_videos.indexOf(video)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: CachedNetworkImage(
-                    imageUrl: video.thumbnailUrl,
-                    fit: BoxFit.cover,
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _feedVideos.map((video) {
+                final isVayu = video.videoType == 'vayu';
+                final width = isVayu ? (availableWidth - 8) / 2 : (availableWidth - 16) / 3;
+                final height = isVayu ? width * (9 / 16) : width * 2;
+                return SizedBox(
+                  width: width,
+                  height: height,
+                  child: UnifiedVideoCard(
+                    video: video,
+                    cardType: isVayu ? UnifiedVideoCardType.vayu : UnifiedVideoCardType.yug,
+                    onTap: () => _navigateToVideo(_videos.indexOf(video)),
                   ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                    child: const Icon(Icons.bolt, color: Colors.amber, size: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            video.videoName,
-            style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            '${FormatUtils.formatViews(video.views)} views',
-            style: AppTypography.labelSmall.copyWith(color: Colors.white54, fontSize: 10),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactVayuCard(VideoModel video) {
-    return InteractiveScaleButton(
-      onTap: () => _navigateToVideo(_videos.indexOf(video)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: CachedNetworkImage(
-                imageUrl: video.thumbnailUrl,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            video.videoName,
-            style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Row(
-            children: [
-              const Icon(Icons.play_circle_outline, color: Colors.white54, size: 10),
-              const SizedBox(width: 4),
-              Text(
-                FormatUtils.formatDuration(video.duration),
-                style: AppTypography.labelSmall.copyWith(color: Colors.white54, fontSize: 10),
-              ),
-            ],
-          ),
-        ],
+                );
+              }).toList(),
+            );
+          }
+        ),
       ),
     );
   }
