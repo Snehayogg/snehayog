@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/widgets.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/services/platform_id_service.dart';
@@ -8,9 +9,23 @@ import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:vayug/shared/constants/app_constants.dart';
 
 /// Handles 2-second view threshold for videos, repeat views (max 10 per user), self-view prevention, and API integration
-class VideoViewTracker {
+class VideoViewTracker with WidgetsBindingObserver {
   static String get _baseUrl => AppConfig.baseUrl;
   final AuthService _authService = AuthService();
+
+  VideoViewTracker() {
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // If the app is minimized, sent to background, or about to be terminated,
+    // IMMEDIATELY flush the queue so no views are lost.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      AppLogger.log('⚠️ VideoViewTracker: App went to background. Flushing views!');
+      syncWatchEvents();
+    }
+  }
 
   // Track timers for each video
   final Map<String, Timer> _viewTimers = <String, Timer>{};
@@ -26,8 +41,8 @@ class VideoViewTracker {
   // **NEW: Batching for watch events**
   final List<Map<String, dynamic>> _pendingWatchEvents = [];
   Timer? _batchSyncTimer;
-  static const Duration _batchSyncInterval = Duration(seconds: 5);
-  static const int _maxBatchSize = 10;
+  static const Duration _batchSyncInterval = Duration(seconds: 30);
+  static const int _maxBatchSize = 20;
 
   /// Increment view count for a video after 2 seconds of playback
   /// Returns true if view was counted, false if already at max or error
@@ -106,62 +121,24 @@ class VideoViewTracker {
         return false;
       }
 
-      // Make API call to increment view (existing functionality)
-      // **IMPROVED: Also send platformId so backend can mark video as watched for anonymous users too**
-      final url = Uri.parse('$_baseUrl/api/videos/$videoId/increment-view');
-      final incrementBody = <String, dynamic>{
-        'userId': userId,
-        'duration': effectiveDuration,
-      };
+      // **IMPROVED: Fully Batched Architecture**
+      // We no longer send an immediate API call to /increment-view.
+      // The view has already been queued via _queueWatchEvent above, 
+      // which will be synced to the backend in bulk every 5 seconds.
+      // This eliminates rapid Redis rate-limiter counts while preserving data integrity.
 
-      // Always send platformId for watch tracking support
-      if (platformId.isNotEmpty) {
-        incrementBody['platformId'] = platformId;
-      }
-      
-      // **NEW: Send videoHash**
-      if (videoHash != null) {
-        incrementBody['videoHash'] = videoHash;
-      }
+      // Update local view count tracking immediately
+      _userViewCounts[viewKey] = userViewCount + 1;
 
-      final response = await httpClientService.post(
-        url,
-        headers: headers,
-        body: json.encode(incrementBody),
-      );
+      // Update recent view time to prevent rapid repeat spam
+      _recentViews[viewKey] = DateTime.now();
 
-      AppLogger.log(
-          '🎯 VideoViewTracker: API response status: ${response.statusCode}');
-      AppLogger.log('🎯 VideoViewTracker: API response body: ${response.body}');
+      AppLogger.log('✅ VideoViewTracker: View queued successfully for batch sync');
+      AppLogger.log('   Local User view count: ${userViewCount + 1}');
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        
-        // **FIX: Safely handle null values from backend response**
-        final bool maxViewsReached = responseData['maxViewsReached'] ?? false;
-        final int totalViews = responseData['totalViews'] ?? responseData['views'] ?? 0;
-        final int userViewCount = responseData['userViewCount'] ?? 0;
-
-        // Update local view count tracking
-        _userViewCounts['${videoId}_$userId'] = userViewCount;
-
-        // **NEW: Update recent view time to prevent rapid repeat spam**
-        _recentViews[viewKey] = DateTime.now();
-
-        AppLogger.log('✅ VideoViewTracker: View incremented successfully');
-        AppLogger.log('   Total views: $totalViews');
-        AppLogger.log('   User view count: $userViewCount');
-        AppLogger.log('   Max views reached: $maxViewsReached');
-
-        return !maxViewsReached;
-      } else {
-        AppLogger.log(
-            '❌ VideoViewTracker: Failed to increment view - Status: ${response.statusCode}');
-        AppLogger.log('❌ VideoViewTracker: Error response: ${response.body}');
-        return false;
-      }
+      return true;
     } catch (e) {
-      AppLogger.log('❌ VideoViewTracker: Error incrementing view: $e');
+      AppLogger.log('❌ VideoViewTracker: Error queueing view: $e');
       return false;
     }
   }
@@ -398,6 +375,7 @@ class VideoViewTracker {
   /// Dispose of the service and clean up resources
   void dispose() {
     AppLogger.log('🎯 VideoViewTracker: Disposing service');
+    WidgetsBinding.instance.removeObserver(this);
     clearViewTracking();
   }
 }

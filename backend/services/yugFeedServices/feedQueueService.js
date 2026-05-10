@@ -47,27 +47,17 @@ class FeedQueueService {
     let currentLength = 0;
     let poppedIds = [];
 
-    // OPTIMIZATION: Combine lLen + lPop into single Lua script to reduce requests
     try {
-      const script = `
-        local queueKey = KEYS[1]
-        local count = tonumber(ARGV[1])
-        local len = redis.call('LLEN', queueKey)
-        local popCount = math.min(len, count)
-        local result = {}
-        if popCount > 0 then
-          for i = 1, popCount do
-            table.insert(result, redis.call('LPOP', queueKey))
-          end
-        end
-        return {len, unpack(result)}
-      `;
-      // Use fixed call method that handles EVAL correctly
-      const result = await redisService.eval(script, [queueKey], [limit]);
-
-      if (Array.isArray(result) && result.length > 0) {
-        currentLength = result[0] || 0;
-        poppedIds = result.slice(1).filter(Boolean);
+      // OPTIMIZATION: Use native LPOP with count (Redis 6.2+) - counts as 1 request on Upstash
+      // instead of Lua loop which counts each LPOP separately.
+      const [len, popped] = await Promise.all([
+        redisService.lLen(queueKey),
+        redisService.lPop(queueKey, limit)
+      ]);
+      
+      currentLength = len || 0;
+      if (popped) {
+        poppedIds = Array.isArray(popped) ? popped : [popped];
       }
     } catch (e) {
       console.error(`⚠️ FeedQueue: Redis lPop failed:`, e.message);

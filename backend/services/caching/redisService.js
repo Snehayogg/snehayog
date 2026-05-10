@@ -228,85 +228,29 @@ class RedisService {
     catch (error) { return false; }
   }
 
-  // --- BLOOM FILTER (MANUAL BITSET) ---
-
-  _getBitPositions(item) {
-    const hash = crypto.createHash('sha256').update(String(item)).digest();
-    const positions = [];
-    const bitsetSize = 8388608; // 1MB
-    for (let i = 0; i < 4; i++) {
-      positions.push(hash.readUInt32BE(i * 4) % bitsetSize);
-    }
-    return positions;
-  }
-
   async bfMAdd(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return false;
+    // Switch to Redis Sets: Key prefix change to avoid type conflict with old Bitsets
+    const setKey = key.replace('bf_', 'user:seen_v2:'); 
     try {
-      const chunkSize = 100;
-      const script = `
-        local key = KEYS[1]
-        for i=1, #ARGV do
-          redis.call('SETBIT', key, ARGV[i], 1)
-        end
-        redis.call('EXPIRE', key, 1296000)
-        return 1
-      `;
-      
-      for (let i = 0; i < items.length; i += chunkSize) {
-        const chunk = items.slice(i, i + chunkSize);
-        const chunkPositions = chunk.flatMap(item => this._getBitPositions(item));
-        if (chunkPositions.length > 0) {
-          await this.eval(script, [key], chunkPositions);
-        }
-      }
+      // SADD with multiple members counts as 1 request on Upstash
+      await this.client.sadd(setKey, ...items);
+      await this.client.expire(setKey, 30 * 24 * 60 * 60); // 30 days retention
       return true;
     } catch (error) { 
-      console.error('❌ Redis: bfMAdd failed:', error?.message);
       return false; 
     }
   }
 
   async bfMExists(key, items) {
     if (!this._canUseRedis() || !items || items.length === 0) return items.map(() => false);
+    const setKey = key.replace('bf_', 'user:seen_v2:');
     try {
-      const results = [];
-      const chunkSize = 100;
-      
-      const script = `
-        local key = KEYS[1]
-        local numItems = math.floor(#ARGV / 4)
-        local res = {}
-        for i=0, numItems-1 do
-          local p1 = redis.call('GETBIT', key, ARGV[(i*4) + 1])
-          local p2 = redis.call('GETBIT', key, ARGV[(i*4) + 2])
-          local p3 = redis.call('GETBIT', key, ARGV[(i*4) + 3])
-          local p4 = redis.call('GETBIT', key, ARGV[(i*4) + 4])
-          if p1 == 1 and p2 == 1 and p3 == 1 and p4 == 1 then
-            table.insert(res, 1)
-          else
-            table.insert(res, 0)
-          end
-        end
-        return res
-      `;
-      
-      for (let i = 0; i < items.length; i += chunkSize) {
-        const chunk = items.slice(i, i + chunkSize);
-        const chunkPositions = chunk.flatMap(item => this._getBitPositions(item));
-        
-        if (chunkPositions.length > 0) {
-          const rawResults = await this.eval(script, [key], chunkPositions);
-          if (rawResults && Array.isArray(rawResults)) {
-              results.push(...rawResults.map(r => r === 1));
-          } else {
-              results.push(...chunk.map(() => false));
-          }
-        }
-      }
-      return results;
+      // SMISMEMBER counts as 1 request and checks all IDs at once
+      const results = await this.client.smismember(setKey, ...items);
+      return results.map(r => r === 1);
     } catch (error) { 
-      console.error('❌ Redis: bfMExists failed:', error?.message);
+      // Fallback: If SMISMEMBER fails (old Redis version), return all false
       return items.map(() => false); 
     }
   }

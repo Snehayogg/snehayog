@@ -701,27 +701,31 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 );
               },
             ),
-            ValueListenableBuilder<bool>(
-              valueListenable: _showLongPressAdOverlayVN,
-              builder: (context, showOverlay, _) {
-                if (!showOverlay || index != _currentIndex) {
-                  return const SizedBox.shrink();
-                }
-                return _buildLongPressAdOverlay(index);
-              },
+            Positioned.fill(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _showLongPressAdOverlayVN,
+                builder: (context, showOverlay, _) {
+                  if (!showOverlay || index != _currentIndex) {
+                    return const SizedBox.shrink();
+                  }
+                  return _buildLongPressAdContent(index);
+                },
+              ),
             ),
 
             // **PAUSE AD: IgnorePointer so taps pass through to play/pause GestureDetector**
-            ValueListenableBuilder<bool>(
-              valueListenable: _showPauseAdOverlayVN,
-              builder: (context, showOverlay, _) {
-                if (!showOverlay || index != _currentIndex) {
-                  return const SizedBox.shrink();
-                }
-                return IgnorePointer(
-                  child: _buildLongPressAdOverlay(index),
-                );
-              },
+            Positioned.fill(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _showPauseAdOverlayVN,
+                builder: (context, showOverlay, _) {
+                  if (!showOverlay || index != _currentIndex) {
+                    return const SizedBox.shrink();
+                  }
+                  return IgnorePointer(
+                    child: _buildLongPressAdContent(index),
+                  );
+                },
+              ),
             ),
 
             // Quiz Overlay is now handled inside _buildVideoOverlay for proper bottom alignment
@@ -1871,7 +1875,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     _showPauseAdOverlayVN.value = false;
   }
 
-  Widget _buildLongPressAdOverlay(int index) {
+  Widget _buildLongPressAdContent(int index) {
     final carouselAd = _carouselAdManager.getCarouselAdForIndex(index);
     if (carouselAd == null || carouselAd.slides.isEmpty) {
       return const SizedBox.shrink();
@@ -1880,8 +1884,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     final slide = carouselAd.slides.first;
     final imageUrl = slide.thumbnailUrl ?? slide.mediaUrl;
 
-    return Positioned.fill(
-      child: Stack(
+    return Stack(
         children: [
           // Transparent background - dismiss on tap outside
           Positioned.fill(
@@ -1988,8 +1991,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   /// **OFFLINE INDICATOR: Shows when device has no internet connection**
