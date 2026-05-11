@@ -51,6 +51,9 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   }
 
   Future<void> _loadVideos({bool refresh = false}) async {
+    // **NEW: Loading guard to prevent concurrent redundant requests**
+    if (_isLoading && !refresh) return;
+
     if (refresh || _videos.isEmpty) {
       setState(() {
         _isLoading = true;

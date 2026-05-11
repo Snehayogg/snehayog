@@ -22,6 +22,7 @@ import searchRoutes from '../routes/searchRoutes.js';
 import appConfigRoutes from '../routes/appConfigRoutes.js';
 import youtubeAuthRoutes from '../routes/youtubeAuthRoutes.js';
 import systemRoutes from '../routes/systemRoutes.js';
+import dubbingRoutes from '../routes/dubbingRoutes.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from '../middleware/errorHandler.js';
@@ -180,6 +181,7 @@ export default async ({ app }) => {
   apiRouter.use('/report', reportRoutes);
   apiRouter.use('/notifications', notificationRoutes);
   apiRouter.use('/search', searchRoutes);
+  apiRouter.use('/dubbing', dubbingRoutes);
 
   // Apply Passive Auth BEFORE Rate Limiter
   app.use('/api', apiVersioning, passiveVerifyToken, versionTracking, apiLimiter, apiRouter);

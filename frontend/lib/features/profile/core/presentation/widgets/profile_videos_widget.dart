@@ -263,6 +263,51 @@ class ProfileVideosWidget extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    // **IMPORTANT NOTICE FOR FIRST-TIME USERS**
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                      ),
+                      child: Column(
+                        children: [
+                       const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children:  [
+                               HugeIcon(
+                                icon: HugeIcons.strokeRoundedMoney03,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
+                               SizedBox(width: 8),
+                               Text(
+                                "Monetization is Active!",
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Creator! Pehle video se hi apna content monetize kar sakte hai. Upload your first video in Vayug!",
+                            style: TextStyle(
+                              color: AppColors.textPrimary.withOpacity(0.9),
+                              fontSize: 13,
+                              height: 1.4,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ],
               ),

@@ -943,6 +943,10 @@ class ProfileStateManager extends ChangeNotifier {
         _getAllVideosUnique(videos);
       }
 
+      // **FIX: Ensure videos are ALWAYS sorted by uploadedAt (Newest First)**
+      // This provides a consistent experience even if the backend or cache returns unordered data.
+      _userVideos.sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
+
       _hasMoreVideos = videos.length >= _pageSize;
       notifyListenersSafe();
     } catch (e) {

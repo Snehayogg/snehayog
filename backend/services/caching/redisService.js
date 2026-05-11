@@ -208,6 +208,20 @@ class RedisService {
     catch (error) { return 0; }
   }
 
+  async lPush(key, values) {
+    if (!this._canUseRedis() || values.length === 0) return 0;
+    try { return await this.client.lpush(key, ...values); }
+    catch (error) { return 0; }
+  }
+
+  async lTrim(key, start, stop) {
+    if (!this._canUseRedis()) return false;
+    try {
+      await this.client.ltrim(key, start, stop);
+      return true;
+    } catch (error) { return false; }
+  }
+
   // --- SET OPERATIONS ---
 
   async sAdd(key, ...members) {
@@ -307,6 +321,7 @@ class RedisService {
   
   // Aliases for compatibility
   async setLock(key, value, expirySeconds) { return this.set(key, value, { nx: true, ex: expirySeconds }); }
+  async setex(key, seconds, value) { return this.set(key, value, seconds); }
   async delMany(keys) { return this.del(...keys); }
   
   async addToSet(key, members) {

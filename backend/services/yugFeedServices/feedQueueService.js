@@ -178,8 +178,10 @@ class FeedQueueService {
 
       const candidates = await Video.find(matchQuery)
         .sort({ finalScore: -1, createdAt: -1 })
-        .limit(300)
+        .limit(500)
         .select('_id uploader createdAt score finalScore videoType videoHash vectorEmbedding').lean();
+
+      console.log(`🔍 FeedQueue: Found ${candidates.length} candidates for ${userId} (${videoType})`);
 
       if (candidates.length > 0) {
           const memFiltered = candidates.filter(v => !seenVideoIds.has(v._id.toString()));
@@ -206,7 +208,6 @@ class FeedQueueService {
               const ordered = RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 4 });
               const pushIds = ordered.map(v => v._id.toString());
 
-              // OPTIMIZATION: bfMAdd internally handles EXPIRE
               const hashes = ordered.map(v => v.videoHash).filter(Boolean);
               await Promise.all([
                 redisService.rPush(queueKey, pushIds),
@@ -214,6 +215,9 @@ class FeedQueueService {
                 redisService.bfMAdd(bfSeenKey, pushIds),
                 hashes.length > 0 ? redisService.bfMAdd(bfHashKey, hashes) : Promise.resolve(),
               ]);
+              console.log(`✅ FeedQueue: Pushed ${pushIds.length} videos to Redis for ${userId} (${videoType})`);
+          } else {
+              console.log(`⚠️ FeedQueue: No new videos to push for ${userId} (${videoType}) after filtering.`);
           }
       }
       return 1;

@@ -14,6 +14,32 @@ class AdImpressionService {
   final AuthService _authService = AuthService();
   static const String _kOfflineImpressionsKey = 'offline_ad_impressions';
 
+  // **NEW: Deduplication Cache to prevent spamming the server**
+  final Map<String, DateTime> _dedupeCache = {};
+  static const Duration _dedupeThreshold = Duration(seconds: 5);
+
+  bool _isDuplicate(String key) {
+    final now = DateTime.now();
+    final lastTracked = _dedupeCache[key];
+    
+    if (lastTracked != null && now.difference(lastTracked) < _dedupeThreshold) {
+      return true;
+    }
+    
+    _dedupeCache[key] = now;
+    
+    // Cleanup old entries periodically
+    if (_dedupeCache.length > 50) {
+      _dedupeCache.removeWhere((_, time) => now.difference(time) > _dedupeThreshold);
+    }
+    return false;
+  }
+
+  /// **NEW: Remove from cache to allow retry on failure**
+  void _removeFromDedupe(String key) {
+    _dedupeCache.remove(key);
+  }
+
   /// **OPTIMIZED: Read JWT token directly from SharedPreferences**
   /// Avoids calling getUserData() (which may trigger a network request) just for the token.
   Future<String?> _getToken() async {
@@ -48,6 +74,9 @@ class AdImpressionService {
     required String adId,
     required String userId,
   }) async {
+    final dedupeKey = 'banner:$videoId:$adId:$userId';
+    if (_isDuplicate(dedupeKey)) return;
+
     try {
       AppLogger.log('📊 AdImpressionService: Tracking banner ad impression:');
       AppLogger.log('   Video ID: $videoId');
@@ -86,6 +115,10 @@ class AdImpressionService {
       } else {
         AppLogger.log(
             '❌ AdImpressionService: Failed to track banner ad impression: ${response.body}');
+        
+        // **NEW: Clear dedupe on failure to allow retry**
+        _removeFromDedupe(dedupeKey);
+
         // **NEW: Queue offline**
         _queueOfflineImpression({
           'videoId': videoId,
@@ -99,6 +132,10 @@ class AdImpressionService {
     } catch (e) {
       AppLogger.log(
           '❌ AdImpressionService: Error tracking banner ad impression: $e');
+      
+      // **NEW: Clear dedupe on error to allow retry**
+      _removeFromDedupe(dedupeKey);
+
       // **NEW: Queue offline**
       _queueOfflineImpression({
         'videoId': videoId,
@@ -118,6 +155,9 @@ class AdImpressionService {
     required String userId,
     required int scrollPosition,
   }) async {
+    final dedupeKey = 'carousel:$videoId:$adId:$userId:$scrollPosition';
+    if (_isDuplicate(dedupeKey)) return;
+
     try {
       final response = await httpClientService.post(
         Uri.parse('${NetworkHelper.adsEndpoint}/impressions/carousel'),
@@ -142,6 +182,10 @@ class AdImpressionService {
       } else {
         AppLogger.log(
             '❌ Failed to track carousel ad impression: ${response.body}');
+        
+        // **NEW: Clear dedupe on failure to allow retry**
+        _removeFromDedupe(dedupeKey);
+
         // **NEW: Queue offline**
         _queueOfflineImpression({
           'videoId': videoId,
@@ -155,6 +199,10 @@ class AdImpressionService {
       }
     } catch (e) {
       AppLogger.log('❌ Error tracking carousel ad impression: $e');
+      
+      // **NEW: Clear dedupe on error to allow retry**
+      _removeFromDedupe(dedupeKey);
+
       // **NEW: Queue offline**
         _queueOfflineImpression({
           'videoId': videoId,

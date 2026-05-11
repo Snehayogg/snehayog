@@ -71,6 +71,8 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
   }
 
   Future<void> _loadVideos({bool refresh = false}) async {
+    if (_isLoading && !refresh) return;
+
     if (refresh) {
       if (!mounted) return;
       setState(() {
@@ -219,12 +221,13 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
     if (_wasSignedIn != null && _wasSignedIn != isSignedIn) {
       _wasSignedIn = isSignedIn;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (mounted && !_isLoading) {
           refreshVideos();
         }
       });
+    } else {
+       _wasSignedIn = isSignedIn;
     }
-    _wasSignedIn = isSignedIn;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,

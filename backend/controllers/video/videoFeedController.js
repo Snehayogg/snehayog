@@ -51,14 +51,22 @@ const populateEpisodesForVideos = async (videos) => {
 export const getUserVideos = async (req, res) => {
   try {
     const { googleId } = req.params;
-    const cacheKey = VideoCacheKeys.user(googleId);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 9;
+    const videoType = (req.query.videoType || 'all').toLowerCase();
+    const mediaType = (req.query.mediaType || 'all').toLowerCase();
+    
+    // **FIX: Include pagination and filter parameters in the cache key**
+    // This prevents different pages/filters from returning the same cached data.
+    const cacheKey = `${VideoCacheKeys.user(googleId)}:p${page}:l${limit}:t${videoType}:m${mediaType}`;
     
     res.set('Cache-Control', 'public, max-age=300');
 
     const shouldRefresh = req.query.refresh === 'true';
 
     if (shouldRefresh && redisService.getConnectionStatus()) {
-        await invalidateCache(cacheKey);
+        // Clear ALL pages/filters for this user using a wildcard pattern
+        await invalidateCache(`${VideoCacheKeys.user(googleId)}*`);
         await invalidateCache(`user:profile:${googleId}`);
     }
 
@@ -90,8 +98,6 @@ export const getUserVideos = async (req, res) => {
       }
     }
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 9;
     let skip = req.query.skip !== undefined ? parseInt(req.query.skip) : (page - 1) * limit;
 
     const query = {

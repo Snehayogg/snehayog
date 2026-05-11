@@ -71,10 +71,9 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     );
 
     _loadUserData();
-    _trackImpression();
     _startProgressAnimation();
-    // **FIX: Don't start view tracking in initState - wait for visibility**
-    // View tracking will start when ad becomes visible (detected by VisibilityDetector)
+    // **FIX: Don't start tracking in initState - wait for visibility**
+    // View tracking and initial impression will start when ad becomes visible
   }
 
   Future<void> _loadUserData() async {
@@ -113,7 +112,10 @@ class _CarouselAdWidgetState extends State<CarouselAdWidget>
     _isVisible = true;
     _viewStartTime = DateTime.now();
     AppLogger.log(
-        '✅ CarouselAdWidget: Ad became visible, starting view tracking');
+        '✅ CarouselAdWidget: Ad became visible, starting tracking');
+
+    // **NEW: Track initial impression now that it's visible**
+    _trackImpression();
 
     // Track view after minimum duration (4 seconds for ads)
     _viewTrackingTimer = Timer(AppConstants.adViewCountThreshold, () async {

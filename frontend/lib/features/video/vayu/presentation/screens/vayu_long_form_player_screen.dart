@@ -38,7 +38,6 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
-import 'package:vibration/vibration.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/core/providers/navigation_providers.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_player_gestures_mixin.dart';
@@ -348,12 +347,14 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     if (index >= _videos.length) return;
     final videoToPlay = _videos[index];
     VideoPlayerController? existing = _controllerPool.getController(videoToPlay.id);
+    final bool shouldAutoPlay = !_lifecyclePaused && index == _currentIndex;
+
     if (existing != null && existing.value.isInitialized) {
       if (mounted) {
         setState(() {
           _controllers[index] = existing;
           _chewieControllers[index]?.dispose();
-          _chewieControllers[index] = _createChewieController(existing);
+          _chewieControllers[index] = _createChewieController(existing, videoToPlay, autoPlay: shouldAutoPlay);
         });
         _setupLateInitialization(index, existing);
       }
@@ -381,7 +382,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       await newController.initialize().timeout(const Duration(seconds: 15));
       await newController.setPlaybackSpeed(_playbackSpeed);
       if (mounted) {
-        final chewie = _createChewieController(newController);
+        final chewie = _createChewieController(newController, effectiveVideo, autoPlay: shouldAutoPlay);
         setState(() { _controllers[index] = newController; _chewieControllers[index] = chewie; });
         _controllerPool.addController(videoToPlay.id, newController, index: index);
         _setupLateInitialization(index, newController);
@@ -389,15 +390,21 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     } catch (e) { AppLogger.log('Failed to init: $e'); }
   }
 
-  ChewieController _createChewieController(VideoPlayerController controller) {
+  ChewieController _createChewieController(VideoPlayerController controller, VideoModel video, {bool autoPlay = true}) {
     return ChewieController(
       videoPlayerController: controller,
       aspectRatio: 16 / 9,
-      autoPlay: true,
+      autoPlay: autoPlay,
       showControls: false,
       customControls: const SizedBox.shrink(),
       materialProgressColors: ChewieProgressColors(playedColor: AppColors.primary, handleColor: AppColors.primary, backgroundColor: AppColors.borderPrimary, bufferedColor: AppColors.textTertiary),
-      placeholder: Container(color: Colors.black, child: const Center(child: CircularProgressIndicator(color: AppColors.primary))),
+      placeholder: video.thumbnailUrl.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: video.thumbnailUrl,
+              fit: BoxFit.cover,
+              errorWidget: (context, url, error) => Container(color: Colors.black),
+            )
+          : Container(color: Colors.black),
     );
   }
 
@@ -507,11 +514,24 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Future<void> _resumePlayback(int index) async {
     final controller = _controllers[index];
     if (controller == null) return;
+
+    // First try memory-cached position (for smooth orientation/tab switches)
+    final memoryPos = _lastKnownPositions[index];
+    if (memoryPos != null && memoryPos > Duration.zero) {
+      if (memoryPos < controller.value.duration) {
+        await controller.seekTo(memoryPos);
+        return;
+      }
+    }
+
+    // Fallback to persisted SharedPreferences (for app restarts)
     _prefs ??= await SharedPreferences.getInstance();
     final savedSeconds = _prefs!.getInt('video_pos_${_videos[index].id}');
     if (savedSeconds != null && savedSeconds > 0) {
       final pos = Duration(seconds: savedSeconds);
-      if (pos < controller.value.duration) controller.seekTo(pos);
+      if (pos < controller.value.duration) {
+        await controller.seekTo(pos);
+      }
     }
   }
 
@@ -726,12 +746,26 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   void _toggleFullScreen() {
     final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
     final controller = _controllers[_currentIndex];
+
+    // Capture exact position before orientation change
+    if (controller != null) {
+      _lastKnownPositions[_currentIndex] = controller.value.position;
+    }
+
     final aspectRatio = controller?.value.aspectRatio ?? 1.0;
     if (aspectRatio < 1.0) {
-      setState(() { _isFullScreenManual = !_isFullScreenManual; showControls = true; });
+      setState(() {
+        _isFullScreenManual = !_isFullScreenManual;
+        showControls = true;
+      });
     } else {
-      SystemChrome.setPreferredOrientations(isPortrait ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight] : [DeviceOrientation.portraitUp]);
-      setState(() { _isFullScreenManual = false; showControls = true; });
+      SystemChrome.setPreferredOrientations(isPortrait
+          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : [DeviceOrientation.portraitUp]);
+      setState(() {
+        _isFullScreenManual = false;
+        showControls = true;
+      });
     }
     startHideControlsTimer(MediaQuery.of(context).orientation);
   }
@@ -927,13 +961,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             scrollDirection: Axis.vertical,
             onPageChanged: _onPageChanged,
             itemCount: _videos.length,
-            itemBuilder: (context, index) => SafeArea(
-              top: !isLandscape,
-              bottom: false,
-              left: false,
-              right: false,
-              child: _buildFeedItem(index),
-            ),
+            itemBuilder: (context, index) => _buildFeedItem(index),
           ),
           if (!_hasSeenScrollHint) Positioned(bottom: isLandscape ? 80 : 140, left: 0, right: 0, child: IgnorePointer(child: AnimatedOpacity(opacity: _showScrollHintOverlay ? 1.0 : 0.0, duration: const Duration(milliseconds: 500), child: Center(child: Container(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(30)), child: const Text('Swipe up to watch more', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600))))))),
         ]),
@@ -943,8 +971,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   Widget _buildFeedItem(int index) {
     final v = _videos[index];
-    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
-    return VayuFeedItem(
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final isPortrait = !isLandscape;
+
+    return SafeArea(
+      top: isPortrait, bottom: false, left: false, right: false,
+      child: VayuFeedItem(
       key: ValueKey(v.id),
       index: index, video: v, controller: _controllers[index], chewie: _chewieControllers[index], isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: showControls, isControlsLocked: isControlsLocked, showScrubbingOverlay: showScrubbingOverlay,
       onToggleFullScreen: _toggleFullScreen, onOpenExternalPlayer: () => _openInExternalPlayer(v), onHandleTap: () => handleTap(MediaQuery.of(context).orientation), onDoubleTapToSeek: (details) => handleDoubleTapToSeek(details, MediaQuery.of(context).size, MediaQuery.of(context).orientation), onHorizontalDragEnd: handleHorizontalDragEnd, onVerticalDragUpdate: (dy, lp) => handleVerticalDragUpdate(dy, lp, MediaQuery.of(context).size), onVerticalDragEnd: () {}, onUnifiedHorizontalDrag: handleUnifiedHorizontalDrag,
@@ -953,7 +985,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       channelInfo: VayuChannelInfo(video: v, isPortrait: isPortrait),
       playerOverlay: VayuPlayerOverlay(controller: _controllers[index], showControls: showControls, isControlsLocked: isControlsLocked, isPortrait: isPortrait, isFullScreenManual: _isFullScreenManual, onTogglePlay: togglePlay, onMoreOptions: _showMoreOptions, onNext: _nextVideo, onPrevious: _previousVideo),
       dubbingOverlay: _buildDubbingOverlay(index),
-    );
+    ));
   }
 
   Widget _buildDubbingOverlay(int index) {

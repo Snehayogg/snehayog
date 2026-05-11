@@ -1257,4 +1257,47 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
   }
 });
 
+// ✅ Route to delete account (MANDATORY for Google Play)
+router.delete('/delete-account', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const googleId = req.user.id;
+
+    console.log(`🗑️ Delete Account: Starting for user ${googleId} (${userId})`);
+
+    // 1. Delete user's videos (or mark as deleted)
+    const Video = (await import('../models/Video.js')).default;
+    await Video.deleteMany({ uploader: userId });
+
+    // 2. Delete followers/following relationships
+    const Follower = (await import('../models/Follower.js')).default;
+    await Follower.deleteMany({ $or: [{ follower: userId }, { following: userId }] });
+
+    // 3. Delete saved videos
+    const SavedVideo = (await import('../models/SavedVideo.js')).default;
+    await SavedVideo.deleteMany({ user: userId });
+
+    // 4. Delete notices
+    const Notice = (await import('../models/Notice.js')).default;
+    await Notice.deleteMany({ userId: googleId });
+
+    // 5. Delete user document
+    const user = await User.findByIdAndDelete(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log(`✅ Delete Account: Completed for user ${googleId}`);
+
+    res.json({ 
+      success: true, 
+      message: 'Account and all associated data deleted successfully. Please note that it may take up to 30 days for data to be fully purged from backups.' 
+    });
+  } catch (err) {
+    console.error('❌ Delete account error:', err);
+    res.status(500).json({ error: 'Failed to delete account', details: err.message });
+  }
+});
+
 export default router;

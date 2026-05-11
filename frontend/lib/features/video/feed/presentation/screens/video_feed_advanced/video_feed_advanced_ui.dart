@@ -924,16 +924,13 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         }
       },
       onImpression: () async {
-        if (index < _videos.length && adData != null) {
+        // **PERFORMANCE FIX: Only track impression for the CURRENTLY ACTIVE video**
+        // PageView builds adjacent items (index-1, index+1), but we shouldn't track them 
+        // until the user actually scrolls to them and they become the primary focus.
+        if (index == _currentIndex && _isScreenVisible && index < _videos.length && adData != null) {
           final video = _videos[index];
           final adId = adData['_id'] ?? adData['id'];
           final userData = await _authService.getUserData();
-
-          AppLogger.log('📊 Banner Ad Impression Tracking:');
-          AppLogger.log('   Video ID: ${video.id}');
-          AppLogger.log('   Video Name: ${video.videoName}');
-          AppLogger.log('   Ad ID: $adId');
-          AppLogger.log('   User ID: ${userData?['id']}');
 
           if (adId != null && userData != null) {
             // **NEW: Check if viewer is the creator**

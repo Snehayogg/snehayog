@@ -479,15 +479,29 @@ class VideoService {
     }
   }
 
+  // **CACHE: Simple memory cache for subscriber videos**
+  List<VideoModel>? _subscriberVideosCache;
+  DateTime? _lastSubscriberFetchTime;
+  static const Duration _cacheDuration = Duration(minutes: 5);
+
   /// **Get subscriber-only videos for the current user**
-  Future<List<VideoModel>> getSubscriberVideos() async {
+  Future<List<VideoModel>> getSubscriberVideos({bool forceRefresh = false}) async {
+    // **NEW: Return cached data if available and not expired**
+    if (!forceRefresh && 
+        _subscriberVideosCache != null && 
+        _lastSubscriberFetchTime != null &&
+        DateTime.now().difference(_lastSubscriberFetchTime!) < _cacheDuration) {
+      AppLogger.log('🎬 VideoService: Returning cached subscriber videos');
+      return _subscriberVideosCache!;
+    }
+
     final hasInternet = await ConnectivityService.hasInternetConnection();
     if (!hasInternet) {
       throw Exception('No internet connection');
     }
 
     try {
-      AppLogger.log('📡 VideoService: Fetching subscriber videos...');
+      AppLogger.log('📡 VideoService: Fetching subscriber videos from network...');
 
       final resolvedBaseUrl = await getBaseUrlWithFallback();
       final url = '$resolvedBaseUrl/api/users/subscriber-videos';
@@ -501,9 +515,16 @@ class VideoService {
         final List<dynamic> videoList = data['videos'] ?? [];
         AppLogger.log(
             '✅ VideoService: Fetched ${videoList.length} subscriber videos');
-        return videoList
+        
+        final List<VideoModel> videos = videoList
             .map((json) => VideoModel.fromJson(Map<String, dynamic>.from(json)))
             .toList();
+        
+        // **NEW: Update cache**
+        _subscriberVideosCache = videos;
+        _lastSubscriberFetchTime = DateTime.now();
+        
+        return videos;
       } else if (res.statusCode == 401 || res.statusCode == 403) {
         throw Exception('Please sign in to view subscriber content');
       } else {

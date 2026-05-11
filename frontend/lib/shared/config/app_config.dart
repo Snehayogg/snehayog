@@ -12,7 +12,7 @@ class AppConfig {
   static const bool isDevelopment = false;
   
   // Set to true to use production Cloudflare worker even in development
-  static const bool useProductionWorker = true; 
+  static const bool useProductionWorker = true;
 
   // Use the explicit flag instead of kReleaseMode
   static bool get _isDevelopment => isDevelopment;

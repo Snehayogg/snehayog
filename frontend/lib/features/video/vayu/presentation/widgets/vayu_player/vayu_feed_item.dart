@@ -138,13 +138,11 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
             child: ColoredBox(color: Color.fromRGBO(0, 0, 0, 0.55)),
           ),
 
-        // Background Video Section
-        if (isFull)
-          _buildVideoSection(orientation)
-        else
-          Column(
-            children: [
-              _buildVideoSection(orientation),
+        // Stable Video + Metadata Column
+        Column(
+          children: [
+            _buildVideoSection(orientation),
+            if (!isFull)
               Expanded(
                 child: SingleChildScrollView(
                   child: Padding(
@@ -171,10 +169,10 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
                   ),
                 ),
               ),
-            ],
-          ),
+          ],
+        ),
 
-        // Overlays that appear in BOTH modes (using Positioned to layer over the Column if in portrait)
+        // Overlays that appear in BOTH modes (landscape specific positions)
         if (isFull) ...[
           if (widget.activeQuiz != null)
             Positioned(
@@ -223,7 +221,7 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
       child: Stack(
         fit: StackFit.passthrough,
         children: [
-          // Background handled at the root uild level. 
+          // Background handled at the root  uild level. 
           // Layer 3: Actual video container + all overlays
           SizedBox(
             width: size.width,
@@ -239,12 +237,9 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
                           offset: _offset,
                           child: Transform.scale(
                             scale: _scale,
-                            child: Hero(
-                              tag: 'video_${widget.video.id}',
-                              child: AspectRatio(
-                                aspectRatio: 16 / 9,
-                                child: Chewie(controller: chewie),
-                              ),
+                            child: AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: Chewie(controller: chewie),
                             ),
                           ),
                         ),
@@ -253,6 +248,39 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
                   )
                 else
                   const Center(child: CircularProgressIndicator(color: Colors.white24)),
+
+                // 2. PAUSE OVERLAY (Black semi-transparent layer when paused)
+                if (controllerIsHealthy && controller != null)
+                  Positioned.fill(
+                    child: ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) {
+                        return IgnorePointer(
+                          child: AnimatedOpacity(
+                            opacity: (!value.isPlaying && value.isInitialized) ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            child: Container(
+                              color: Colors.black.withValues(alpha: 0.55),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                // 3. CONTROLS OVERLAY (Provides contrast for icons when controls are visible)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: widget.showControls ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 250),
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ),
+                ),
 
           // 2. GESTURE LAYER
           Positioned.fill(
@@ -293,8 +321,21 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
                 _dragVerticalDeltaAccumulated = 0;
               },
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: widget.onHandleTap,
                 onDoubleTapDown: widget.onDoubleTapToSeek,
+                onVerticalDragStart: (_) {
+                  _activeGesture = GestureType.vertical;
+                  widget.onScrollingLock(true);
+                },
+                onVerticalDragUpdate: (details) {
+                  widget.onVerticalDragUpdate(details.delta.dy, details.localPosition);
+                },
+                onVerticalDragEnd: (_) {
+                  _activeGesture = GestureType.none;
+                  widget.onScrollingLock(false);
+                  widget.onVerticalDragEnd();
+                },
                 onScaleStart: (details) {
                   if (_pointers >= 2) {
                     _isScaling = true;
@@ -312,23 +353,22 @@ class _VayuFeedItemState extends ConsumerState<VayuFeedItem> with AutomaticKeepA
 
                   if (_activeGesture == GestureType.none) {
                     _dragHorizontalDeltaAccumulated += details.focalPointDelta.dx;
-                    _dragVerticalDeltaAccumulated += details.focalPointDelta.dy;
+                    // Vertical is handled by onVerticalDragUpdate now
                     if (_dragHorizontalDeltaAccumulated.abs() > _gestureThreshold) {
                       _activeGesture = GestureType.horizontal;
-                    } else if (_dragVerticalDeltaAccumulated.abs() > _gestureThreshold) {
-                      _activeGesture = GestureType.vertical;
+                      widget.onScrollingLock(true);
                     }
                   }
 
                   if (_activeGesture == GestureType.horizontal) {
                     widget.onUnifiedHorizontalDrag(details.focalPointDelta.dx);
-                  } else if (_activeGesture == GestureType.vertical) {
-                    widget.onVerticalDragUpdate(details.focalPointDelta.dy, details.localFocalPoint);
                   }
                 },
                 onScaleEnd: (details) {
-                  if (_activeGesture == GestureType.horizontal) widget.onHorizontalDragEnd();
-                  if (_activeGesture == GestureType.vertical) widget.onVerticalDragEnd();
+                  if (_activeGesture == GestureType.horizontal) {
+                    widget.onHorizontalDragEnd();
+                    widget.onScrollingLock(false);
+                  }
                   _activeGesture = GestureType.none;
                   _dragHorizontalDeltaAccumulated = 0;
                   _dragVerticalDeltaAccumulated = 0;

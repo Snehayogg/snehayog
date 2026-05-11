@@ -46,31 +46,6 @@ class VayuPlayerOverlay extends StatelessWidget {
         ignoring: !showControls,
         child: Stack(
           children: [
-            // TOP SCRIM
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 60,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.8),
-                        Colors.black.withValues(alpha: 0.5),
-                        Colors.black.withValues(alpha: 0.2),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.3, 0.7, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
             // Top Controls (More menu)
             Positioned(
               top: 0,
@@ -115,31 +90,6 @@ class VayuPlayerOverlay extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ),
-
-            // BOTTOM SCRIM
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 80,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.8),
-                        Colors.black.withValues(alpha: 0.5),
-                        Colors.black.withValues(alpha: 0.2),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.3, 0.7, 1.0],
-                    ),
-                  ),
                 ),
               ),
             ),
