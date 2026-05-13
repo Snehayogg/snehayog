@@ -10,7 +10,7 @@ class ShareService {
   Future<void> shareVideo(VideoModel video) async {
     try {
       final shareText = _generateVideoShareText(video);
-      await Share.share(shareText);
+      await SharePlus.instance.share(ShareParams(text: shareText));
       await _incrementVideoShareCount(video.id);
     } catch (e) {
       AppLogger.log('❌ ShareService: Error sharing video: $e');
@@ -20,7 +20,7 @@ class ShareService {
   Future<void> shareAd(CarouselAdModel ad) async {
     try {
       final shareText = _generateAdShareText(ad);
-      await Share.share(shareText);
+      await SharePlus.instance.share(ShareParams(text: shareText));
       // Ads might track shares differently or not at all in the same way as videos
       // For now, we'll assume ad share tracking is handled by the caller or not needed here
       // If needed, we can inject a service to track ad shares.

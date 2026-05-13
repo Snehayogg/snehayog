@@ -1,38 +1,36 @@
 import 'package:flutter/material.dart';
-import 'package:vayug/core/design/spacing.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
 import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
+import 'package:vayug/core/providers/auth_providers.dart';
 import 'package:vayug/features/profile/core/presentation/screens/saved_videos_screen.dart';
 import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/utils/app_text.dart';
+import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
+import 'package:vayug/features/profile/core/presentation/managers/profile_state_manager.dart';
+import 'package:vayug/features/profile/core/data/services/user_service.dart';
 
-class SettingsScreen extends StatefulWidget {
+import 'package:vayug/features/profile/core/presentation/screens/creator_tools_screen.dart';
+
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
-
+ 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isLoading = true;
+ 
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadDeveloperToken();
   }
-
-  Future<void> _loadDeveloperToken() async {
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) { 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       body: CustomScrollView(
@@ -43,6 +41,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             floating: true,
             snap: true,
             elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
           if (_isLoading)
             const SliverFillRemaining(
@@ -51,39 +53,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
             )
           else
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  if (index == 0) {
-                    return _buildActionTile(
-                      title: AppText.get('settings_saved_videos', fallback: 'Saved Videos'),
-                      icon: Icons.bookmark_outlined,
-                      color: AppColors.textPrimary,
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedVideosScreen()));
-                      },
-                    );
-                  } else if (index == 1) {
-                    return _buildActionTile(
-                      title: AppText.get('settings_linked_accounts', fallback: 'Linked Accounts'),
-                      icon: Icons.link,
-                      color: AppColors.textPrimary,
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const LinkedAccountsScreen()));
-                      },
-                    );
-                  }
-                  return _buildActionTile(
-                    title: AppText.get('btn_logout', fallback: 'Logout'),
-                    icon: Icons.logout,
-                    color: AppColors.error,
-                    onTap: () {
-                      context.read<GoogleSignInController>().signOut();
-                      Navigator.of(context).pop();
-                    },
-                  );
-                },
-                childCount: 3,
-              ),
+              delegate: SliverChildListDelegate([
+                const SizedBox(height: 16),
+                _buildActionTile(
+                  title: AppText.get('settings_saved_videos', fallback: 'Saved Videos'),
+                  icon: Icons.bookmark_outline_rounded,
+                  color: AppColors.textPrimary,
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedVideosScreen()));
+                  },
+                ),
+                _buildActionTile(
+                  title: AppText.get('settings_linked_accounts', fallback: 'Linked Accounts'),
+                  icon: Icons.link_rounded,
+                  color: AppColors.textPrimary,
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const LinkedAccountsScreen()));
+                  },
+                ),
+                
+                _buildActionTile(
+                  title: 'Manage Alerts',
+                  subtitle: 'Notifications from creators you subscribe to',
+                  icon: Icons.notifications_active_outlined,
+                  color: AppColors.textPrimary,
+                  onTap: () => _showSubscriptionAlertsSettings(context),
+                ),
+                
+                _buildActionTile(
+                  title: 'Broadcast Alerts',
+                  subtitle: 'Send direct updates to your subscribers',
+                  icon: Icons.campaign_outlined,
+                  color: AppColors.textPrimary,
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatorToolsScreen()));
+                  },
+                ),
+                
+                _buildActionTile(
+                  title: AppText.get('btn_logout', fallback: 'Logout'),
+                  icon: Icons.logout_rounded,
+                  color: AppColors.error,
+                  onTap: () {
+                    ref.read(googleSignInProvider).signOut();
+                    Navigator.of(context).pop();
+                  },
+                ),
+                const SizedBox(height: 40),
+              ]),
             ),
         ],
       ),
@@ -91,21 +108,207 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
 
+
   Widget _buildActionTile({
     required String title,
+    String? subtitle,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
   }) {
     return ListTile(
       onTap: onTap,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
       title: Text(
         title,
-        style: AppTypography.bodyMedium.copyWith(color: color),
+        style: AppTypography.bodyMedium.copyWith(color: color, fontWeight: FontWeight.w500),
       ),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textTertiary),
+      subtitle: subtitle != null ? Text(subtitle, style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary)) : null,
+      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 20),
+    );
+  }
+
+  void _showSubscriptionAlertsSettings(BuildContext context) {
+    VayuBottomSheet.show(
+      context: context,
+      title: 'Manage Alerts',
+      child: Consumer(
+        builder: (context, ref, child) {
+          final manager = ref.watch(profileStateManagerProvider);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Global Alerts', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Enable/disable all creator notifications', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                value: manager.isGlobalAlertsEnabled,
+                activeTrackColor: AppColors.primary,
+                activeColor: Colors.white,
+                onChanged: (value) async {
+                  await manager.updateNotificationPreference(globalEnabled: value);
+                },
+              ),
+              
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20.0),
+                child: Divider(color: Colors.white12),
+              ),
+              const Text(
+                'Mute or unmute specific creators you subscribe to.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+ 
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: UserService().getFollowingList(),
+                builder: (context, snapshot) {
+                  // Debugging the list
+                  if (snapshot.hasData) {
+                    debugPrint('🔍 Manage Alerts: Found ${snapshot.data!.length} creators');
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      ),
+                    );
+                  }
+                  
+                  if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40.0),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.notifications_off_outlined, color: Colors.white24, size: 48),
+                            const SizedBox(height: 16),
+                            Text(
+                              snapshot.hasError ? 'Error loading creators' : 'You haven\'t subscribed to any creators yet.',
+                              style: const TextStyle(color: Colors.white38, fontSize: 13),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+ 
+                  final following = snapshot.data!;
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: following.length,
+                    itemBuilder: (context, index) {
+                      final creator = following[index];
+                      final creatorId = creator['id']?.toString() ?? creator['_id']?.toString() ?? '';
+                      final isMuted = manager.disabledCreatorIds.contains(creatorId);
+ 
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: SwitchListTile.adaptive(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          secondary: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.white10,
+                            backgroundImage: creator['profilePic'] != null 
+                              ? NetworkImage(creator['profilePic']) 
+                              : null,
+                            child: creator['profilePic'] == null 
+                              ? const Icon(Icons.person, color: Colors.white24, size: 20) 
+                              : null,
+                          ),
+                          title: Text(
+                            creator['name'] ?? 'Creator',
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            isMuted ? 'Muted' : 'Alerts On',
+                            style: TextStyle(color: isMuted ? Colors.white38 : AppColors.primary, fontSize: 11),
+                          ),
+                          value: !isMuted,
+                          activeTrackColor: AppColors.primary,
+                          activeColor: Colors.white,
+                          onChanged: (bool value) async {
+                            if (value) {
+                              await manager.updateNotificationPreference(enabledCreatorId: creatorId);
+                            } else {
+                              await manager.updateNotificationPreference(disabledCreatorId: creatorId);
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 30),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSendAlertDialog(BuildContext context, ProfileStateManager manager) {
+    final messageController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.backgroundSecondary,
+        title: const Text('Send Direct Alert', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: messageController,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Type your message here...',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (messageController.text.trim().isEmpty) return;
+              
+              try {
+                await manager.sendCreatorAlert(message: messageController.text.trim());
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Alert sent successfully!')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('Send Alert'),
+          ),
+        ],
+      ),
     );
   }
 }

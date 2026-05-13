@@ -575,6 +575,42 @@ router.get('/my-subscribers/export', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/users/following/list
+ * Get list of creators the current user is following with metadata
+ */
+router.get('/following/list', verifyToken, async (req, res) => {
+  try {
+    const currentUserIdFromToken = req.user.id;
+    const user = await User.findOne({ googleId: currentUserIdFromToken });
+    
+    if (!user) {
+      console.log(`❌ following/list: User not found for googleId: ${currentUserIdFromToken}`);
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    console.log(`🔍 following/list: Fetching following for user _id: ${user._id} (${user.name})`);
+    const followingDocs = await Follower.find({ follower: user._id })
+      .populate('following', 'name profilePic googleId')
+      .lean();
+
+    const following = followingDocs
+      .filter(doc => doc.following) // Ensure user exists
+      .map(doc => ({
+        id: doc.following._id,
+        googleId: doc.following.googleId,
+        name: doc.following.name,
+        profilePic: doc.following.profilePic
+      }));
+
+    console.log(`✅ following/list: Found ${following.length} creators for ${user.name}`);
+    res.status(200).json({ success: true, following });
+  } catch (error) {
+    console.error('Error fetching following list:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // ✅ Route to update user profile (name and profilePic)
 router.post('/update-profile', async (req, res) => {
   try {
@@ -1070,9 +1106,13 @@ router.get('/subscribers', verifyToken, async (req, res) => {
         user = await User.findOne({ googleId }).select('_id').lean();
       }
     }
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      console.log(`❌ /subscribers: User not found for search`);
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     const userId = user._id;
+    console.log(`🔍 /subscribers: Fetching subscribers for creator _id: ${userId}`);
 
     // Get all followers (subscribers) of this creator
     const followers = await Follower.find({ following: userId })
@@ -1087,6 +1127,7 @@ router.get('/subscribers', verifyToken, async (req, res) => {
       profilePic: f.follower.profilePic || f.follower.profilePicture,
     }));
 
+    console.log(`✅ /subscribers: Found ${subscribers.length} subscribers for creator`);
     res.json({
       success: true,
       subscribers,

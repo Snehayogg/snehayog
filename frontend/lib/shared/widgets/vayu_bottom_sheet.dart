@@ -102,86 +102,95 @@ class VayuBottomSheet extends StatelessWidget {
     final effectiveMaxWidth = maxWidth ?? (isLandscape ? 420.0 : null);
     final isFloating = isLandscape && effectiveMaxWidth != null;
 
-    Widget content = Container(
-      constraints: effectiveMaxWidth != null ? BoxConstraints(maxWidth: effectiveMaxWidth) : null,
-      decoration: BoxDecoration(
-        color: AppColors.backgroundPrimary,
-        borderRadius: isFloating 
-          ? BorderRadius.circular(28) // Floating card style
-          : BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-        border: Border.all(
-          color: AppColors.borderPrimary.withValues(alpha: 0.5),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 24,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showHandle)
-              Center(
-                child: Container(
-                  width: 32,
-                  height: 4,
-                  margin: EdgeInsets.symmetric(vertical: isLandscape ? 6 : 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.borderPrimary,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                ),
+    Widget content = ClipRRect(
+      borderRadius: isFloating 
+        ? BorderRadius.circular(28) 
+        : BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          constraints: effectiveMaxWidth != null ? BoxConstraints(maxWidth: effectiveMaxWidth) : null,
+          decoration: BoxDecoration(
+            color: AppColors.backgroundPrimary.withValues(alpha: 0.75),
+            borderRadius: isFloating 
+              ? BorderRadius.circular(28)
+              : BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.1),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 4),
               ),
-            
-            // Header
-            if (title != null)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(20, showHandle ? 0 : (isLandscape ? 8 : 20), 12, isLandscape ? 6 : 12),
-                      child: Row(
-                        children: [
-                          if (icon != null) ...[
-                            Icon(icon, color: iconColor ?? AppColors.primary, size: isLandscape ? 18 : 22),
-                            const SizedBox(width: 12),
-                          ],
-                          Expanded(
-                            child: Text(
-                              title!,
-                              style: AppTypography.titleMedium.copyWith(
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.5,
-                                fontSize: isLandscape ? 14.0 : null,
-                              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (showHandle)
+                  Center(
+                    child: Container(
+                      width: 32,
+                      height: 4,
+                      margin: EdgeInsets.symmetric(vertical: isLandscape ? 6 : 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(100),
+                      ),
+                    ),
+                  ),
+                
+                // Header
+                if (title != null)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20, showHandle ? 0 : (isLandscape ? 8 : 20), 12, isLandscape ? 6 : 12),
+                    child: Row(
+                      children: [
+                        if (icon != null) ...[
+                          Icon(icon, color: iconColor ?? AppColors.primary, size: isLandscape ? 18 : 22),
+                          const SizedBox(width: 12),
+                        ],
+                        Expanded(
+                          child: Text(
+                            title!,
+                            style: AppTypography.titleMedium.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.5,
+                              fontSize: isLandscape ? 14.0 : null,
                             ),
                           ),
-                    if (actions != null) ...actions!,
-                    IconButton(
-                      icon: const Icon(Icons.close, color: AppColors.textTertiary, size: 18),
-                      onPressed: () => Navigator.pop(context),
-                      visualDensity: VisualDensity.compact,
+                        ),
+                        if (actions != null) ...actions!,
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.textTertiary, size: 18),
+                          onPressed: () => Navigator.pop(context),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                
+                // Main Content
+                Flexible(
+                  child: builder != null 
+                    ? builder!(context, scrollController)
+                    : SingleChildScrollView(
+                      controller: scrollController,
+                      physics: const BouncingScrollPhysics(),
+                      padding: padding ?? const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      child: child,
+                    ),
                 ),
-              ),
-            
-            // Main Content
-            Flexible(
-              child: builder != null 
-                ? builder!(context, scrollController)
-                : SingleChildScrollView(
-                  controller: scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  padding: padding ?? const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: child,
-                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

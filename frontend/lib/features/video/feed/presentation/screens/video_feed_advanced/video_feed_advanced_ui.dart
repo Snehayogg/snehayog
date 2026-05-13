@@ -713,7 +713,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               ),
             ),
 
-            // **PAUSE AD: IgnorePointer so taps pass through to play/pause GestureDetector**
+            // **PAUSE AD: Allow taps to trigger ad actions or resume video**
             Positioned.fill(
               child: ValueListenableBuilder<bool>(
                 valueListenable: _showPauseAdOverlayVN,
@@ -721,9 +721,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   if (!showOverlay || index != _currentIndex) {
                     return const SizedBox.shrink();
                   }
-                  return IgnorePointer(
-                    child: _buildLongPressAdContent(index),
-                  );
+                  return _buildLongPressAdContent(index, isPauseAd: true);
                 },
               ),
             ),
@@ -1872,7 +1870,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     _showPauseAdOverlayVN.value = false;
   }
 
-  Widget _buildLongPressAdContent(int index) {
+  Widget _buildLongPressAdContent(int index, {bool isPauseAd = false}) {
     final carouselAd = _carouselAdManager.getCarouselAdForIndex(index);
     if (carouselAd == null || carouselAd.slides.isEmpty) {
       return const SizedBox.shrink();
@@ -1883,13 +1881,6 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
     return Stack(
         children: [
-          // Transparent background - dismiss on tap outside
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () => _hideLongPressAdOverlay(),
-              child: Container(color: Colors.transparent),
-            ),
-          ),
           // Circular ad image - slightly left, vertically centered, with popup animation
           Positioned(
             left: 40,
@@ -1913,6 +1904,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 child: GestureDetector(
                   onTap: () async {
                     _hideLongPressAdOverlay();
+                    _hidePauseAdOverlay();
 
                     // **NEW: Track popup ad click**
                     if (index < _videos.length) {

@@ -6,7 +6,6 @@ import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
-import 'package:vayug/features/profile/core/presentation/widgets/video_creator_search_delegate.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:hugeicons/hugeicons.dart';
@@ -39,11 +38,13 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
   List<VideoModel> _videos = [];
   List<VideoModel> get videos => _videos;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   bool _hasMore = true;
   int _currentPage = 1;
+  String? _nextCursor;
   String? _errorMessage;
-  bool? _wasSignedIn;
   bool _isOfflineMode = false;
+  bool? _wasSignedIn;
 
   // Banner Ad State
 
@@ -89,59 +90,86 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
       });
     }
 
+    int emptyBatches = 0;
+    const int maxEmptyRetries = 3;
+
     try {
-      final result = await _videoService.getVideos(
-        page: _currentPage,
-        limit: 10,
-        videoType: 'vayu',
-        clearSession: refresh,
-      );
-
-      if (!mounted) return;
-
-      final List<VideoModel> newVideos = result['videos'];
-      final bool hasMore = result['hasMore'] ?? false;
-
-      AppLogger.log(
-          '📦 VayuScreen: Backend returned ${newVideos.length} videos');
-      if (newVideos.isNotEmpty) {
-        AppLogger.log('🔍 First video type: ${newVideos[0].videoType}');
-      }
-
-      // **SAFETY CHECK: Ensure backend sent correct videoType**
-      // Filter as safety net, not primary logic
-      final List<VideoModel> longFormVideos =
-          newVideos.where((v) => v.videoType == 'vayu').toList();
-
-      if (longFormVideos.length != newVideos.length) {
+      while (emptyBatches < maxEmptyRetries) {
         AppLogger.log(
-            '⚠️ WARNING: Backend sent ${newVideos.length - longFormVideos.length} non-vayu videos!');
-      }
+            '🎬 VayuScreen: Loading videos - Page: $_currentPage, Cursor: ${_nextCursor ?? "none"}');
+        final result = await _videoService.getVideos(
+          page: _currentPage,
+          limit: 10,
+          videoType: 'vayu',
+          clearSession: refresh,
+          cursor: _nextCursor,
+        );
 
-      AppLogger.log(
-          '🎬 VayuScreen: Fetched ${newVideos.length} videos from backend, showing ${longFormVideos.length} vayu videos');
+        if (!mounted) return;
 
-      setState(() {
-        if (refresh) {
-          _videos = longFormVideos;
-        } else {
-          final existingIds = _videos.map((v) => v.id).toSet();
-          final uniqueNewVideos =
-              longFormVideos.where((v) => !existingIds.contains(v.id)).toList();
-          _videos.addAll(uniqueNewVideos);
+        final dynamic rawVideos = result['videos'];
+        List<VideoModel> newVideos = [];
+
+        if (rawVideos is List) {
+          newVideos = rawVideos.map((v) {
+            if (v is VideoModel) return v;
+            return VideoModel.fromJson(Map<String, dynamic>.from(v));
+          }).toList();
         }
 
-        _hasMore = hasMore;
-        _isOfflineMode = false; // Updated
-        _isLoading = false;
-      });
+        final bool hasMore = result['hasMore'] ?? false;
+        final String? nextCursor = result['nextCursor'] as String?;
+
+        AppLogger.log('📦 VayuScreen: Backend returned ${newVideos.length} videos');
+
+        // Filter for vayu type (safety check)
+        final List<VideoModel> longFormVideos =
+            newVideos.where((v) => v.videoType == 'vayu').toList();
+
+        if (longFormVideos.isEmpty && hasMore) {
+          AppLogger.log(
+              '⚠️ VayuScreen: Batch was empty/filtered. Retrying... (Attempt ${emptyBatches + 1})');
+          emptyBatches++;
+          _currentPage++;
+          _nextCursor = nextCursor;
+          continue;
+        }
+
+        if (mounted) {
+          setState(() {
+            if (refresh) {
+              _videos = longFormVideos;
+            } else {
+              final existingIds = _videos.map((v) => v.id).toSet();
+              final uniqueNewVideos = longFormVideos
+                  .where((v) => !existingIds.contains(v.id))
+                  .toList();
+              _videos.addAll(uniqueNewVideos);
+            }
+
+            _hasMore = hasMore;
+            _nextCursor = nextCursor;
+            _isOfflineMode = false;
+            _isLoading = false;
+            _isLoadingMore = false;
+          });
+        }
+
+        return; // Success
+      }
+
+      // If we exit loop without success
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isLoadingMore = false;
+        });
+      }
     } catch (e) {
       AppLogger.log(
           '❌ VayuScreen: Error loading videos from backend: $e. Falling back to local gallery...');
-
       try {
         // Fallback to local gallery videos if offline
-        // Vayu specifically wants videos > 1 minute
         final localVideos = await localGalleryService.fetchGalleryVideos(
           page: _currentPage - 1,
           limit: 10,
@@ -160,38 +188,34 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
             _videos.addAll(uniqueNewVideos);
           }
 
-          _hasMore = localVideos.length >= 10;
+          _hasMore = localVideos.length == 10;
           _isOfflineMode = true;
           _isLoading = false;
-          _errorMessage =
-              null; // Clear error since we are showing offline content
+          _isLoadingMore = false;
         });
-
-        AppLogger.log(
-            '✅ VayuScreen: Loaded ${localVideos.length} local Vayu videos for offline mode');
       } catch (galleryError) {
         AppLogger.log(
-            '❌ VayuScreen: Error loading local gallery videos: $galleryError');
+            '❌ VayuScreen: Local gallery fallback failed: $galleryError');
         if (mounted) {
           setState(() {
             _isLoading = false;
-            _errorMessage =
-                'Failed to load videos and offline gallery access failed.';
+            _isLoadingMore = false;
+            _errorMessage = 'Connection error. Check your internet.';
           });
         }
       }
     }
   }
 
-  /// **Expose public refresh method**
   Future<void> refreshVideos() async {
     await _loadVideos(refresh: true);
   }
 
   Future<void> _loadMoreVideos() async {
-    if (_isLoading) return;
+    if (_isLoading || _isLoadingMore || !_hasMore) return;
 
     setState(() {
+      _isLoadingMore = true;
       _currentPage++;
     });
 
@@ -566,16 +590,6 @@ class VayuScreenState extends ConsumerState<VayuScreen> {
     );
   }
 
-  Widget _buildShimmerList() {
-    return ListView.builder(
-      itemCount: 4,
-      padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
-      itemBuilder: (context, index) => Padding(
-        padding: EdgeInsets.only(bottom: AppSpacing.spacing4),
-        child: _buildShimmerItem(),
-      ),
-    );
-  }
 
   Widget _buildShimmerItem() {
     return Column(

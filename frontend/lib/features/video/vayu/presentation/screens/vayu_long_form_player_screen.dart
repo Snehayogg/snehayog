@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:share_plus/share_plus.dart';
 import 'dart:async';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/core/design/colors.dart';
@@ -71,8 +72,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, ChewieController?> _chewieControllers = {};
 
-  bool _isLoadingMore = false;
   bool _hasMore = true;
+  bool _isLoadingMore = false;
   int _currentPage = 1;
   final VideoService _videoService = VideoService();
 
@@ -231,7 +232,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
         _handleAppMovedToBackground();
         break;
@@ -240,6 +240,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         break;
       case AppLifecycleState.detached:
         _videoControllerManager.disposeAllControllers();
+        break;
+      default:
         break;
     }
   }
@@ -435,7 +437,6 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     if (!mounted) return;
     final controller = _controllers[_currentIndex];
     if (controller == null) return;
-    setState(() {});
     final currentPos = controller.value.position;
     final lastPos = _lastKnownPositions[_currentIndex] ?? Duration.zero;
     if (currentPos < lastPos && lastPos.inSeconds > 1) {
@@ -468,6 +469,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   @override
   void dispose() {
     _disableWakelock();
+    disposeGestures();
+    _pageController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _mainController?.unregisterVideoObserver(onPause: _pauseCurrentVideo, onResume: _resumeCurrentVideo);
     try { _mainController?.unregisterCallbacks(); } catch (_) {}
@@ -546,65 +549,62 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _showEpisodeList(BuildContext context, VideoModel video) {
     if (video.episodes == null || video.episodes!.isEmpty) return;
-    showModalBottomSheet(
+    VayuBottomSheet.show<void>(
       context: context,
-      backgroundColor: AppColors.backgroundPrimary,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.spacing4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4, vertical: AppSpacing.spacing2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Episodes', style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold)),
-                    IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
-                  ],
+      title: 'Episodes',
+      padding: EdgeInsets.zero,
+      builder: (context, scrollController) {
+        return ListView.separated(
+          shrinkWrap: true,
+          controller: scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          itemCount: video.episodes!.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final ep = video.episodes![index];
+            final isCurrent = ep['id'] == video.id || ep['_id'] == video.id;
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 100, height: 56,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  image: ep['thumbnailUrl'] != null 
+                    ? DecorationImage(image: CachedNetworkImageProvider(ep['thumbnailUrl']), fit: BoxFit.cover) 
+                    : null,
+                  color: Colors.white.withValues(alpha: 0.05),
                 ),
+                child: isCurrent 
+                  ? Container(
+                      decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)), 
+                      child: const Icon(Icons.play_circle_fill_rounded, color: AppColors.primary, size: 28)
+                    ) 
+                  : null,
               ),
-              const Divider(height: 1),
-              AppSpacing.vSpace8,
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.spacing4),
-                  itemCount: video.episodes!.length,
-                  separatorBuilder: (context, index) => AppSpacing.vSpace8,
-                  itemBuilder: (context, index) {
-                    final ep = video.episodes![index];
-                    final isCurrent = ep['id'] == video.id || ep['_id'] == video.id;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        width: 100, height: 56,
-                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), image: ep['thumbnailUrl'] != null ? DecorationImage(image: CachedNetworkImageProvider(ep['thumbnailUrl']), fit: BoxFit.cover) : null, color: AppColors.backgroundSecondary),
-                        child: isCurrent ? Container(decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.play_circle_fill_rounded, color: AppColors.primary, size: 28)) : null,
-                      ),
-                      title: Text(ep['videoName'] ?? 'Episode ${index + 1}', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.bodyMedium.copyWith(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, color: isCurrent ? AppColors.primary : AppColors.textPrimary)),
-                      subtitle: ep['duration'] != null ? Text(_formatDuration(Duration(seconds: (ep['duration'] as num).toInt())), style: AppTypography.bodySmall) : null,
-                      onTap: () {
-                        Navigator.pop(context);
-                        if (!isCurrent) {
-                          final epId = ep['id'] ?? ep['_id'];
-                          if (epId != null) {
-                            final targetIndex = _videos.indexWhere((v) => v.id == epId);
-                            if (targetIndex != -1) _pageController.animateToPage(targetIndex, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                          }
-                        }
-                      },
-                    );
-                  },
-                ),
+              title: Text(
+                ep['videoName'] ?? 'Episode ${index + 1}', 
+                maxLines: 2, 
+                overflow: TextOverflow.ellipsis, 
+                style: AppTypography.bodyMedium.copyWith(
+                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, 
+                  color: isCurrent ? AppColors.primary : AppColors.textPrimary
+                )
               ),
-            ],
-          ),
+              subtitle: ep['duration'] != null 
+                ? Text(_formatDuration(Duration(seconds: (ep['duration'] as num).toInt())), style: AppTypography.bodySmall.copyWith(color: AppColors.textTertiary)) 
+                : null,
+              onTap: () {
+                Navigator.pop(context);
+                if (!isCurrent) {
+                  final epId = ep['id'] ?? ep['_id'];
+                  if (epId != null) {
+                    final targetIndex = _videos.indexWhere((v) => v.id == epId);
+                    if (targetIndex != -1) _pageController.animateToPage(targetIndex, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                  }
+                }
+              },
+            );
+          },
         );
       },
     );
@@ -625,7 +625,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
             dense: true, visualDensity: VisualDensity.compact,
             leading: const Icon(Icons.share_rounded, color: AppColors.textPrimary),
             title: const Text('Share Link'),
-            onTap: () { Navigator.pop(context); Share.share(video.videoUrl); },
+            onTap: () { Navigator.pop(context); SharePlus.instance.share(ShareParams(text: video.videoUrl)); },
           ),
           ListTile(
             dense: true, visualDensity: VisualDensity.compact,
@@ -756,7 +756,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     if (aspectRatio < 1.0) {
       setState(() {
         _isFullScreenManual = !_isFullScreenManual;
-        showControls = true;
+        showControlsVN.value = true;
       });
     } else {
       SystemChrome.setPreferredOrientations(isPortrait
@@ -764,7 +764,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
           : [DeviceOrientation.portraitUp]);
       setState(() {
         _isFullScreenManual = false;
-        showControls = true;
+        showControlsVN.value = true;
       });
     }
     startHideControlsTimer(MediaQuery.of(context).orientation);
@@ -780,7 +780,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         children: [
           ListTile(dense: true, leading: const Icon(Icons.speed_rounded), title: const Text('Playback Speed'), trailing: Text('${_playbackSpeed}x'), onTap: () { Navigator.pop(context); _showPlaybackSpeedOptions(); }),
           if (_currentIndex < _videos.length) ListTile(dense: true, leading: const Icon(Icons.language_rounded), title: const Text('Audio Language'), onTap: () { Navigator.pop(context); _showLanguageSelector(context, _videos[_currentIndex]); }),
-          ListTile(dense: true, leading: Icon(isControlsLocked ? Icons.lock_rounded : Icons.lock_open_rounded), title: Text(isControlsLocked ? 'Unlock' : 'Lock'), onTap: () { Navigator.pop(context); setState(() => isControlsLocked = !isControlsLocked); }),
+          ListTile(dense: true, leading: Icon(isControlsLockedVN.value ? Icons.lock_rounded : Icons.lock_open_rounded), title: Text(isControlsLockedVN.value ? 'Unlock' : 'Lock'), onTap: () { Navigator.pop(context); isControlsLockedVN.value = !isControlsLockedVN.value; }),
           ListTile(dense: true, leading: const Icon(Icons.report_problem_rounded), title: const Text('Report'), onTap: () { Navigator.pop(context); _openReportDialog(); }),
         ],
       ),
@@ -978,12 +978,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       top: isPortrait, bottom: false, left: false, right: false,
       child: VayuFeedItem(
       key: ValueKey(v.id),
-      index: index, video: v, controller: _controllers[index], chewie: _chewieControllers[index], isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControls: showControls, isControlsLocked: isControlsLocked, showScrubbingOverlay: showScrubbingOverlay,
+      index: index, video: v, controller: _controllers[index], chewie: _chewieControllers[index], isCurrent: index == _currentIndex, isFullScreenManual: _isFullScreenManual, showControlsVN: showControlsVN, isControlsLockedVN: isControlsLockedVN, showScrubbingOverlayVN: showScrubbingOverlayVN,
       onToggleFullScreen: _toggleFullScreen, onOpenExternalPlayer: () => _openInExternalPlayer(v), onHandleTap: () => handleTap(MediaQuery.of(context).orientation), onDoubleTapToSeek: (details) => handleDoubleTapToSeek(details, MediaQuery.of(context).size, MediaQuery.of(context).orientation), onHorizontalDragEnd: handleHorizontalDragEnd, onVerticalDragUpdate: (dy, lp) => handleVerticalDragUpdate(dy, lp, MediaQuery.of(context).size), onVerticalDragEnd: () {}, onUnifiedHorizontalDrag: handleUnifiedHorizontalDrag,
-      onScrollingLock: (l) => setState(() => isScrollingLocked = l), onShowSnackBar: _showSnackBar, buildAdSection: _buildAdSection, buildVideoInfo: (_) => const SizedBox.shrink(), buildChannelRow: (_) => const SizedBox.shrink(), buildScrubbingOverlay: _buildScrubbingOverlay, buildCustomControls: (_) => const SizedBox.shrink(), buildDubbingProgress: (_) => const SizedBox.shrink(), formatDuration: _formatDuration, onQuizDismiss: () => setState(() => _activeQuiz = null), activeQuiz: index == _currentIndex ? _activeQuiz : null,
-      metadataSection: VayuMetadataSection(video: v, isPortrait: isPortrait, onShare: () => _showShareOptions(v), onSave: () => _handleToggleSave(index), onVisitLink: () async { final u = Uri.parse(_sanitizeUrl(v.link!)); if (await canLaunchUrl(u)) launchUrl(u, mode: LaunchMode.externalApplication); }, onMoreOptions: _showMoreOptions, onEpisodes: () => _showEpisodeList(context, v), onSuggestion: () => _showShareSuggestionBottomSheet(v), onShowError: (m) => _showSnackBar(m, type: VayuSnackBarType.error)),
+      onScrollingLock: (l) => isScrollingLockedVN.value = l, onShowSnackBar: _showSnackBar, buildAdSection: _buildAdSection, buildVideoInfo: (_) => const SizedBox.shrink(), buildChannelRow: (_) => const SizedBox.shrink(), buildScrubbingOverlay: _buildScrubbingOverlay, buildCustomControls: (_) => const SizedBox.shrink(), buildDubbingProgress: (_) => const SizedBox.shrink(), formatDuration: _formatDuration, onQuizDismiss: () => setState(() => _activeQuiz = null), activeQuiz: index == _currentIndex ? _activeQuiz : null,
+      metadataSection: VayuMetadataSection(video: v, isPortrait: isPortrait, isLoading: _controllers[index] == null || !_controllers[index]!.value.isInitialized, onShare: () => _showShareOptions(v), onSave: () => _handleToggleSave(index), onVisitLink: () async { final u = Uri.parse(_sanitizeUrl(v.link!)); if (await canLaunchUrl(u)) launchUrl(u, mode: LaunchMode.externalApplication); }, onMoreOptions: _showMoreOptions, onEpisodes: () => _showEpisodeList(context, v), onSuggestion: () => _showShareSuggestionBottomSheet(v), onShowError: (m) => _showSnackBar(m, type: VayuSnackBarType.error)),
       channelInfo: VayuChannelInfo(video: v, isPortrait: isPortrait),
-      playerOverlay: VayuPlayerOverlay(controller: _controllers[index], showControls: showControls, isControlsLocked: isControlsLocked, isPortrait: isPortrait, isFullScreenManual: _isFullScreenManual, onTogglePlay: togglePlay, onMoreOptions: _showMoreOptions, onNext: _nextVideo, onPrevious: _previousVideo),
+      playerOverlay: VayuPlayerOverlay(controller: _controllers[index], showControlsVN: showControlsVN, isControlsLockedVN: isControlsLockedVN, isPortrait: isPortrait, isFullScreenManual: _isFullScreenManual, onTogglePlay: togglePlay, onMoreOptions: _showMoreOptions, onNext: _nextVideo, onPrevious: _previousVideo),
       dubbingOverlay: _buildDubbingOverlay(index),
     ));
   }

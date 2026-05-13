@@ -176,9 +176,10 @@ class FeedQueueService {
           isSubscriberOnly: { $ne: true } // STRICT: Never show exclusive content in the main feed
       };
 
+      // **OPTIMIZATION: Increase candidate pool to 1500 to allow more discovery**
       const candidates = await Video.find(matchQuery)
         .sort({ finalScore: -1, createdAt: -1 })
-        .limit(500)
+        .limit(1500)
         .select('_id uploader createdAt score finalScore videoType videoHash vectorEmbedding').lean();
 
       console.log(`🔍 FeedQueue: Found ${candidates.length} candidates for ${userId} (${videoType})`);
@@ -258,7 +259,7 @@ class FeedQueueService {
 
       const candidates = await Video.find(matchStage)
         .sort({ finalScore: -1, createdAt: -1 })
-        .limit(Math.max(count * 8, 60))
+        .limit(200)
         .select('_id videoHash uploader finalScore createdAt')
         .lean();
 

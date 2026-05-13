@@ -692,6 +692,7 @@ class VideoService {
     int? episodeNumber,
     List<QuizModel>? quizzes,
     List<String>? allowedSubscribers,
+    File? thumbnailFile,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting video upload...');
@@ -740,6 +741,7 @@ class VideoService {
         episodeNumber: episodeNumber,
         quizzes: quizzes,
         allowedSubscribers: allowedSubscribers,
+        thumbnailFile: thumbnailFile,
       );
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
@@ -768,6 +770,7 @@ class VideoService {
     int? episodeNumber,
     List<QuizModel>? quizzes,
     List<String>? allowedSubscribers,
+    File? thumbnailFile,
   }) async {
     try {
       AppLogger.log('🚀 VideoService: Starting Direct R2 Upload...');
@@ -830,7 +833,34 @@ class VideoService {
 
       if (onProgress != null) onProgress(0.98); // Almost done
 
-      // 3. Notify Backend to Start Processing
+      // 3. Handle Thumbnail Upload if provided
+      String? thumbnailKey;
+      if (thumbnailFile != null) {
+        AppLogger.log('🖼️ VideoService: Uploading custom thumbnail...');
+        final thumbMimeType = 'image/${thumbnailFile.path.split('.').last}';
+        final thumbPresignedResponse = await dio.post(
+          '$baseUrl/api/upload/video/presigned',
+          data: {
+            'fileName': thumbnailFile.path.split('/').last,
+            'fileType': thumbMimeType,
+            'fileSize': await thumbnailFile.length(),
+          },
+        );
+        
+        final thumbUploadUrl = thumbPresignedResponse.data['uploadUrl'];
+        thumbnailKey = thumbPresignedResponse.data['key'];
+
+        if (thumbUploadUrl != null) {
+          await r2Dio.put(
+            thumbUploadUrl,
+            data: thumbnailFile.openRead(),
+            options: Options(headers: {'Content-Type': thumbMimeType}),
+          );
+          AppLogger.log('✅ Custom thumbnail uploaded successfully');
+        }
+      }
+
+      // 4. Notify Backend to Start Processing
       final completeResponse = await dio.post(
         '$baseUrl/api/upload/video/direct-complete',
         data: {
@@ -845,6 +875,7 @@ class VideoService {
           'crossPostPlatforms': crossPostPlatforms,
           'seriesId': seriesId,
           'episodeNumber': episodeNumber,
+          'thumbnailKey': thumbnailKey,
           'quizzes': quizzes?.map((q) => q.toJson()).toList(),
           'allowedSubscribers': allowedSubscribers,
         },
@@ -863,7 +894,8 @@ class VideoService {
       List<String>? tags,
       String? seriesId,
       int? episodeNumber,
-      List<QuizModel>? quizzes}) async {
+      List<QuizModel>? quizzes,
+      File? thumbnailFile}) async {
     try {
       AppLogger.log('🔄 VideoService: Updating metadata for video: $videoId');
 
@@ -880,6 +912,37 @@ class VideoService {
       if (episodeNumber != null) updateData['episodeNumber'] = episodeNumber;
       if (quizzes != null) {
         updateData['quizzes'] = quizzes.map((q) => q.toJson()).toList();
+      }
+
+      // Handle Thumbnail Update if provided
+      if (thumbnailFile != null) {
+        AppLogger.log('🖼️ VideoService: Uploading new thumbnail for existing video...');
+        final thumbMimeType = 'image/${thumbnailFile.path.split('.').last}';
+        
+        // 1. Get Presigned URL
+        final thumbPresignedResponse = await httpClientService.dioClient.post(
+          '$resolvedBaseUrl/api/upload/video/presigned',
+          data: {
+            'fileName': thumbnailFile.path.split('/').last,
+            'fileType': thumbMimeType,
+            'fileSize': await thumbnailFile.length(),
+          },
+        );
+        
+        final thumbUploadUrl = thumbPresignedResponse.data['uploadUrl'];
+        final thumbnailKey = thumbPresignedResponse.data['key'];
+
+        if (thumbUploadUrl != null) {
+          // 2. Upload to R2
+          await Dio().put(
+            thumbUploadUrl,
+            data: thumbnailFile.openRead(),
+            options: Options(headers: {'Content-Type': thumbMimeType}),
+          );
+          
+          updateData['thumbnailKey'] = thumbnailKey;
+          AppLogger.log('✅ New thumbnail uploaded and key added to update data');
+        }
       }
 
       final res = await httpClientService.patch(

@@ -18,10 +18,12 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-// NEW IMPORTS
 import 'package:vayug/features/profile/analytics/data/services/analytics_service.dart';
 import 'package:vayug/features/profile/analytics/domain/models/analytics_models.dart';
 import 'package:vayug/features/profile/analytics/presentation/widgets/analytics_widgets.dart';
+import 'package:vayug/core/providers/profile_providers.dart';
+import 'package:vayug/features/profile/core/presentation/screens/creator_tools_screen.dart';
+import 'package:vayug/features/profile/analytics/presentation/screens/notification_performance_screen.dart';
 
 class CreatorRevenueScreen extends ConsumerStatefulWidget {
   const CreatorRevenueScreen({super.key});
@@ -68,6 +70,8 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
           _fetchRevenueData(forceRefresh),
           _fetchAnalytics(userId),
           _fetchRemovedVideos(),
+          // We'll use a local fetch method to handle the async gap correctly
+          _fetchCreatorAlertStats(),
         ]);
 
         if (mounted) {
@@ -117,6 +121,18 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
       }
     } catch (e) {
       AppLogger.log('⚠️ Removed videos load failed: $e');
+    }
+  }
+
+  Future<void> _fetchCreatorAlertStats() async {
+    // Assuming ProfileStateManager is available via a provider or similar
+    // Since it's a ChangeNotifier, we might need to access it differently if not in a ProviderScope
+    // For now, let's use the local manager if we can or just call the service directly
+    try {
+      final manager = ref.read(profileStateManagerProvider);
+      await manager.fetchCreatorAlertStats();
+    } catch (e) {
+      AppLogger.log('⚠️ Alert stats load failed: $e');
     }
   }
 
@@ -238,6 +254,8 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
             AppSpacing.vSpace24,
             _buildRevenueBreakdownCard(),
             AppSpacing.vSpace24,
+            _buildCreatorAlertsSection(),
+            AppSpacing.vSpace24,
             _buildExportSubscribersSection(),
             if (_removedVideos.isNotEmpty) ...[
               AppSpacing.vSpace24,
@@ -319,9 +337,11 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
 
       // Share
       if (mounted) {
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Vayug Subscribers Export',
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path)],
+            subject: 'Vayug Subscribers Export',
+          ),
         );
       }
     } catch (e) {
@@ -473,6 +493,76 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
       title: "Daily Performance Kya Hai?",
       icon: Icons.bar_chart,
       content: "Ye graph pichle 7 dino ki performance dikhata hai. Har ek bar ek din ko represent karta hai aur bar ki height ye dikhati hai ki us din kitne views aaye the.",
+      secondaryButton: AppButton(
+        onPressed: () {
+          Navigator.pop(context);
+          _showDetailedPerformance();
+        },
+        label: "View Detailed Stats",
+        variant: AppButtonVariant.secondary,
+        isFullWidth: true,
+      ),
+    );
+  }
+
+  void _showDetailedPerformance() {
+    if (_analytics == null) return;
+    
+    VayuBottomSheet.show(
+      context: context,
+      title: "Detailed Performance",
+      icon: Icons.insights_rounded,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Top Videos (Last 14 Days)",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          AppSpacing.vSpace16,
+          ..._analytics!.topVideos.map((v) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.backgroundSecondary,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderPrimary),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(v.title, style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      AppSpacing.vSpace4,
+                      Text("${v.views} views • ${v.shares} shares", style: AppTypography.labelSmall.copyWith(color: AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.trending_up, color: AppColors.success, size: 16),
+                ),
+              ],
+            ),
+          )),
+          AppSpacing.vSpace24,
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              onPressed: () => Navigator.pop(context),
+              label: "Close",
+            ),
+          ),
+          AppSpacing.vSpace16,
+        ],
+      ),
     );
   }
 
@@ -481,6 +571,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
     required IconData icon,
     required String content,
     List<Widget> items = const [],
+    Widget? secondaryButton,
   }) {
     VayuBottomSheet.show(
       context: context,
@@ -506,6 +597,10 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
               label: "Samajh Gaya!",
             ),
           ),
+          if (secondaryButton != null) ...[
+            AppSpacing.vSpace12,
+            secondaryButton,
+          ],
           AppSpacing.vSpace16,
         ],
       ),
@@ -630,7 +725,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
               decoration: BoxDecoration(
                 color: AppColors.backgroundSecondary,
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -646,7 +741,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
                             image: NetworkImage(video.thumbnailUrl),
                             fit: BoxFit.cover,
                             colorFilter: ColorFilter.mode(
-                              Colors.black.withOpacity(0.6),
+                              Colors.black.withValues(alpha: 0.6),
                               BlendMode.darken,
                             ),
                           ),
@@ -672,7 +767,7 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
                         ),
                         Text(
                           "Reason: ${video.reason}",
-                          style: TextStyle(color: AppColors.error.withOpacity(0.8), fontSize: 13),
+                          style: TextStyle(color: AppColors.error.withValues(alpha: 0.8), fontSize: 13),
                         ),
                       ],
                     ),
@@ -684,5 +779,87 @@ class _CreatorRevenueScreenState extends ConsumerState<CreatorRevenueScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildCreatorAlertsSection() {
+    final manager = ref.watch(profileStateManagerProvider);
+
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => NotificationPerformanceScreen(manager: manager)),
+      ),
+      child: Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppSpacing.spacing4),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.textSecondary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.bolt, color: Color(0xFFFFD700)),
+                  AppSpacing.hSpace8,
+                  Text("Send Notification", style: AppTypography.titleMedium),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  "${manager.remainingAlerts}/2 left today",
+                  style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          AppSpacing.vSpace12,
+          Text(
+            "Aap apne specific subscribers ko notification bhej sakte hai",
+            style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+          ),
+          AppSpacing.vSpace16,
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CreatorToolsScreen()),
+              ),
+              label: "Send Notification",
+              icon: const Icon(Icons.send_rounded, size: 18),
+            ),
+          ),
+          if (manager.creatorAlertStats.isNotEmpty) ...[
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => NotificationPerformanceScreen(manager: manager)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Recent Performance", style: AppTypography.labelLarge.copyWith(fontWeight: FontWeight.bold)),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.textTertiary),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    ));
   }
 }

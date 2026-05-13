@@ -54,6 +54,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final ValueNotifier<bool> _isAuthError = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _showUploadForm = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isMinimizing = ValueNotifier<bool>(false);
+  final ValueNotifier<File?> _selectedThumbnail = ValueNotifier<File?>(null);
 
   // **UNIFIED PROGRESS TRACKING** - Single progress bar for entire flow
   final ValueNotifier<double> _unifiedProgress = ValueNotifier<double>(0.0);
@@ -121,6 +122,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       _crossPostProgressMap.value = {};
       _quizzes.value = [];
       _videoDuration.value = 0.0;
+      _selectedThumbnail.value = null;
 
       _stopUnifiedProgress();
       
@@ -386,6 +388,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     _selectedVideo.addListener(_onFieldChanged);
     _selectedCategory.addListener(_onFieldChanged);
     _tags.addListener(_onFieldChanged);
+    _selectedThumbnail.addListener(_onFieldChanged);
   }
 
   void _onFieldChanged() {
@@ -583,6 +586,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
           crossPostPlatforms: crossPostPlatforms,
           quizzes: _quizzes.value,
           allowedSubscribers: _selectedSubscribers.value,
+          thumbnailFile: _selectedThumbnail.value,
         ),
         zoneValues: {
           'upload_metadata': {
@@ -2197,6 +2201,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               quizzes: _quizzes,
               selectedPlatforms: _selectedPlatforms,
               selectedSubscribers: _selectedSubscribers,
+              selectedThumbnail: _selectedThumbnail,
               videoDuration: _videoDuration.value,
             ),
           ),

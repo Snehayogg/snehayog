@@ -478,9 +478,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       }
       await prefs.setInt('referral_invite_count', _invitedCount.value);
 
-      await sp.Share.share(
-        message,
-        subject: 'Vayug – Monetize from your content. Enjoy ad-free videos',
+      await sp.SharePlus.instance.share(
+        sp.ShareParams(
+          text: message,
+          subject: 'Vayug – Monetize from your content. Enjoy ad-free videos',
+        ),
       );
       // **REMOVED: No setState needed, ValueNotifier automatically updates listeners**
     } catch (e) {

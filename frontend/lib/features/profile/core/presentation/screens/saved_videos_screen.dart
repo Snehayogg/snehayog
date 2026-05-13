@@ -6,6 +6,7 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
+import 'package:vayug/shared/widgets/unified_video_card.dart';
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'dart:ui';
 
@@ -53,15 +54,6 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
     }
   }
 
-  String _formatViews(int views) {
-    if (views >= 1000000) {
-      return '${(views / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
-    } else if (views >= 1000) {
-      return '${(views / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
-    } else {
-      return views.toString();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,108 +153,52 @@ class _SavedVideosScreenState extends State<SavedVideosScreen> {
               ),
             )
           else
-            SliverGrid(
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 1,
-                mainAxisSpacing: 1,
-                childAspectRatio: 0.5,
-              ),
+            SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildVideoItem(_savedVideos[index]),
+                (context, index) {
+                  final video = _savedVideos[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: SizedBox(
+                      height: 120,
+                      child: UnifiedVideoCard(
+                        video: video,
+                        cardType: video.videoType == 'vayu' 
+                            ? UnifiedVideoCardType.vayu 
+                            : UnifiedVideoCardType.yug,
+                        onTap: () {
+                          final sharedPool = SharedVideoControllerPool();
+                          sharedPool.pauseAllControllers();
+    
+                          if (video.videoType == 'vayu') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => VayuLongFormPlayerScreen(
+                                  video: video,
+                                  relatedVideos: _savedVideos,
+                                ),
+                              ),
+                            );
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => VideoScreen(
+                                  initialVideos: _savedVideos,
+                                  initialVideoId: video.id,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  );
+                },
                 childCount: _savedVideos.length,
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVideoItem(VideoModel video) {
-    return GestureDetector(
-      onTap: () {
-        final sharedPool = SharedVideoControllerPool();
-        sharedPool.pauseAllControllers();
-
-        if (video.videoType == 'vayu') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => VayuLongFormPlayerScreen(
-                video: video,
-                relatedVideos: _savedVideos,
-              ),
-            ),
-          );
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => VideoScreen(
-                initialVideos: _savedVideos,
-                initialVideoId: video.id,
-              ),
-            ),
-          );
-        }
-      },
-      child: Stack(
-        children: [
-          // Thumbnail
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: AppColors.surfacePrimary,
-            child: video.thumbnailUrl.isNotEmpty
-                ? Image.network(
-                    video.thumbnailUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Icon(Icons.video_library,
-                          color: AppColors.textSecondary),
-                    ),
-                  )
-                : const Center(
-                    child: Icon(Icons.video_library,
-                        color: AppColors.textSecondary),
-                  ),
-          ),
-          // Views Overlay
-          Positioned(
-            bottom: 8,
-            left: 8,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.visibility,
-                          color: Colors.white, size: 12),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatViews(video.views),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Duration indicator if available (optional)
         ],
       ),
     );

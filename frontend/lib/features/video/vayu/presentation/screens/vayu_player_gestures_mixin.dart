@@ -10,15 +10,26 @@ import 'package:vibration/vibration.dart';
 /// This keeps the main screen file clean from volume, brightness, seeking, and UI overlay timers.
 mixin VayuPlayerGesturesMixin<T extends StatefulWidget> on State<T> {
   // Controls State
-  bool showControls = true;
-  bool showScrubbingOverlay = false;
-  Duration scrubbingTargetTime = Duration.zero;
-  Duration scrubbingDelta = Duration.zero;
+  // Controls State (Using ValueNotifiers for performance optimization)
+  final ValueNotifier<bool> showControlsVN = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> showScrubbingOverlayVN = ValueNotifier<bool>(false);
+  final ValueNotifier<Duration> scrubbingTargetTimeVN = ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> scrubbingDeltaVN = ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<bool> isForwardVN = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> isScrollingLockedVN = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> isControlsLockedVN = ValueNotifier<bool>(false);
+
+  // Getters for compatibility (optional, but good for transition)
+  bool get showControls => showControlsVN.value;
+  bool get showScrubbingOverlay => showScrubbingOverlayVN.value;
+  Duration get scrubbingTargetTime => scrubbingTargetTimeVN.value;
+  Duration get scrubbingDelta => scrubbingDeltaVN.value;
+  bool get isForward => isForwardVN.value;
+  bool get isScrollingLocked => isScrollingLockedVN.value;
+  bool get isControlsLocked => isControlsLockedVN.value;
+
   double horizontalDragTotal = 0.0;
-  bool isForward = true;
   Timer? controlsTimer;
-  bool isScrollingLocked = false;
-  bool isControlsLocked = false;
 
   // Gesture state
   double brightnessValue = 0.5;
@@ -37,22 +48,18 @@ mixin VayuPlayerGesturesMixin<T extends StatefulWidget> on State<T> {
     if (targetPosition < Duration.zero) targetPosition = Duration.zero;
     if (targetPosition > controller.value.duration) targetPosition = controller.value.duration;
 
-    setState(() {
-      showScrubbingOverlay = true;
-      scrubbingTargetTime = targetPosition;
-      scrubbingDelta = seekOffset;
-      isForward = deltaX > 0;
-    });
+    showScrubbingOverlayVN.value = true;
+    scrubbingTargetTimeVN.value = targetPosition;
+    scrubbingDeltaVN.value = seekOffset;
+    isForwardVN.value = deltaX > 0;
   }
 
   void handleHorizontalDragEnd() {
     if (currentVideoController == null) return;
-    currentVideoController!.seekTo(scrubbingTargetTime);
-    setState(() {
-      showScrubbingOverlay = false;
-      horizontalDragTotal = 0.0;
-      showControls = true;
-    });
+    currentVideoController!.seekTo(scrubbingTargetTimeVN.value);
+    showScrubbingOverlayVN.value = false;
+    horizontalDragTotal = 0.0;
+    showControlsVN.value = true;
   }
 
   void handleVerticalDragUpdate(double primaryDelta, Offset localPosition, Size size) {
@@ -66,10 +73,8 @@ mixin VayuPlayerGesturesMixin<T extends StatefulWidget> on State<T> {
       volumeValue = (volumeValue - delta).clamp(0.0, 1.0);
       FlutterVolumeController.setVolume(volumeValue);
     }
-    setState(() {
-      showScrubbingOverlay = false;
-      showControls = false;
-    });
+    showScrubbingOverlayVN.value = false;
+    showControlsVN.value = false;
     resetOverlayTimer();
     controlsTimer?.cancel();
   }
@@ -79,21 +84,21 @@ mixin VayuPlayerGesturesMixin<T extends StatefulWidget> on State<T> {
   }
 
   void handleTap(Orientation orientation) {
-    setState(() => showControls = !showControls);
+    showControlsVN.value = !showControlsVN.value;
     if (orientation == Orientation.landscape) {
       SystemChrome.setEnabledSystemUIMode(
-        showControls ? SystemUiMode.manual : SystemUiMode.immersiveSticky,
+        showControlsVN.value ? SystemUiMode.manual : SystemUiMode.immersiveSticky,
         overlays: SystemUiOverlay.values,
       );
     }
-    if (showControls) startHideControlsTimer(orientation);
+    if (showControlsVN.value) startHideControlsTimer(orientation);
   }
 
   void startHideControlsTimer(Orientation orientation) {
     controlsTimer?.cancel();
     controlsTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
-        setState(() => showControls = false);
+        showControlsVN.value = false;
         if (orientation == Orientation.landscape) {
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         }
@@ -111,18 +116,16 @@ mixin VayuPlayerGesturesMixin<T extends StatefulWidget> on State<T> {
     if (target > controller.value.duration) target = controller.value.duration;
     
     controller.seekTo(target);
-    setState(() {
-      showControls = true;
-      showScrubbingOverlay = true;
-      scrubbingTargetTime = target;
-      scrubbingDelta = seekOffset;
-      isForward = !isLeftSide;
-    });
+    showControlsVN.value = true;
+    showScrubbingOverlayVN.value = true;
+    scrubbingTargetTimeVN.value = target;
+    scrubbingDeltaVN.value = seekOffset;
+    isForwardVN.value = !isLeftSide;
     
     startHideControlsTimer(orientation);
     overlayTimer?.cancel();
     overlayTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => showScrubbingOverlay = false);
+      if (mounted) showScrubbingOverlayVN.value = false;
     });
   }
 
@@ -130,21 +133,29 @@ mixin VayuPlayerGesturesMixin<T extends StatefulWidget> on State<T> {
     final controller = currentVideoController;
     if (controller == null) return;
     Vibration.vibrate(duration: 50, amplitude: 128);
-    setState(() {
-      if (controller.value.isPlaying) {
-        controller.pause();
-      } else {
-        controller.play();
-        hideControlsWithDelay();
-      }
-    });
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+      hideControlsWithDelay();
+    }
   }
 
   void hideControlsWithDelay() {
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && currentVideoController?.value.isPlaying == true && showControls) {
-        setState(() => showControls = false);
+      if (mounted && currentVideoController?.value.isPlaying == true && showControlsVN.value) {
+        showControlsVN.value = false;
       }
     });
+  }
+
+  void disposeGestures() {
+    showControlsVN.dispose();
+    showScrubbingOverlayVN.dispose();
+    scrubbingTargetTimeVN.dispose();
+    scrubbingDeltaVN.dispose();
+    isForwardVN.dispose();
+    isScrollingLockedVN.dispose();
+    isControlsLockedVN.dispose();
   }
 }

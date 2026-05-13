@@ -280,6 +280,9 @@ export const getFeed = async (req, res) => {
     const requestedType = (videoType || 'yog').toLowerCase();
     const type = requestedType;
     
+    // DIAGNOSTIC LOG: Trace the feed request lifecycle for Vayu/Yug replenishment
+    console.log(`[FeedRequest] User: ${userIdentifier}, Type: ${type}, Page: ${pageNum}, Cursor: ${cursor || 'none'}, Personalized: ${userId ? 'Yes' : 'No'}`);
+    
     let finalVideos = [];
     let hasMore = false;
     let total = 0;
@@ -291,6 +294,7 @@ export const getFeed = async (req, res) => {
     finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
     
     if (finalVideos.length === 0) {
+      console.log(`[FeedQueue] Queue empty for ${userIdentifier} (${type}), falling back to MongoDB`);
       const query = {
         videoType: type,
         processingStatus: 'completed'
@@ -314,6 +318,7 @@ export const getFeed = async (req, res) => {
       }
 
       finalVideos = await videosQuery.lean();
+      console.log(`[FeedFallback] MongoDB returned ${finalVideos.length} videos for ${type}`);
     }
 
     // SECONDARY SAFETY: Strictly filter out any exclusive content from the main feed results

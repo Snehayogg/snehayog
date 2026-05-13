@@ -5,8 +5,8 @@ import 'dart:ui';
 
 class VayuPlayerOverlay extends StatelessWidget {
   final VideoPlayerController? controller;
-  final bool showControls;
-  final bool isControlsLocked;
+  final ValueNotifier<bool> showControlsVN;
+  final ValueNotifier<bool> isControlsLockedVN;
   final bool isPortrait;
   final bool isFullScreenManual;
   final VoidCallback onTogglePlay;
@@ -17,8 +17,8 @@ class VayuPlayerOverlay extends StatelessWidget {
   const VayuPlayerOverlay({
     super.key,
     required this.controller,
-    required this.showControls,
-    required this.isControlsLocked,
+    required this.showControlsVN,
+    required this.isControlsLockedVN,
     required this.isPortrait,
     required this.isFullScreenManual,
     required this.onTogglePlay,
@@ -39,133 +39,148 @@ class VayuPlayerOverlay extends StatelessWidget {
     // Stable top offset for landscape
     final topOffset = isPortrait ? 8.0 : 32.0;
 
-    return AnimatedOpacity(
-      opacity: showControls ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      child: IgnorePointer(
-        ignoring: !showControls,
-        child: Stack(
-          children: [
-            // Top Controls (More menu)
-            Positioned(
-              top: 0,
-              right: 0,
-              left: 0,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  isPortrait ? sidePadding : horizontalPadding,
-                  topOffset,
-                  isPortrait ? sidePadding : horizontalPadding,
-                  0,
+    return ValueListenableBuilder<bool>(
+      valueListenable: showControlsVN,
+      builder: (context, showControls, _) {
+        return AnimatedOpacity(
+          opacity: showControls ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: IgnorePointer(
+            ignoring: !showControls,
+            child: Stack(
+              children: [
+                // Top Controls (More menu)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  left: 0,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isPortrait ? sidePadding : horizontalPadding,
+                      topOffset,
+                      isPortrait ? sidePadding : horizontalPadding,
+                      0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const SizedBox(width: 30), // Balance
+                        SizedBox(
+                          width: isPortrait ? 30 : 34,
+                          height: isPortrait ? 30 : 34,
+                          child: IconButton(
+                            constraints: const BoxConstraints(),
+                            icon: Icon(
+                              Icons.more_vert_rounded,
+                              color: Colors.white,
+                              size: isPortrait ? 22 : 26,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            onPressed: onMoreOptions,
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black.withValues(alpha: 0.45),
+                              padding: const EdgeInsets.all(4),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: const CircleBorder(),
+                              side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const SizedBox(width: 30), // Balance
-                    SizedBox(
-                      width: isPortrait ? 30 : 34,
-                      height: isPortrait ? 30 : 34,
-                      child: IconButton(
-                        constraints: const BoxConstraints(),
-                        icon: Icon(
-                          Icons.more_vert_rounded,
-                          color: Colors.white,
-                          size: isPortrait ? 22 : 26,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
+    
+                // Center Controls (Skip/Play/Skip)
+                ValueListenableBuilder<bool>(
+                  valueListenable: isControlsLockedVN,
+                  builder: (context, isLocked, _) {
+                    if (isLocked) return const SizedBox.shrink();
+                    return Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (!isPortrait) ...[
+                            InteractiveScaleButton(
+                              onTap: onPrevious,
+                              child: Container(
+                                width: 38,
+                                height: 38,
+                                decoration:
+                                    const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                                child: const Icon(
+                                  Icons.skip_previous_rounded,
+                                  color: Colors.white,
+                                  size: 38,
+                                  shadows: [
+                                    Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 42),
+                          ],
+                          Container(
+                            width: isPortrait ? 64 : 76,
+                            height: isPortrait ? 64 : 76,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
+                            ),
+                            child: InteractiveScaleButton(
+                              onTap: onTogglePlay,
+                              child: ValueListenableBuilder<VideoPlayerValue>(
+                                valueListenable: controller!,
+                                builder: (context, value, _) {
+                                  return Icon(
+                                    value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: isPortrait ? 48 : 56,
+                                    shadows: const [
+                                      Shadow(color: Colors.black54, blurRadius: 15, offset: Offset(0, 2)),
+                                    ],
+                                  );
+                                }
+                              ),
+                            ),
+                          ),
+                          if (!isPortrait) ...[
+                            const SizedBox(width: 42),
+                            InteractiveScaleButton(
+                              onTap: onNext,
+                              child: Container(
+                                width: 38,
+                                height: 38,
+                                decoration:
+                                    const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                                child: const Icon(
+                                  Icons.skip_next_rounded,
+                                  color: Colors.white,
+                                  size: 38,
+                                  shadows: [
+                                    Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2)),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
-                        ),
-                        onPressed: onMoreOptions,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black.withValues(alpha: 0.45),
-                          padding: const EdgeInsets.all(4),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: const CircleBorder(),
-                          side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
-                        ),
+                        ],
                       ),
-                    ),
-                  ],
+                    );
+                  }
                 ),
-              ),
+              ],
             ),
-
-            // Center Controls (Skip/Play/Skip)
-            if (!isControlsLocked)
-              Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (!isPortrait) ...[
-                      InteractiveScaleButton(
-                        onTap: onPrevious,
-                        child: Container(
-                          width: 38,
-                          height: 38,
-                          decoration:
-                              const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                          child: const Icon(
-                            Icons.skip_previous_rounded,
-                            color: Colors.white,
-                            size: 38,
-                            shadows: [
-                              Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 42),
-                    ],
-                    Container(
-                      width: isPortrait ? 64 : 76,
-                      height: isPortrait ? 64 : 76,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
-                      ),
-                      child: InteractiveScaleButton(
-                        onTap: onTogglePlay,
-                        child: Icon(
-                          controller!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: isPortrait ? 48 : 56,
-                          shadows: const [
-                            Shadow(color: Colors.black54, blurRadius: 15, offset: Offset(0, 2)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (!isPortrait) ...[
-                      const SizedBox(width: 42),
-                      InteractiveScaleButton(
-                        onTap: onNext,
-                        child: Container(
-                          width: 38,
-                          height: 38,
-                          decoration:
-                              const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                          child: const Icon(
-                            Icons.skip_next_rounded,
-                            color: Colors.white,
-                            size: 38,
-                            shadows: [
-                              Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
+          ),
+        );
+      }
     );
   }
 }

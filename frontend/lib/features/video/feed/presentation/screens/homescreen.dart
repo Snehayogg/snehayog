@@ -435,7 +435,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
     // **FIXED: Use dedicated methods for better audio leak prevention**
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       mainController.handleAppBackgrounded();
       // **NEW: Save navigation state when app goes to background**

@@ -9,7 +9,31 @@ import {
 import monthlyNotificationCron from '../../services/notificationServices/monthlyNotificationCron.js';
 import User from '../../models/User.js';
 
+import { 
+  sendCreatorAlert, 
+  updateNotificationPreferences, 
+  getCreatorNotificationStats 
+} from '../../controllers/notificationController.js';
+
 const router = express.Router();
+
+/**
+ * POST /api/notifications/creator-alert
+ * Send an alert to all eligible subscribers (Creator Only)
+ */
+router.post('/creator-alert', verifyToken, sendCreatorAlert);
+
+/**
+ * PATCH /api/notifications/preferences
+ * Update user notification preferences (Opt-out/Opt-in)
+ */
+router.patch('/preferences', verifyToken, updateNotificationPreferences);
+
+/**
+ * GET /api/notifications/creator-alert/stats
+ * Get analytics for sent creator alerts
+ */
+router.get('/creator-alert/stats', verifyToken, getCreatorNotificationStats);
 
 /**
  * POST /api/notifications/token

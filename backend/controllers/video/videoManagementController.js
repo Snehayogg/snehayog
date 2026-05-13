@@ -15,7 +15,7 @@ export const updateVideo = async (req, res) => {
   try {
     const videoId = req.params.id;
     const googleId = req.user.googleId;
-    const { videoName, link, tags, seriesId, episodeNumber, quizzes } = req.body;
+    const { videoName, link, tags, seriesId, episodeNumber, quizzes, thumbnailKey } = req.body;
 
     if (!videoName || videoName.trim() === '') {
       return res.status(400).json({ error: 'Video name is required' });
@@ -49,6 +49,14 @@ export const updateVideo = async (req, res) => {
  
     if (quizzes !== undefined && Array.isArray(quizzes)) {
       video.quizzes = quizzes;
+    }
+
+    if (thumbnailKey) {
+      // Lazy load cloudflareR2Service if needed or import it at top
+      // For consistency with direct-complete, we'll assume it's available or we use a helper
+      const { default: cloudflareR2Service } = await import('../../services/uploadServices/cloudflareR2Service.js');
+      video.thumbnailUrl = cloudflareR2Service.getPublicUrl(thumbnailKey);
+      logger.info(req.traceId, 'Video thumbnail updated', { videoId, thumbnailKey });
     }
 
     video.updatedAt = new Date();

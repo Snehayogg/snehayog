@@ -383,24 +383,16 @@ class ProfileDialogsWidget {
     required Color color,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.backgroundSecondary,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.borderPrimary, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Question Row
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -418,28 +410,21 @@ class ProfileDialogsWidget {
                   question,
                   style: AppTypography.titleSmall.copyWith(
                     color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
                     height: 1.3,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Answer
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.backgroundPrimary,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderPrimary, width: 1),
-            ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
             child: Text(
               answer,
               style: AppTypography.bodySmall.copyWith(
                 color: AppColors.textSecondary,
                 height: 1.5,
-                letterSpacing: 0.2,
               ),
             ),
           ),
@@ -465,7 +450,7 @@ class ProfileDialogsWidget {
           ),
            SizedBox(height: 8),
           // **FIX: Use _LegalItemWidget to provide visual feedback on click**
-         const _VerticalLegalItem(
+          _VerticalLegalItem(
             title: 'Privacy Policy',
             icon: Icons.privacy_tip_outlined,
             url: 'https://snehayog.site/privacy.html',
@@ -777,6 +762,47 @@ class ProfileDialogsWidget {
       title: 'Top Earners',
       icon: Icons.emoji_events_outlined,
       child: const TopEarnersBottomSheet(),
+    );
+  }
+
+  static void showNotificationGuide(BuildContext context) {
+    VayuBottomSheet.show(
+      context: context,
+      title: 'Direct Alerts Guide',
+      icon: Icons.help_outline,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ye feature aapko apne subscribers ke saath judne mein madad karta hai.',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          _buildFAQItem(
+            question: "Creator Notification kya hai?",
+            answer:
+                "Ye feature aapko apne subscribers ko direct notification bhejne ki power deta hai.",
+            icon: Icons.notifications_active_outlined,
+            color: Colors.orange,
+          ),
+          _buildFAQItem(
+            question: "Views ka matlab kya hai?",
+            answer:
+                "Notifications ke context mein 'Views' ka matlab hai ki kitne users ne aapke bhejey huye notification par click kiya ya use open kiya.",
+            icon: Icons.remove_red_eye_outlined,
+            color: Colors.blue,
+          ),
+          const SizedBox(height: 12),
+          AppButton(
+            isFullWidth: true,
+            onPressed: () => Navigator.pop(context),
+            label: 'Done',
+            variant: AppButtonVariant.primary,
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }

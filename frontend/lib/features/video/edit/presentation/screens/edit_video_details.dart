@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
@@ -27,6 +29,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
   final VideoService _videoService = VideoService();
   bool _isSaving = false;
   String? _error;
+  File? _selectedThumbnail;
 
   @override
   void initState() {
@@ -91,6 +94,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
         link: newLink,
         tags: newTags,
         quizzes: _quizzes,
+        thumbnailFile: _selectedThumbnail,
       );
 
       // 2. Handle Series Linking (Bulk Update)
@@ -132,6 +136,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
             seriesId: '', // Explicitly clear
             episodeNumber: 0, // Explicitly clear
             quizzes: _quizzes,
+            thumbnailFile: _selectedThumbnail,
           );
         }
 
@@ -229,6 +234,10 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
                           : 'Title, Link, and Tags',
                       onTap: _showDetailsEditor,
                     ),
+
+                    AppSpacing.vSpace8,
+
+                    _buildThumbnailEditor(),
                     
                     AppSpacing.vSpace8,
 
@@ -329,6 +338,102 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
       ),
       onTap: onTap,
     );
+  }
+
+  Widget _buildThumbnailEditor() {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundSecondary.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.image_rounded, color: AppColors.textPrimary, size: 22),
+      ),
+      title: const Text(
+        'Custom Thumbnail',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      subtitle: Text(
+        _selectedThumbnail != null ? 'New thumbnail selected' : 'Change video cover image',
+        style: const TextStyle(
+          fontSize: 13,
+          color: AppColors.textSecondary,
+        ),
+      ),
+      trailing: Container(
+        width: 60,
+        height: 40,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: AppColors.backgroundSecondary,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: _selectedThumbnail != null 
+            ? Image.file(_selectedThumbnail!, fit: BoxFit.cover)
+            : Image.network(widget.video.thumbnailUrl, fit: BoxFit.cover),
+        ),
+      ),
+      onTap: _pickThumbnail,
+    );
+  }
+
+  void _pickThumbnail() async {
+    // We'll use a simple modal to ask for pick or remove
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.backgroundPrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Change Thumbnail', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            AppSpacing.vSpace24,
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Pick from Gallery'),
+              onTap: () => Navigator.pop(context, 'pick'),
+            ),
+            if (_selectedThumbnail != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                title: const Text('Remove Selected', style: TextStyle(color: Colors.redAccent)),
+                onTap: () => Navigator.pop(context, 'remove'),
+              ),
+            AppSpacing.vSpace16,
+          ],
+        ),
+      ),
+    );
+
+    if (action == 'pick') {
+      try {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          allowMultiple: false,
+        );
+
+        if (result != null && result.files.single.path != null) {
+          setState(() {
+            _selectedThumbnail = File(result.files.single.path!);
+          });
+        }
+      } catch (e) {
+        AppLogger.log('❌ EditVideoDetails: Error picking thumbnail: $e');
+      }
+    } else if (action == 'remove') {
+      setState(() {
+        _selectedThumbnail = null;
+      });
+    }
   }
 
   void _showDetailsEditor() {

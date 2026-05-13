@@ -327,6 +327,8 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       case AppLifecycleState.hidden:
         _handleAppMovedToBackground(state);
         break;
+      default:
+        break;
     }
   }
 
@@ -1397,7 +1399,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       if (uri != null) {
         // Use url_launcher to open the link
         if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          await launchUrl(uri, mode: LaunchMode.platformDefault);
         } else {
           _showSnackBar('Could not open link', isError: true);
         }

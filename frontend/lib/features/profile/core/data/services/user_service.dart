@@ -421,6 +421,32 @@ class UserService {
       rethrow;
     }
   }
+
+  /// Get list of creators the user is following
+  Future<List<Map<String, dynamic>>> getFollowingList() async {
+    try {
+      final token = (await _authService.getUserData())?['token'];
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await httpClientService.get(
+        Uri.parse('${NetworkHelper.usersEndpoint}/following/list'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['following'] ?? []);
+      } else {
+        throw Exception('Failed to fetch following list');
+      }
+    } catch (e) {
+      AppLogger.log('❌ UserService: Error fetching following list: $e');
+      rethrow;
+    }
+  }
 }
 
 /// Subscriber model for subscriber-only content

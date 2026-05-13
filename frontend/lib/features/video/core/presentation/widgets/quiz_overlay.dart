@@ -91,18 +91,25 @@ class _QuizOverlayState extends State<QuizOverlay> with SingleTickerProviderStat
               maxWidth: isLandscape ? (size.width * 0.35) : size.width,
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.spacing4,
+                    horizontal: AppSpacing.spacing4, 
                     vertical: AppSpacing.spacing3,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

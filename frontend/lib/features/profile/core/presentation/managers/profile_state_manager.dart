@@ -15,6 +15,7 @@ import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/ads/data/services/ad_service.dart';
 import 'package:vayug/features/profile/notices/domain/models/notice_model.dart';
 import 'package:vayug/features/profile/notices/data/services/notice_service.dart';
+import 'package:vayug/features/profile/core/data/services/notification_service.dart';
 
 import 'package:vayug/shared/managers/smart_cache_manager.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
@@ -27,6 +28,7 @@ class ProfileStateManager extends ChangeNotifier {
   final UserService _userService = UserService();
   final PaymentSetupService _paymentSetupService = PaymentSetupService();
   final NoticeService _noticeService = NoticeService();
+  final NotificationService _notificationService = NotificationService();
 
   final SmartCacheManager _smartCacheManager = SmartCacheManager();
   bool _smartCacheInitialized = false;
@@ -97,6 +99,12 @@ class ProfileStateManager extends ChangeNotifier {
   // Video Stats
   int _totalVideoCount = 0;
 
+  // Notification State
+  List<dynamic> _creatorAlertStats = [];
+  int _remainingAlerts = 2;
+  bool _isAlertSending = false;
+  bool _isAlertStatsLoading = false;
+
   // Pagination State
   int _currentPage = 1;
   bool _isFetchingMore = false;
@@ -128,6 +136,14 @@ class ProfileStateManager extends ChangeNotifier {
   bool get isSignedIn => _authService.currentUserId != null;
   NoticeModel? get activeNotice => _activeNotice;
   bool get isNoticeLoading => _isNoticeLoading;
+  
+  List<dynamic> get creatorAlertStats => _creatorAlertStats;
+  int get remainingAlerts => _remainingAlerts;
+  bool get isAlertSending => _isAlertSending;
+  bool get isAlertStatsLoading => _isAlertStatsLoading;
+
+  bool get isGlobalAlertsEnabled => _userData?['notificationPreferences']?['globalCreatorAlerts'] ?? true;
+  List<String> get disabledCreatorIds => List<String>.from(_userData?['notificationPreferences']?['disabledCreators'] ?? []);
 
   /// **NEW: Check if the current user data is partial (fallback or missing metrics)**
   bool get isDataPartial {
@@ -522,7 +538,103 @@ class ProfileStateManager extends ChangeNotifier {
     final rank = normalized['rank'] ?? 0;
     normalized['rank'] = rank;
 
+    // 4. Normalize Notification Preferences
+    if (!normalized.containsKey('notificationPreferences')) {
+      normalized['notificationPreferences'] = {
+        'globalCreatorAlerts': true,
+        'disabledCreators': []
+      };
+    }
+
     return normalized;
+  }
+
+  // --- Creator Alert Methods ---
+
+  Future<void> updateNotificationPreference({
+    bool? globalEnabled,
+    String? disabledCreatorId,
+    String? enabledCreatorId,
+  }) async {
+    // 1. Store current state for revert on failure
+    final Map<String, dynamic>? originalData = _userData != null ? Map<String, dynamic>.from(_userData!) : null;
+
+    try {
+      // 2. Update local state immediately (Optimistic UI)
+      if (_userData != null) {
+        final prefs = Map<String, dynamic>.from(_userData!['notificationPreferences'] ?? {});
+        if (globalEnabled != null) prefs['globalCreatorAlerts'] = globalEnabled;
+        
+        final List<String> disabledList = List<String>.from(prefs['disabledCreators'] ?? []);
+        if (disabledCreatorId != null && !disabledList.contains(disabledCreatorId)) {
+          disabledList.add(disabledCreatorId);
+        }
+        if (enabledCreatorId != null) {
+          disabledList.remove(enabledCreatorId);
+        }
+        prefs['disabledCreators'] = disabledList;
+        
+        _userData!['notificationPreferences'] = prefs;
+        notifyListenersSafe();
+      }
+
+      // 3. Perform network call
+      final result = await _notificationService.updatePreferences(
+        globalEnabled: globalEnabled,
+        disabledCreatorId: disabledCreatorId,
+        enabledCreatorId: enabledCreatorId,
+      );
+      
+      if (result['success'] != true) {
+        throw Exception('Failed to update preferences on server');
+      }
+    } catch (e) {
+      AppLogger.log('❌ ProfileStateManager: Failed to update preferences: $e');
+      // 4. Revert state on failure
+      if (originalData != null) {
+        _userData = originalData;
+        notifyListenersSafe();
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> sendCreatorAlert({
+    required String message,
+    String? title,
+    String? targetUrl,
+    List<String>? recipientIds,
+  }) async {
+    _isAlertSending = true;
+    notifyListenersSafe();
+    
+    try {
+      await _notificationService.sendCreatorAlert(
+        message: message,
+        title: title,
+        targetUrl: targetUrl,
+        recipientIds: recipientIds,
+      );
+      // Refresh stats after sending
+      await fetchCreatorAlertStats();
+    } finally {
+      _isAlertSending = false;
+      notifyListenersSafe();
+    }
+  }
+
+  Future<void> fetchCreatorAlertStats() async {
+    _isAlertStatsLoading = true;
+    notifyListenersSafe();
+    
+    try {
+      final data = await _notificationService.getCreatorAlertStats();
+      _creatorAlertStats = data['stats'] ?? [];
+      _remainingAlerts = data['remainingToday'] ?? 2;
+    } finally {
+      _isAlertStatsLoading = false;
+      notifyListenersSafe();
+    }
   }
 
   Future<List<VideoModel>> _fetchVideosFromServer(

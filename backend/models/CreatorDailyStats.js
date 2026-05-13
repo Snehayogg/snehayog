@@ -36,6 +36,10 @@ const creatorDailyStatsSchema = new mongoose.Schema({
   uniqueViewers: {
     type: Number,
     default: 0
+  },
+  directNotificationsSent: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true

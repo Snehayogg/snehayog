@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
@@ -17,6 +19,7 @@ class UploadAdvancedSettingsScreen extends StatefulWidget {
   final ValueNotifier<List<QuizModel>> quizzes;
   final ValueNotifier<List<String>> selectedPlatforms;
   final ValueNotifier<List<String>> selectedSubscribers;
+  final ValueNotifier<File?> selectedThumbnail;
   final double videoDuration;
 
   const UploadAdvancedSettingsScreen({
@@ -30,6 +33,7 @@ class UploadAdvancedSettingsScreen extends StatefulWidget {
     required this.quizzes,
     required this.selectedPlatforms,
     required this.selectedSubscribers,
+    required this.selectedThumbnail,
     this.videoDuration = 0.0,
   });
 
@@ -58,6 +62,8 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
+                    _buildThumbnailRow(),
+
                     _buildSettingRow(
                       icon: Icons.help_outline_rounded,
                       title: 'Quizzes',
@@ -456,6 +462,106 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
         ),
       ),
     );
+  }
+
+  Widget _buildThumbnailRow() {
+    return ValueListenableBuilder<File?>(
+      valueListenable: widget.selectedThumbnail,
+      builder: (context, file, _) {
+        return _buildSettingRow(
+          icon: Icons.image_rounded,
+          title: 'Custom Thumbnail',
+          subtitle: file == null ? 'Select a cover image' : 'Custom image selected',
+          trailing: file != null 
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.file(file, width: 40, height: 40, fit: BoxFit.cover),
+              )
+            : null,
+          onTap: _pickThumbnail,
+        );
+      },
+    );
+  }
+
+  Future<void> _pickThumbnail() async {
+    try {
+      // Use standard file picker for images
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(title: const Text('Select Thumbnail')),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.image_search, size: 64, color: AppColors.textTertiary),
+                  const SizedBox(height: 16),
+                  const Text('Pick a thumbnail image from gallery'),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (widget.selectedThumbnail.value != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: AppButton(
+                            onPressed: () {
+                              widget.selectedThumbnail.value = null;
+                              Navigator.pop(context);
+                            },
+                            label: 'Remove',
+                            variant: AppButtonVariant.secondary,
+                          ),
+                        ),
+                      AppButton(
+                        onPressed: () async {
+                          // Note: In a real app we'd use a file picker service, 
+                          // but for this task I'll assume we can use a basic implementation
+                          // or the user will provide one.
+                          // Let's use the provided file picker if available.
+                          Navigator.pop(context, 'pick');
+                        },
+                        label: 'Pick Image',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      if (result == 'pick') {
+         // Assuming we can use something like ImagePicker or FilePicker here.
+         // Since I don't want to add new dependencies or guess the exact service name,
+         // I'll use a placeholder that the user can adapt if they have a specific service.
+         // However, I see 'file_picker' is imported in upload_screen.dart.
+         // Let's use the same logic.
+         // For now, I'll ask the user to provide the logic or I'll try to find a picker service.
+         AppLogger.log('Thumbnail pick requested');
+         _pickFile();
+      }
+    } catch (e) {
+      AppLogger.log('Error picking thumbnail: $e');
+    }
+  }
+
+  void _pickFile() async {
+     try {
+       final result = await FilePicker.platform.pickFiles(
+         type: FileType.image,
+         allowMultiple: false,
+       );
+
+       if (result != null && result.files.single.path != null) {
+         widget.selectedThumbnail.value = File(result.files.single.path!);
+       }
+     } catch (e) {
+       AppLogger.log('❌ Error picking thumbnail file: $e');
+     }
   }
 }
 

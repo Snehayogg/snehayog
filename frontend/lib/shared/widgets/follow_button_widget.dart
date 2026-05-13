@@ -174,8 +174,8 @@ class _FollowButtonWidgetState extends ConsumerState<FollowButtonWidget> {
         final isFollowing = userProviderRef.isFollowingUser(trimmedUploaderId);
         _optimisticIsFollowingNotifier.value = isFollowing;
         _showSnackBar(isFollowing
-            ? 'Followed ${widget.uploaderName}'
-            : 'Unfollowed ${widget.uploaderName}');
+            ? 'Subscribed to ${widget.uploaderName}'
+            : 'Unsubscribed from ${widget.uploaderName}');
 
         try {
           final profileStateManager = ref.read(profileStateManagerProvider);

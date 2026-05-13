@@ -178,6 +178,17 @@ const UserSchema = new mongoose.Schema({
     type: String,
     trim: true,
     default: 'unknown'
+  },
+  // **NEW: Creator Alert Preferences**
+  notificationPreferences: {
+    globalCreatorAlerts: { 
+      type: Boolean, 
+      default: true 
+    },
+    disabledCreators: [{ 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'User' 
+    }]
   }
 }, {
   timestamps: true
