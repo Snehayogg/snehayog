@@ -41,7 +41,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
     ),
     GuideStep(
       title: 'UPI ID Setup karein (Setup billing button)',
-      description: 'Apne rewards paane ke liye Account tab mein jaakar apni UPI ID add karein.',
+      description: 'Apne rewards paane ke liye Account tab mein jaakar apni setup billing button pe click karkeUPI ID add karein.',
       icon: HugeIcons.strokeRoundedWallet02,
       color: AppColors.warning,
     ),

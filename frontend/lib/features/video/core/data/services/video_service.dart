@@ -854,7 +854,12 @@ class VideoService {
           await r2Dio.put(
             thumbUploadUrl,
             data: thumbnailFile.openRead(),
-            options: Options(headers: {'Content-Type': thumbMimeType}),
+            options: Options(
+              headers: {
+                'Content-Type': thumbMimeType,
+                'Content-Length': await thumbnailFile.length(),
+              },
+            ),
           );
           AppLogger.log('✅ Custom thumbnail uploaded successfully');
         }
@@ -937,7 +942,12 @@ class VideoService {
           await Dio().put(
             thumbUploadUrl,
             data: thumbnailFile.openRead(),
-            options: Options(headers: {'Content-Type': thumbMimeType}),
+            options: Options(
+              headers: {
+                'Content-Type': thumbMimeType,
+                'Content-Length': await thumbnailFile.length(),
+              },
+            ),
           );
           
           updateData['thumbnailKey'] = thumbnailKey;
