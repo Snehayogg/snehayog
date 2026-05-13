@@ -55,6 +55,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final ValueNotifier<bool> _showUploadForm = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isMinimizing = ValueNotifier<bool>(false);
   final ValueNotifier<File?> _selectedThumbnail = ValueNotifier<File?>(null);
+  final ValueNotifier<double> _videoAspectRatio = ValueNotifier<double>(9/16);
 
   // **UNIFIED PROGRESS TRACKING** - Single progress bar for entire flow
   final ValueNotifier<double> _unifiedProgress = ValueNotifier<double>(0.0);
@@ -123,6 +124,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       _quizzes.value = [];
       _videoDuration.value = 0.0;
       _selectedThumbnail.value = null;
+      _videoAspectRatio.value = 9/16;
 
       _stopUnifiedProgress();
       
@@ -1167,6 +1169,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             }
             final durationSeconds = controller.value.duration.inSeconds;
             _videoDuration.value = durationSeconds.toDouble();
+            _videoAspectRatio.value = controller.value.aspectRatio;
             await controller.dispose();
 
             if (durationSeconds < 8) {
@@ -2203,6 +2206,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               selectedSubscribers: _selectedSubscribers,
               selectedThumbnail: _selectedThumbnail,
               videoDuration: _videoDuration.value,
+              videoAspectRatio: _videoAspectRatio.value,
             ),
           ),
         );

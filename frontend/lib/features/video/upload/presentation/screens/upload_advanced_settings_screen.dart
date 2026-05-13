@@ -21,6 +21,7 @@ class UploadAdvancedSettingsScreen extends StatefulWidget {
   final ValueNotifier<List<String>> selectedSubscribers;
   final ValueNotifier<File?> selectedThumbnail;
   final double videoDuration;
+  final double videoAspectRatio;
 
   const UploadAdvancedSettingsScreen({
     super.key,
@@ -35,6 +36,7 @@ class UploadAdvancedSettingsScreen extends StatefulWidget {
     required this.selectedSubscribers,
     required this.selectedThumbnail,
     this.videoDuration = 0.0,
+    this.videoAspectRatio = 9/16,
   });
 
   @override
@@ -468,19 +470,77 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
     return ValueListenableBuilder<File?>(
       valueListenable: widget.selectedThumbnail,
       builder: (context, file, _) {
-        return _buildSettingRow(
-          icon: Icons.image_rounded,
-          title: 'Custom Thumbnail',
-          subtitle: file == null ? 'Select a cover image' : 'Custom image selected',
-          trailing: file != null 
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.file(file, width: 40, height: 40, fit: BoxFit.cover),
-              )
-            : null,
-          onTap: _pickThumbnail,
+        return Column(
+          children: [
+            _buildSettingRow(
+              icon: Icons.image_rounded,
+              title: 'Custom Thumbnail',
+              subtitle: file == null ? 'Select a cover image' : 'Custom image selected',
+              trailing: file != null 
+                ? IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20, color: Colors.redAccent),
+                    onPressed: () => widget.selectedThumbnail.value = null,
+                  )
+                : null,
+              onTap: _pickThumbnail,
+            ),
+            if (file != null) _buildThumbnailPreview(file),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildThumbnailPreview(File file) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Preview',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.6,
+                maxHeight: 300,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: AspectRatio(
+                aspectRatio: widget.videoAspectRatio,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(file, fit: BoxFit.cover),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'Thumbnail aspect ratio matches your video (${widget.videoAspectRatio > 1 ? "Horizontal" : "Vertical"})',
+              style: const TextStyle(fontSize: 10, color: AppColors.textTertiary),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

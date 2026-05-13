@@ -238,6 +238,7 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
                     AppSpacing.vSpace8,
 
                     _buildThumbnailEditor(),
+                    if (_selectedThumbnail != null) _buildThumbnailPreview(_selectedThumbnail!),
                     
                     AppSpacing.vSpace8,
 
@@ -381,6 +382,59 @@ class _EditVideoDetailsState extends State<EditVideoDetails> {
         ),
       ),
       onTap: _pickThumbnail,
+    );
+  }
+
+  Widget _buildThumbnailPreview(File file) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Preview',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.6,
+                maxHeight: 300,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: AspectRatio(
+                aspectRatio: widget.video.aspectRatio,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(file, fit: BoxFit.cover),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              'Thumbnail aspect ratio matches your video (${widget.video.aspectRatio > 1 ? "Horizontal" : "Vertical"})',
+              style: const TextStyle(fontSize: 10, color: AppColors.textTertiary),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
