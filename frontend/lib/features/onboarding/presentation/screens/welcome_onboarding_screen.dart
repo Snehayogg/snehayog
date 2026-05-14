@@ -155,7 +155,6 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                   const SizedBox(height: 32),
 
                   // Action Button
-                  // Hidden on last page because it's now an overlay on the video
                   if (_currentPage != _steps.length - 1)
                     AppButton(
                       onPressed: _onNext,
@@ -163,6 +162,21 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                       variant: AppButtonVariant.primary,
                       isFullWidth: true,
                       size: AppButtonSize.large,
+                    )
+                  else
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 500),
+                      opacity: _isVideoProgressSufficient ? 1.0 : 0.0,
+                      child: IgnorePointer(
+                        ignoring: !_isVideoProgressSufficient,
+                        child: AppButton(
+                          onPressed: _onNext,
+                          label: 'Get Started',
+                          variant: AppButtonVariant.primary,
+                          isFullWidth: true,
+                          size: AppButtonSize.large,
+                        ),
+                      ),
                     ),
                   const SizedBox(height: 24),
 
@@ -222,41 +236,16 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
         if (step.isVideo && step.videoUrl != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16), // Increased size
-            child: Stack(
-              alignment: Alignment.bottomCenter,
-              children: [
-                OnboardingVideoPlayer(
-                  videoUrl: step.videoUrl!,
-                  autoPlay: true,
-                  onProgress: (progress) {
-                    if (progress >= 0.2 && !_isVideoProgressSufficient) {
-                      setState(() {
-                        _isVideoProgressSufficient = true;
-                      });
-                    }
-                  },
-                ),
-                // Overlay Button
-                Positioned(
-                  bottom: 40,
-                  left: 24,
-                  right: 24,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 500),
-                    opacity: _isVideoProgressSufficient ? 1.0 : 0.0,
-                    child: IgnorePointer(
-                      ignoring: !_isVideoProgressSufficient,
-                      child: AppButton(
-                        onPressed: _onNext,
-                        label: 'Get Started',
-                        variant: AppButtonVariant.primary,
-                        isFullWidth: true,
-                        size: AppButtonSize.large,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            child: OnboardingVideoPlayer(
+              videoUrl: step.videoUrl!,
+              autoPlay: true,
+              onProgress: (progress) {
+                if (progress >= 0.2 && !_isVideoProgressSufficient) {
+                  setState(() {
+                    _isVideoProgressSufficient = true;
+                  });
+                }
+              },
             ),
           )
         else
