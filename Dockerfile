@@ -1,7 +1,10 @@
 FROM node:18-alpine
 
 # Install FFmpeg and build dependencies for native modules
-RUN apk add --no-cache ffmpeg ffmpeg-dev build-base g++ make python3
+RUN apk add --no-cache ffmpeg ffmpeg-dev build-base g++ make python3 py3-pip
+
+# Install edge-tts globally
+RUN pip3 install edge-tts --break-system-packages
 
 WORKDIR /app
 

@@ -6,6 +6,7 @@ import 'package:vayug/features/onboarding/data/services/welcome_onboarding_servi
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/features/onboarding/presentation/widgets/onboarding_video_player.dart';
 
 class WelcomeOnboardingScreen extends StatefulWidget {
   final VoidCallback onGetStarted;
@@ -25,6 +26,7 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
   // Guide State
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  bool _isVideoProgressSufficient = false;
 
   final List<GuideStep> _steps = [
     GuideStep(
@@ -50,6 +52,14 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
       description: 'Aapka sara reward har mahine ki 1st tarikh ko aapke account mein bhej diya jayega.',
       icon: HugeIcons.strokeRoundedCalendar01,
       color: AppColors.info,
+    ),
+    GuideStep(
+      title: 'App kaise use karein?',
+      description: 'Ye chhota sa video dekhein aur samjhein Vayu app ke saare features.',
+      icon: HugeIcons.strokeRoundedPlay,
+      color: AppColors.primary,
+      isVideo: true,
+      videoUrl: 'https://cdn.snehayog.site/guide_video.mp4',
     ),
   ];
 
@@ -145,13 +155,15 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
                   const SizedBox(height: 32),
 
                   // Action Button
-                  AppButton(
-                    onPressed: _onNext,
-                    label: _currentPage == _steps.length - 1 ? 'Get Started' : 'Next',
-                    variant: AppButtonVariant.primary,
-                    isFullWidth: true,
-                    size: AppButtonSize.large,
-                  ),
+                  // Hidden on last page because it's now an overlay on the video
+                  if (_currentPage != _steps.length - 1)
+                    AppButton(
+                      onPressed: _onNext,
+                      label: 'Next',
+                      variant: AppButtonVariant.primary,
+                      isFullWidth: true,
+                      size: AppButtonSize.large,
+                    ),
                   const SizedBox(height: 24),
 
                   // Legal Disclosure (Only show on first or last page to keep it clean?)
@@ -201,55 +213,103 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
   }
 
   Widget _buildStep(GuideStep step) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(flex: 2),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Spacer(flex: 1),
 
-          // Visual
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: step.color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: step.color.withValues(alpha: 0.2),
-                width: 2,
+        // Visual Section
+        if (step.isVideo && step.videoUrl != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16), // Increased size
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                OnboardingVideoPlayer(
+                  videoUrl: step.videoUrl!,
+                  autoPlay: true,
+                  onProgress: (progress) {
+                    if (progress >= 0.2 && !_isVideoProgressSufficient) {
+                      setState(() {
+                        _isVideoProgressSufficient = true;
+                      });
+                    }
+                  },
+                ),
+                // Overlay Button
+                Positioned(
+                  bottom: 40,
+                  left: 24,
+                  right: 24,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 500),
+                    opacity: _isVideoProgressSufficient ? 1.0 : 0.0,
+                    child: IgnorePointer(
+                      ignoring: !_isVideoProgressSufficient,
+                      child: AppButton(
+                        onPressed: _onNext,
+                        label: 'Get Started',
+                        variant: AppButtonVariant.primary,
+                        isFullWidth: true,
+                        size: AppButtonSize.large,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: step.color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: step.color.withValues(alpha: 0.2),
+                  width: 2,
+                ),
+              ),
+              child: HugeIcon(
+                icon: step.icon,
+                size: 80,
+                color: step.color,
               ),
             ),
-            child: HugeIcon(
-              icon: step.icon,
-              size: 80,
-              color: step.color,
-            ),
           ),
-          const SizedBox(height: 48),
+        const SizedBox(height: 48),
 
-          // Text Content
-          Text(
-            step.title,
-            textAlign: TextAlign.center,
-            style: AppTypography.headlineLarge.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
+        // Text Content
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              Text(
+                step.title,
+                textAlign: TextAlign.center,
+                style: AppTypography.headlineLarge.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                step.description,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyLarge.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            step.description,
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyLarge.copyWith(
-              color: AppColors.textSecondary,
-              height: 1.6,
-            ),
-          ),
+        ),
 
-          const Spacer(flex: 3),
-        ],
-      ),
+        const Spacer(flex: 2),
+      ],
     );
   }
 }
@@ -259,11 +319,15 @@ class GuideStep {
   final String description;
   final dynamic icon;
   final Color color;
+  final bool isVideo;
+  final String? videoUrl;
 
   GuideStep({
     required this.title,
     required this.description,
     required this.icon,
     required this.color,
+    this.isVideo = false,
+    this.videoUrl,
   });
 }

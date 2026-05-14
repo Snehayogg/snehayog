@@ -18,6 +18,7 @@ import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/shared/utils/url_utils.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
+import 'package:vayug/features/onboarding/presentation/widgets/onboarding_video_player.dart';
 
 class ProfileDialogsWidget {
   static void showSettingsBottomSheet(
@@ -333,45 +334,55 @@ class ProfileDialogsWidget {
   static void showFAQDialog(BuildContext context) {
     VayuBottomSheet.show(
       context: context,
-      title: 'Frequently Asked Questions',
-      icon: Icons.help_outline,
+      title: 'App Kaise Use Karein?',
+      icon: Icons.play_circle_outline,
       useDraggable: true,
       initialChildSize: 0.9,
       minChildSize: 0.5,
       maxChildSize: 0.95,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Vayug ke baare mein sab kuch jo aapko jaanna chahiye',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 16),
-          // **FIX: Removed Expanded and ListView to prevent layout crashes in VayuBottomSheet**
-          _buildFAQItem(
-            question: "Creators ke liye kya fayde hai?",
-            answer:
-                "Creators ko hum pehle din se monetization ka mauka dete hai. Aapko YouTube ki tarah lambe intezar ki zaroorat nahi hai. Creators can monetize from Day 1.",
-            icon: Icons.stars,
-            color: Colors.orange,
-          ),
-          _buildFAQItem(
-            question: "Kamaya hua paisa kab aur kaise milega?",
-            answer:
-                "App ko kam se kam 2 logo ko share karein, uske baad aapko 'Setup Billing' ka option dikhega. Wahan apna UPI ID daalein. Bas phir har mahine ki 1st date ko aapka kamaya hua paisa automatic aapke bank account mein credit kar diya jayega.",
-            icon: Icons.account_balance_wallet_outlined,
-            color: Colors.blue,
-          ),
-          const SizedBox(height: 20),
-          AppButton(
-            isFullWidth: true,
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.check_circle_outline),
-            label: 'Got it!',
-            variant: AppButtonVariant.primary,
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const OnboardingVideoPlayer(
+              videoUrl: 'https://cdn.snehayog.site/guide_video.mp4',
+              autoPlay: true,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Vayug ke baare mein sab kuch jo aapko jaanna chahiye',
+              style: TextStyle(
+                fontSize: 14, 
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildFAQItem(
+              question: "Creators ke liye kya fayde hai?",
+              answer:
+                  "Creators ko hum pehle din se monetization ka mauka dete hai. Aapko YouTube ki tarah lambe intezar ki zaroorat nahi hai. Creators can monetize from Day 1.",
+              icon: Icons.stars,
+              color: Colors.orange,
+            ),
+            _buildFAQItem(
+              question: "Kamaya hua paisa kab aur kaise milega?",
+              answer:
+                  "App ko kam se kam 2 logo ko share karein, uske baad aapko 'Setup Billing' ka option dikhega. Wahan apna UPI ID daalein. Bas phir har mahine ki 1st date ko aapka kamaya hua paisa automatic aapke bank account mein credit kar diya jayega.",
+              icon: Icons.account_balance_wallet_outlined,
+              color: Colors.blue,
+            ),
+            const SizedBox(height: 20),
+            AppButton(
+              isFullWidth: true,
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.check_circle_outline),
+              label: 'Samajh Gaya!',
+              variant: AppButtonVariant.primary,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,7 +1,10 @@
 import axios from 'axios';
 import fs from 'fs';
-import path from 'path';
 import mime from 'mime-types';
+import { exec } from 'child_process';
+import util from 'util';
+
+const execPromise = util.promisify(exec);
 
 class AIService {
   constructor() {
@@ -74,33 +77,28 @@ class AIService {
   }
 
   /**
-   * Generates high-quality speech from text
+   * Generates high-quality speech from text using Microsoft Edge TTS
    * @param {string} text - Text to synthesize
    * @param {string} language - 'hindi' or 'english'
-   * @param {string} outputPath - Path to save the wav file
+   * @param {string} outputPath - Path to save the wav/mp3 file
    */
   async synthesize(text, language = 'hindi', outputPath) {
-    if (!this.hfToken) throw new Error('HF_TOKEN is missing');
-
-    const modelUrl = language.toLowerCase() === 'hindi' ? this.ttsHindiModel : this.ttsEnglishModel;
+    const voice = language.toLowerCase() === 'hindi' ? 'hi-IN-SwaraNeural' : 'en-US-AriaNeural';
 
     try {
-      console.log(`🔊 [AI Service] Synthesizing ${language} voice for: "${text.substring(0, 30)}..."`);
+      console.log(`🔊 [AI Service] Synthesizing ${language} voice with Edge TTS (${voice}) for: "${text.substring(0, 30)}..."`);
       
-      const response = await axios.post(modelUrl, { inputs: text }, {
-        headers: {
-          'Authorization': `Bearer ${this.hfToken}`,
-          'Content-Type': 'application/json'
-        },
-        responseType: 'arraybuffer',
-        timeout: 30000
-      });
-
-      fs.writeFileSync(outputPath, Buffer.from(response.data));
+      // Escape double quotes in text to prevent CLI injection issues
+      const safeText = text.replace(/"/g, '\\"');
+      
+      const command = `edge-tts --text "${safeText}" --voice ${voice} --write-media "${outputPath}"`;
+      
+      await execPromise(command);
+      
       console.log(`✅ [AI Service] Synthesis complete: ${outputPath}`);
       return outputPath;
     } catch (error) {
-      this._handleError(error, 'Synthesis');
+      console.error(`❌ [AI Service] Synthesis error:`, error.message);
       throw error;
     }
   }
