@@ -14,9 +14,10 @@ import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/services/connectivity_service.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/core/interfaces/i_video_service.dart';
 
 /// Eliminates code duplication and provides consistent API
-class VideoService {
+class VideoService implements IVideoService {
   final AuthService _authService = AuthService();
   final AdService _adService = AdService();
   final HttpClientService httpClientService = HttpClientService.instance;

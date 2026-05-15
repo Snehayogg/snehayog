@@ -2,8 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayug/features/video/core/presentation/managers/video_provider.dart';
 
 import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/core/interfaces/i_video_service.dart';
 
-final videoServiceProvider = Provider<VideoService>((ref) {
+final videoServiceProvider = Provider<IVideoService>((ref) {
   return VideoService();
 });
 

@@ -21,7 +21,7 @@ class NoticeBannerWidget extends StatelessWidget {
     // Mark as seen once displayed
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (manager.activeNotice?.id == notice.id && notice.firstSeenAt == null) {
-        manager.markNoticeAsSeen();
+        manager.markNoticeAsSeen(notice.id);
       }
     });
 
@@ -29,10 +29,10 @@ class NoticeBannerWidget extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: isWarning ? AppColors.error.withOpacity(0.12) : AppColors.primary.withOpacity(0.12),
+        color: isWarning ? AppColors.error.withValues(alpha: 0.12) : AppColors.primary.withValues(alpha: 0.12),
         border: Border(
           bottom: BorderSide(
-            color: isWarning ? AppColors.error.withOpacity(0.3) : AppColors.primary.withOpacity(0.3),
+            color: isWarning ? AppColors.error.withValues(alpha: 0.2) : AppColors.primary.withValues(alpha: 0.2),
             width: 0.5,
           ),
         ),

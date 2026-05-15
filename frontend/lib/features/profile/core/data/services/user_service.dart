@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/features/auth/data/usermodel.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
+import 'package:dio/dio.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/core/interfaces/i_user_service.dart';
 
-class UserService {
+class UserService implements IUserService {
   final AuthService _authService = AuthService();
 
   // **REQUEST DEDUPLICATION: Track in-flight requests to prevent duplicate API calls**
@@ -283,6 +285,29 @@ class UserService {
           'Failed to update profile. Status code: ${response.statusCode}, Body: ${response.body}');
       throw Exception('Failed to update profile on server');
     }
+  }
+  
+  Future<String?> updateProfilePhoto(String googleId, String photoPath) async {
+    final token = (await _authService.getUserData())?['token'];
+    if (token == null) throw Exception('Not authenticated');
+
+    final response = await httpClientService.postMultipart(
+      '${NetworkHelper.usersEndpoint}/update-photo',
+      fields: {'googleId': googleId},
+      files: [
+        MapEntry(
+          'profilePic',
+          await MultipartFile.fromFile(photoPath, filename: 'profile_photo.jpg'),
+        ),
+      ],
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = response.data is String ? jsonDecode(response.data) : response.data;
+      return data['profilePic'];
+    }
+    return null;
   }
 
   /// Get user data including follower counts

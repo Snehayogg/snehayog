@@ -8,16 +8,13 @@ import 'package:vayug/features/video/core/presentation/screens/video_screen.dart
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
 import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
-import 'package:vayug/shared/utils/format_utils.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
-import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
 import 'package:vayug/shared/widgets/episode_grid_widget.dart';
-
 import 'package:vayug/shared/widgets/unified_video_card.dart';
+import 'package:vayug/features/profile/core/presentation/widgets/profile_dialogs_widget.dart';
 
 class ProfileVideosWidget extends StatelessWidget {
   final ProfileStateManager stateManager;
@@ -64,55 +61,6 @@ class ProfileVideosWidget extends StatelessWidget {
         status == 'processing';
   }
 
-  String _processingLabel(VideoModel video) {
-    final progress = video.processingProgress.clamp(0, 100);
-    return 'Processing $progress%';
-  }
-
-  Widget _buildCrossPostStatus(VideoModel video) {
-    if (video.crossPostStatus == null || video.crossPostStatus!.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: video.crossPostStatus!.entries.map((entry) {
-          final platform = entry.key;
-          final status = entry.value.toLowerCase();
-          
-          IconData icon;
-          Color iconColor;
-          
-          switch (platform) {
-            case 'youtube': icon = Icons.play_circle_filled; break;
-            case 'instagram': icon = Icons.camera_alt; break;
-            case 'facebook': icon = Icons.facebook; break;
-            case 'linkedin': icon = Icons.work; break;
-            default: icon = Icons.share;
-          }
-
-          switch (status) {
-            case 'completed': iconColor = Colors.green; break;
-            case 'failed': iconColor = Colors.red; break;
-            case 'processing': iconColor = Colors.orange; break;
-            default: iconColor = Colors.white70;
-          }
-
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0),
-            child: Icon(icon, size: 12, color: iconColor),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   String _normalizedVideoType(VideoModel video) {
     if (video.aspectRatio > 1.1) return 'vayu';
     if (video.aspectRatio < 0.9) return 'yog';
@@ -142,28 +90,6 @@ class ProfileVideosWidget extends StatelessWidget {
     
     final normalizedType = _normalizedVideoType(video);
     return normalizedType == filterVideoType!.toLowerCase();
-  }
-
-  String _emptyTitle() {
-    switch (filterVideoType?.trim().toLowerCase()) {
-      case 'yog':
-        return 'No Yug videos yet';
-      case 'vayu':
-        return 'No Vayu videos yet';
-      default:
-        return 'No videos yet';
-    }
-  }
-
-  String _emptySubtitle() {
-    switch (filterVideoType?.trim().toLowerCase()) {
-      case 'yog':
-        return 'Short-form Yug videos will appear here.';
-      case 'vayu':
-        return 'Long-form Vayu videos will appear here.';
-      default:
-        return 'Upload your first video to get started!';
-    }
   }
 
   @override

@@ -13,8 +13,8 @@ import 'dart:async';
 import 'package:hugeicons/hugeicons.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:vayug/features/video/core/data/services/video_service.dart';
-import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/core/interfaces/i_auth_service.dart';
+import 'package:vayug/core/interfaces/i_video_service.dart';
 import 'package:vayug/features/auth/data/services/logout_service.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:dio/dio.dart';
@@ -31,7 +31,6 @@ import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/upload/presentation/screens/upload_advanced_settings_screen.dart';
 import 'package:vayug/features/video/upload/presentation/screens/make_episode_screen.dart';
 import 'package:vayug/features/profile/core/presentation/screens/linked_accounts_screen.dart';
-import 'package:vayug/features/video/upload/presentation/screens/shorts_generator_screen.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 import 'package:vayug/shared/constants/interests.dart';
 import 'package:vayug/features/video/upload/presentation/widgets/short_video_creator_dialog.dart';
@@ -70,8 +69,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _linkController = TextEditingController();
-  late final VideoService _videoService;
-  late final AuthService _authService;
+  late final IVideoService _videoService;
+  late final IAuthService _authService;
   late final FilePickerService _filePickerService;
 
   // Timer for unified progress tracking
@@ -354,9 +353,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     );
   }
 
-  void _toggleAdvancedSettings() {
-    _showAdvancedSettings.value = !_showAdvancedSettings.value;
-  }
+
 
   void _handleAddTag(String text) {
     final trimmed = text.trim();
@@ -1267,14 +1264,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     }
   }
 
-  void _showShortsGenerator() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const ShortVideoCreatorDialog(),
-    );
-  }
+
 
   @override
   void dispose() {

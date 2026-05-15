@@ -15,8 +15,9 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/services/platform_id_service.dart';
 import 'package:vayug/shared/services/notification_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:vayug/core/interfaces/i_auth_service.dart';
 
-class AuthService {
+class AuthService implements IAuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: GoogleSignInConfig.platformClientId,
   );

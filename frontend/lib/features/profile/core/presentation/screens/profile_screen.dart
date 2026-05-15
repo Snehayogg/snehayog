@@ -32,6 +32,11 @@ import 'package:vayug/features/profile/analytics/presentation/screens/creator_re
 import 'package:vayug/shared/utils/app_text.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 
+import 'package:vayug/features/video/core/data/services/video_service.dart';
+import 'package:vayug/features/profile/core/data/services/user_service.dart';
+import 'package:vayug/features/profile/core/data/services/notification_service.dart';
+import 'package:vayug/features/profile/notices/data/services/notice_service.dart';
+import 'package:vayug/features/profile/payouts/data/services/payment_setup_service.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
 import 'package:vayug/features/auth/data/services/logout_service.dart';
@@ -119,7 +124,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     // Check if we are viewing someone else's profile
     if (widget.userId != null && widget.userId != myId?.toString()) {
       AppLogger.log('🚀 ProfileScreen: Initializing LOCAL ProfileStateManager for creator: ${widget.userId}');
-      _localStateManager = ProfileStateManager();
+      _localStateManager = ProfileStateManager(
+        authService: authService,
+        videoService: VideoService(),
+        userService: UserService(),
+        notificationService: NotificationService(),
+        noticeService: NoticeService(),
+        paymentSetupService: PaymentSetupService(),
+      );
       _profileStateManager = _localStateManager!;
       _isLocalManager = true;
     } else {
@@ -129,16 +141,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       _isLocalManager = false;
     }
     
-    _profileStateManager.setContext(context);
-
-    // Ensure context is set early for providers that may be used during loads
-    // It will be set again in didChangeDependencies
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _profileStateManager.setContext(context);
-      }
-    });
-
     // **FIX: Always attempt initial load once during init**
     // This ensures data loads on first attempt without double-triggering
     _loadData();
@@ -285,7 +287,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         // This ensures the user sees a complete grid quickly without manually scrolling/waiting.
         if (_profileStateManager.hasMoreVideos && !_profileStateManager.isFetchingMore) {
            AppLogger.log('🚀 ProfileScreen: Triggering AGGRESSIVE background load for ALL remaining videos...');
-           _profileStateManager.loadAllVideosInBackground(userIdForVideos).catchError((e) {
+           _profileStateManager.loadAllVideosInBackground(userId: userIdForVideos).catchError((e) {
              AppLogger.log('⚠️ ProfileScreen: Background load all failed: $e');
            });
         }
@@ -331,7 +333,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _profileStateManager.setContext(context);
 
     // **DISABLED: Preload profile videos to prevent video playback conflicts**
     // _preloadProfileVideos();
@@ -343,7 +344,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _activeProfileTabIndex.dispose();
-    // _upiController.dispose(); // This line was not in the original code, so I'm not adding it.
     _isCheckingUpiId.dispose();
     ProfileScreenLogger.logProfileScreenDispose();
     
@@ -351,7 +351,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     try {
       AppLogger.log('🛑 ProfileScreen: Exiting profile, stopping all background downloads...');
       final videoCacheProxy = VideoCacheProxyService();
-      // Passing empty list cancels EVERYTHING
       videoCacheProxy.cancelAllStreamingExcept([]); 
       videoCacheProxy.cancelAllPrefetches();
     } catch (e) {
@@ -676,10 +675,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       width: 64,
                       height: 64,
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.15),
+                        color: AppColors.error.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.error.withOpacity(0.3),
+                          color: AppColors.error.withValues(alpha: 0.3),
                           width: 2,
                         ),
                       ),
@@ -766,7 +765,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
                         source: ImageSource.camera);
-                    Navigator.pop(context, photo);
+                    if (context.mounted) Navigator.pop(context, photo);
                   },
                 ),
                 ListTile(
@@ -775,7 +774,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   onTap: () async {
                     final XFile? photo = await _imagePicker.pickImage(
                         source: ImageSource.gallery);
-                    Navigator.pop(context, photo);
+                    if (context.mounted) Navigator.pop(context, photo);
                   },
                 ),
               ],
@@ -844,10 +843,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       width: double.infinity,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: color.withOpacity(0.15),
+          backgroundColor: color.withValues(alpha: 0.15),
           foregroundColor: color,
           elevation: 0,
-          side: BorderSide(color: color.withOpacity(0.4)),
+          side: BorderSide(color: color.withValues(alpha: 0.4)),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           alignment: Alignment.centerLeft,
@@ -862,7 +861,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
-                  Text(subtitle, style: TextStyle(fontSize: 10, color: color.withOpacity(0.7))),
+                  Text(subtitle, style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7))),
                 ],
               ),
             ),
@@ -951,7 +950,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               // **NEW: Signing In Overlay**
               if (_isSigningIn)
                 Container(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -961,7 +960,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -1205,8 +1204,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.07),
-              border: Border.all(color: Colors.amber.withOpacity(0.4)),
+              color: Colors.amber.withValues(alpha: 0.07),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
@@ -1233,7 +1232,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   color: Colors.amber[700]!,
                   onPressed: () async {
                     await _authService.debugExpireToken();
-                    if (!mounted) return;
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('🧪 Case 1: Access token expired. Watch logs for silent refresh...'),
                     ));
@@ -1251,7 +1250,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   color: Colors.red[700]!,
                   onPressed: () async {
                     await _authService.debugFullSessionLoss();
-                    if (!mounted) return;
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('🧪 Case 2: Both tokens deleted. Watch for sign-in screen...'),
                     ));
@@ -1269,7 +1268,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   color: Colors.deepOrange[700]!,
                   onPressed: () async {
                     await _authService.debugRotationMismatch();
-                    if (!mounted) return;
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('🧪 Case 3: Refresh token corrupted (stale). Watch for Google Silent Sign-In fallback...'),
                     ));
@@ -2009,39 +2008,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       });
     } catch (e) {
       AppLogger.log('⚠️ ProfileScreen: Earnings refresh error: $e');
-    }
-  }
-
-  Future<void> _clearProfileCache() async {
-    try {
-      // 0. Clear AuthService in-memory cache
-      _authService.clearMemoryCache();
-
-      // 1. Clear Legacy SharedPreferences Cache (Earnings & Old Profile Data)
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = _getProfileCacheKey();
-
-      // Clear old profile keys (safe to keep for cleanup)
-      await prefs.remove('profile_cache_$cacheKey');
-      await prefs.remove('profile_cache_timestamp_$cacheKey');
-      await prefs.remove('profile_videos_cache_$cacheKey');
-      await prefs.remove('profile_videos_cache_timestamp_$cacheKey');
-
-      // Clear Earnings Cache (Still in SharedPreferences)
-      final userId = widget.userId ??
-          _profileStateManager.userData?['googleId'] ??
-          _profileStateManager.userData?['id'];
-          
-      if (userId != null) {
-        await prefs.remove('earnings_cache_$userId');
-        await prefs.remove('earnings_cache_timestamp_$userId');
-      }
-
-      // Hive Cache clearing removed as Hive is no longer used for profile data.
-      
-      AppLogger.log('🧹 ProfileScreen: Profile cache cleared successfully');
-    } catch (e) {
-      ProfileScreenLogger.logWarning('Error clearing profile cache: $e');
     }
   }
 }

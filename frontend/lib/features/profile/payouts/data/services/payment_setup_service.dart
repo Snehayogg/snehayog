@@ -3,9 +3,10 @@ import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/core/interfaces/i_payment_setup_service.dart';
 
 /// Service to manage payment setup status and prevent multiple setups
-class PaymentSetupService {
+class PaymentSetupService implements IPaymentSetupService {
   static const String _paymentSetupKey = 'has_payment_setup';
   static const String _paymentProfileKey = 'payment_profile_cache';
 

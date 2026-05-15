@@ -3,8 +3,9 @@ import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
+import 'package:vayug/core/interfaces/i_notification_service.dart';
 
-class NotificationService {
+class NotificationService implements INotificationService {
   final AuthService _authService = AuthService();
 
   /// Send a direct alert to subscribers (Creator Only)
