@@ -4,83 +4,58 @@
  * Uses @xenova/transformers (local, no API costs)
  * Falls back gracefully if transformers are not available
  */
+import geminiService from '../geminiService.js';
+
 class AISemanticService {
   constructor() {
     this.model = null;
-    this.cache = new Map(); // Cache for embeddings to speed up
+    this.cache = new Map();
     this.initialized = false;
     this.transformersModule = null;
     this.pipeline = null;
-    this.initializing = false; // **FIX: Prevent concurrent initialization**
-    this.initPromise = null; // **FIX: Store init promise to reuse**
+    this.initializing = false;
+    this.initPromise = null;
   }
 
+  // ... (keeping existing local loading methods for fallback)
   async _loadTransformers() {
-    if (this.transformersModule) {
-      return true;
-    }
-    
-    if (this.transformersModule === false) {
-      // Already tried and failed, don't retry
-      return false;
-    }
-    
+    if (this.transformersModule) return true;
+    if (this.transformersModule === false) return false;
     try {
-      // **MEMORY EFFICIENT: Use dynamic import to load transformers only when needed**
-      // This prevents loading the heavy library unless AI matching is required
+      console.log('🤖 AISemanticService: Loading @xenova/transformers...');
       const transformers = await import('@xenova/transformers');
       this.transformersModule = transformers;
       this.pipeline = transformers.pipeline;
-      console.log('✅ AISemanticService: @xenova/transformers imported successfully (lazy-loaded)');
       return true;
     } catch (error) {
-      console.warn('⚠️ AISemanticService: @xenova/transformers not available:', error.message);
-      console.warn('⚠️ AI semantic matching will be disabled. This is okay - keyword matching will be used instead.');
-      this.transformersModule = false; // Mark as failed to prevent retry
+      this.transformersModule = false;
+      console.warn('⚠️ AISemanticService: Failed to load @xenova/transformers native modules.');
+      console.warn(`   Reason: ${error.message}`);
+      if (error.code === 'ERR_DLOPEN_FAILED') {
+        console.warn('   Note: This is usually due to missing glibc/shared libraries in the OS environment.');
+      }
       return false;
     }
   }
 
   async initialize() {
-    // **FIX: Return cached promise if already initializing**
-    if (this.initPromise) {
-      return this.initPromise;
-    }
-    
-    // **FIX: Return immediately if already initialized**
-    if (this.initialized && this.model) {
-      return Promise.resolve();
-    }
-    
-    // **FIX: Prevent concurrent initialization**
-    if (this.initializing) {
-      return this.initPromise || Promise.resolve();
-    }
+    if (this.initPromise) return this.initPromise;
+    if (this.initialized && this.model) return Promise.resolve();
+    if (this.initializing) return this.initPromise || Promise.resolve();
     
     this.initializing = true;
-    
     this.initPromise = (async () => {
       try {
-        // Try to load transformers first
         const transformersReady = await this._loadTransformers();
-        
         if (!transformersReady || !this.pipeline) {
-          console.log('⚠️ AISemanticService: AI transformers not available, skipping initialization');
-          this.initialized = true; // Mark as initialized to prevent retries
+          this.initialized = true;
           this.initializing = false;
           return;
         }
-        
         try {
-          console.log('🤖 AISemanticService: Loading multilingual AI model...');
-          this.model = await this.pipeline(
-            'feature-extraction',
-            'Xenova/paraphrase-multilingual-MiniLM-L12-v2' // Multilingual 384-dimensional model (Hindi + 100+ languages)
-          );
+          this.model = await this.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2');
           this.initialized = true;
-          console.log('✅ AISemanticService: AI model loaded successfully');
         } catch (error) {
-          console.error('❌ AISemanticService: Failed to load AI model:', error);
           this.model = null;
           this.initialized = false;
         }
@@ -88,37 +63,43 @@ class AISemanticService {
         this.initializing = false;
       }
     })();
-    
     return this.initPromise;
   }
 
   /**
-   * Get embedding for text (cached for performance)
+   * Get embedding for text (Primary: Gemini, Fallback: Local MiniLM)
    */
   async getEmbedding(text) {
+    if (!text) return null;
+    
+    // Check cache
+    const cacheKey = text.toLowerCase().trim();
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
+    try {
+      // **STRATEGY 1: Gemini (Best for Hinglish)**
+      if (process.env.GEMINI_API_KEY) {
+        const embedding = await geminiService.getEmbedding(text);
+        if (embedding) {
+          this.cache.set(cacheKey, embedding);
+          setTimeout(() => this.cache.delete(cacheKey), 3600000);
+          return embedding;
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ AISemanticService: Gemini embedding failed, falling back to local model.');
+    }
+
+    // **STRATEGY 2: Local MiniLM Fallback**
     if (!this.model) {
       await this.initialize();
-      if (!this.model) return null; // Return null if initialization failed
+      if (!this.model) return null;
     }
-    
-    // Check cache first
-    const cacheKey = text.toLowerCase().trim();
-    if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
-    }
-    
+
     try {
-      // Get embedding from model
-      const output = await this.model(text, { 
-        pooling: 'mean', 
-        normalize: true 
-      });
+      const output = await this.model(text, { pooling: 'mean', normalize: true });
       const embedding = Array.from(output.data);
-      
-      // Cache for 1 hour
       this.cache.set(cacheKey, embedding);
-      setTimeout(() => this.cache.delete(cacheKey), 3600000);
-      
       return embedding;
     } catch (error) {
       return null;

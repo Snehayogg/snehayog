@@ -53,6 +53,14 @@ class AppInitializationManager {
     final age = DateTime.now().difference(_initialVideosTimestamp!);
     return age < const Duration(minutes: 3);
   }
+  
+  /// **NEW: Clear cached initial videos on auth change**
+  void clearCache() {
+    initialVideos = null;
+    _initialVideosTimestamp = null;
+    AppLogger.log('🧹 InitManager: Cache cleared (Auth Change)');
+    
+  }
 
   // --- STAGE 1: AVAILABLE IMMEDIATELY (Before UI) ---
   /// Called before `runApp`. Setup basic config.

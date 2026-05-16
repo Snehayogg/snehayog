@@ -294,29 +294,37 @@ class HybridVideoService {
       console.log('📊 Getting original video dimensions...');
       const originalVideoInfo = await this.getOriginalVideoInfo(videoPath);
       
-      // **NEW STEP 3: Generate and Upload Thumbnail EARLY**
-      // This ensures the user sees something immediately, even if HLS takes time
-      console.log('📸 [Step 3/6] Generating thumbnail early...');
+      // **STEP 3: Generate Thumbnail ONLY if missing**
+      console.log('📸 [Step 3/6] Checking for thumbnail...');
       let thumbnailUrl = '';
-      try {
-        const thumbnailPath = await this.generateThumbnailWithFFmpeg(videoPath, videoName, userId);
-        if (thumbnailPath) {
-          thumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
-          console.log(`✅ Early Thumbnail uploaded: ${thumbnailUrl}`);
-          
-          // Update DB immediately if videoId provided
-          if (mongoVideoId) {
-             const Video = (await import('../../models/Video.js')).default;
-             await Video.findByIdAndUpdate(mongoVideoId, { 
-               thumbnailUrl,
-               processingProgress: 20 
-             });
+      
+      // Check if video already has a thumbnail (e.g., custom upload)
+      if (mongoVideoId) {
+          const Video = (await import('../../models/Video.js')).default;
+          const videoRecord = await Video.findById(mongoVideoId);
+          if (videoRecord && videoRecord.thumbnailUrl && videoRecord.thumbnailUrl.startsWith('http')) {
+              console.log('✅ Custom thumbnail detected, skipping FFmpeg generation.');
+              thumbnailUrl = videoRecord.thumbnailUrl;
           }
-          
-          if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
-        }
-      } catch (thumbError) {
-        console.warn('⚠️ Early thumbnail step failed (non-fatal):', thumbError.message);
+      }
+
+      if (!thumbnailUrl) {
+          try {
+            console.log('📸 Generating thumbnail early...');
+            const thumbnailPath = await this.generateThumbnailWithFFmpeg(videoPath, videoName, userId);
+            if (thumbnailPath) {
+              thumbnailUrl = await this.uploadThumbnailImageToR2(thumbnailPath, videoName, userId);
+              console.log(`✅ Early Thumbnail uploaded: ${thumbnailUrl}`);
+              
+              if (mongoVideoId) {
+                const Video = (await import('../../models/Video.js')).default;
+                await Video.findByIdAndUpdate(mongoVideoId, { thumbnailUrl, processingProgress: 20 });
+              }
+              if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
+            }
+          } catch (thumbError) {
+            console.warn('⚠️ Early thumbnail step failed (non-fatal):', thumbError.message);
+          }
       }
 
       // Step 4: Use LOCAL FFmpeg to create HLS segments

@@ -66,6 +66,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   // **LAZY TAB RESTORATION: Track which tabs have been restored**
   final Set<int> _restoredTabs = {};
+  bool? _wasSignedIn;
 
   Future<void> _refreshVideoList() async {
     try {
@@ -537,6 +538,26 @@ class _MainScreenState extends ConsumerState<MainScreen>
   @override
   Widget build(BuildContext context) {
     final mainController = ref.watch(mainControllerProvider);
+    final authController = ref.watch(googleSignInProvider);
+    final bool isSignedIn = authController.isSignedIn;
+
+    // **SYNC: Trigger global refresh when auth state changes (Login/Logout)**
+    if (_wasSignedIn != null && _wasSignedIn != isSignedIn) {
+      _wasSignedIn = isSignedIn;
+      AppLogger.log('🔐 MainScreen: Auth transition detected (signedIn: $isSignedIn). Triggering feed refresh.');
+      
+      // Clear the initialization cache so fresh personalized videos are fetched
+      AppInitializationManager.instance.clearCache();
+      
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _refreshVideoList();
+        }
+      });
+    } else {
+      _wasSignedIn = isSignedIn;
+    }
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
           value: const SystemUiOverlayStyle(
             systemNavigationBarColor: Colors.transparent,

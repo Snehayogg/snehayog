@@ -1,28 +1,35 @@
-FROM node:18-alpine
+FROM node:18-slim
 
-# Install FFmpeg and build dependencies for native modules
-RUN apk add --no-cache ffmpeg ffmpeg-dev build-base g++ make python3 py3-pip
+# Install system dependencies
+# We use debian-slim for better compatibility with native C++ modules (onnxruntime, sharp)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    python3 \
+    python3-pip \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install edge-tts globally
+# Install edge-tts for AI voice generation
 RUN pip3 install edge-tts --break-system-packages
 
 WORKDIR /app
 
-# Copy package files from backend directory
+# Copy package files
 COPY backend/package*.json ./
 
-# Install dependencies (production only)
+# Install dependencies
 RUN npm ci --only=production
 
-# Copy application code from backend directory
+# Copy application code
 COPY backend/ .
 
-# Create necessary directories
+# Create persistent/temp directories
 RUN mkdir -p logs temp uploads
 
-# Expose port
+# Fly.io expects port 8080 by default
 ENV PORT=8080
+ENV NODE_ENV=production
 EXPOSE 8080
 
-# Start the application
+# Start command
 CMD ["npm", "start"]

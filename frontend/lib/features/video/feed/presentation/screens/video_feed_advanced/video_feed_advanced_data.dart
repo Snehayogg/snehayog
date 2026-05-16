@@ -13,6 +13,7 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
 
       if (page == 1 &&
           !append &&
+          !clearSession &&
           AppInitializationManager.instance.isInitialVideosFresh) {
         final preFetchedVideos =
             AppInitializationManager.instance.initialVideos!;

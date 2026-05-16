@@ -20,6 +20,27 @@ const videoSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  aiContext: {
+    type: String,
+    trim: true,
+    description: 'AI-generated description/context of the video content (multimodal analysis)'
+  },
+  aiContextGenerated: {
+    type: Boolean,
+    default: false
+  },
+  language: {
+    type: String,
+    trim: true,
+    index: true,
+    description: 'Primary language of the video content'
+  },
+  detectedRegion: {
+    type: String,
+    trim: true,
+    index: true,
+    description: 'Geographic or cultural region associated with the video dialect/content'
+  },
   uploader: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

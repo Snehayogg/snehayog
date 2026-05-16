@@ -143,6 +143,12 @@ const UserSchema = new mongoose.Schema({
       default: false
     }
   },
+  preferredLanguages: [{
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: ['english', 'hindi', 'hinglish']
+  }],
   
   // **NEW: Social Media Accounts for Cross-Posting**
   // Stores OAuth tokens and basic profile info for linked accounts

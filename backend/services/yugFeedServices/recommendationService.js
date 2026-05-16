@@ -168,6 +168,28 @@ class RecommendationService {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
+  /**
+   * Finds videos that are semantically similar to the user's interest vector.
+   * 
+   * @param {Array} userVector - The user's interest embedding
+   * @param {Array} candidates - Pool of candidate videos
+   * @param {Number} limit - How many to return
+   * @returns {Array} Top matching videos with similarity scores
+   */
+  static findTopSemanticMatches(userVector, candidates, limit = 100) {
+    if (!userVector || !candidates || candidates.length === 0) return [];
+
+    const matches = candidates.map(video => {
+      const similarity = this.calculateCosineSimilarity(userVector, video.vectorEmbedding);
+      return { ...video, semanticSimilarity: similarity };
+    });
+
+    // Sort by similarity and take top results
+    return matches
+      .sort((a, b) => b.semanticSimilarity - a.semanticSimilarity)
+      .slice(0, limit);
+  }
+
   static calculateFinalScore(videoData) {
     const {
       totalWatchTime = 0,
@@ -213,6 +235,44 @@ class RecommendationService {
     const finalScore = (baseScore + freshnessBoost + explorationBoost - skipPenalty) * recencyBoost;
 
     return Math.max(finalScore, 0.01); 
+  }
+
+  /**
+   * Calculate Personalization Boost based on User Language and Location
+   * 
+   * @param {Object} video - Video document/object
+   * @param {Object} user - User document/object
+   * @returns {Number} Boost multiplier (e.g., 1.2x)
+   */
+  static calculatePersonalizedBoost(video, user) {
+    if (!user || user === 'anon') return 1.0;
+
+    let boost = 1.0;
+
+    // 1. Language Match (Major Factor)
+    if (video.language && user.preferredLanguages && user.preferredLanguages.length > 0) {
+      const isPreferred = user.preferredLanguages.some(lang => 
+        lang.toLowerCase() === video.language.toLowerCase()
+      );
+      if (isPreferred) boost += 0.3; // 30% boost for preferred language
+    }
+
+    // 2. Region/Location Match (Medium Factor)
+    if (video.detectedRegion && user.location && user.location.state) {
+      // Basic check: if region mention matches user's state or region
+      const videoRegion = video.detectedRegion.toLowerCase();
+      const userState = (user.location.state || '').toLowerCase();
+      
+      if (videoRegion.includes(userState) || userState.includes(videoRegion)) {
+        boost += 0.15; // 15% boost for regional relevance
+      }
+    }
+
+    // 3. Creator Affinity (If user follows creator)
+    // Note: This requires uploader ID comparison
+    // boost += (user.following && user.following.includes(video.uploader)) ? 0.2 : 0;
+
+    return boost;
   }
 
   /**
@@ -301,16 +361,31 @@ class RecommendationService {
         uploadedAt: video.uploadedAt || video.createdAt
       });
 
-      // **NEW: Ensure Vector Embedding exists and is current**
+      // **NEW: Ensure Vector Embedding exists and is current (v3_gemini)**
       let updatedEmbedding = false;
-      if (!video.vectorEmbedding || video.vectorEmbedding.length === 0 || video.embeddingVersion !== 'v1_minilm') {
-        const text = `${video.videoName || ''} ${video.description || ''}`.trim();
+      const CURRENT_VERSION = 'v3_gemini';
+
+      // **SPAM PREVENTION:** If it recently failed, don't retry for 1 hour
+      const wasRecentlyFailed = video.embeddingVersion === 'failed_gemini' && 
+                               (new Date() - new Date(video.scoreUpdatedAt)) < (60 * 60 * 1000);
+
+      if (!wasRecentlyFailed && (!video.vectorEmbedding || video.vectorEmbedding.length === 0 || video.embeddingVersion !== CURRENT_VERSION)) {
+        const aiContextText = video.aiContext ? `Video Content Analysis: ${video.aiContext}.` : '';
+        const text = `${video.videoName || ''}. ${video.description || ''}. ${aiContextText} Category: ${video.category || ''}. Tags: ${(video.tags || []).join(', ')}.`.trim();
+        
         if (text) {
-          const embedding = await aiSemanticService.getEmbedding(text);
-          if (embedding) {
-            video.vectorEmbedding = embedding;
-            video.embeddingVersion = 'v1_minilm';
-            updatedEmbedding = true;
+          try {
+            const embedding = await aiSemanticService.getEmbedding(text);
+            if (embedding && (embedding.length === 768 || embedding.length === 384)) {
+              video.vectorEmbedding = embedding;
+              video.embeddingVersion = CURRENT_VERSION;
+              updatedEmbedding = true;
+            } else {
+              // If it returned null/undefined, mark as failed to stop spam
+              video.embeddingVersion = 'failed_gemini';
+            }
+          } catch (e) {
+            video.embeddingVersion = 'failed_gemini';
           }
         }
       }
@@ -518,6 +593,8 @@ class RecommendationService {
           }
         }
 
+        // **FIX: Small sleep between batches to prevent CPU spikes on Fly.io**
+        await new Promise(resolve => setTimeout(resolve, 500));
         skip += batchSize;
       }
 
@@ -670,12 +747,19 @@ class RecommendationService {
       if (recentWatches.length === 0) return null;
 
       const embeddings = [];
+      let targetDim = null;
+
       recentWatches.forEach((watch, index) => {
         const video = watch.videoId;
         if (video && video.vectorEmbedding && video.vectorEmbedding.length > 0) {
-          // **TIME DECAY:** Recent videos have more weight (1.0 down to 0.4)
-          const weight = 1.0 - (index * 0.04);
-          embeddings.push({ vector: video.vectorEmbedding, weight });
+          // Set target dimension from the first valid video
+          if (targetDim === null) targetDim = video.vectorEmbedding.length;
+          
+          // Only include if dimensions match (prevent 384 vs 768 crashes)
+          if (video.vectorEmbedding.length === targetDim) {
+             const weight = 1.0 - (index * 0.04);
+             embeddings.push({ vector: video.vectorEmbedding, weight });
+          }
         }
       });
 
