@@ -2,13 +2,14 @@ import { verifyGoogleToken, generateJWT } from '../utils/verifytoken.js';
 import User from '../models/User.js';
 import RefreshToken from '../models/RefreshToken.js';
 import brevoService from '../services/notificationServices/brevoService.js';
+import { OAuth2Client } from 'google-auth-library';
 
 /**
  * Google Sign-In (First Time / Re-authentication)
  * Verifies Google ID Token, creates/finds user, issues device-bound tokens
  */
 export const googleSignIn = async (req, res) => {
-  const { idToken, deviceId, deviceName, platform, appVersion } = req.body;
+  const { idToken, serverAuthCode, deviceId, deviceName, platform, appVersion } = req.body;
 
   try {
     if (!idToken) {
@@ -19,9 +20,31 @@ export const googleSignIn = async (req, res) => {
     const userData = await verifyGoogleToken(idToken);
     console.log('🔐 Google Sign-In: Verified user');
 
+    // **Tier 4 Google Offline Access: Exchange serverAuthCode for Google Refresh Token**
+    let googleRefreshToken = null;
+    if (serverAuthCode) {
+      try {
+        const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
+        const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+        
+        const oauth2Client = new OAuth2Client(
+          GOOGLE_CLIENT_ID,
+          GOOGLE_CLIENT_SECRET,
+          'postmessage'
+        );
+        const { tokens } = await oauth2Client.getToken(serverAuthCode);
+        if (tokens.refresh_token) {
+          googleRefreshToken = tokens.refresh_token;
+          console.log('✅ Google Offline Access: Acquired Google Refresh Token');
+        }
+      } catch (err) {
+        console.error('⚠️ Google Offline Access: Failed to exchange serverAuthCode:', err.message);
+      }
+    }
+
     // Find or create user
     let user = await User.findOne({ googleId: userData.sub })
-      .select('googleId name email profilePic videos appVersion');
+      .select('googleId name email profilePic videos appVersion googleRefreshToken');
     
     let isNewUser = false;
 
@@ -35,7 +58,8 @@ export const googleSignIn = async (req, res) => {
         videos: [],
         lastActive: new Date(),
         isAppUninstalled: false,
-        appVersion: appVersion || 'unknown'
+        appVersion: appVersion || 'unknown',
+        googleRefreshToken: googleRefreshToken || undefined
       });
       await user.save();
       console.log('✅ Created new user:', user.email);
@@ -54,6 +78,9 @@ export const googleSignIn = async (req, res) => {
       }
       if (appVersion) {
         user.appVersion = appVersion;
+      }
+      if (googleRefreshToken) {
+        user.googleRefreshToken = googleRefreshToken;
       }
       await user.save();
       console.log('✅ Found existing user:', user.email);
@@ -298,5 +325,76 @@ export const checkDeviceId = async (req, res) => {
   } catch (error) {
     console.error('Check Device ID error:', error);
     res.status(500).json({ error: 'Check failed', hasLoggedIn: false });
+  }
+};
+
+/**
+ * Recover Session (Tier 4 Google Offline Access)
+ * Exchanges stored googleRefreshToken directly with Google for a fresh token
+ * and issues new local access/refresh tokens.
+ */
+export const recoverSession = async (req, res) => {
+  const { googleId, deviceId, deviceName, platform } = req.body;
+
+  try {
+    if (!googleId) {
+      return res.status(400).json({ error: 'Google ID is required' });
+    }
+
+    const user = await User.findOne({ googleId })
+      .select('_id googleId email googleRefreshToken');
+
+    if (!user || !user.googleRefreshToken) {
+      console.log(`⚠️ Tier 4: Recovery attempted but no stored Google Refresh Token for ${googleId}`);
+      return res.status(401).json({ 
+        error: 'No offline session found or Google offline token missing',
+        requiresLogin: true
+      });
+    }
+
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '406195883653-qp49f9nauq4t428ndscuu3nr9jb10g4h.apps.googleusercontent.com';
+    const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
+    // Exchange stored googleRefreshToken with Google
+    const oauth2Client = new OAuth2Client(
+      GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({
+      refresh_token: user.googleRefreshToken
+    });
+
+    console.log(`🔄 Tier 4: Silently requesting fresh credentials from Google on behalf of ${user.email}...`);
+    
+    // Request a refreshed access token from Google
+    const { token } = await oauth2Client.getAccessToken();
+
+    if (!token) {
+      console.log(`❌ Tier 4: Google rejected refresh token for ${user.email}`);
+      return res.status(401).json({ 
+        error: 'Google offline session is no longer valid. User must sign in again.',
+        requiresLogin: true 
+      });
+    }
+
+    // Success! Generate fresh local Snehayog session
+    const accessToken = generateJWT(user.googleId, '30d');
+    const newRefreshToken = await RefreshToken.createForDevice(
+      user._id,
+      deviceId,
+      deviceName || 'Unknown Device',
+      platform || 'unknown'
+    );
+
+    console.log(`✅ Tier 4 Recovery Successful: Silently logged in ${user.email}`);
+
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken
+    });
+
+  } catch (error) {
+    console.error('❌ Tier 4: Session recovery error:', error);
+    res.status(500).json({ error: 'Failed to silently recover session' });
   }
 };

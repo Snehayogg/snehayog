@@ -13,7 +13,6 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:hugeicons/hugeicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';

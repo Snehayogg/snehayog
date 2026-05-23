@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:vayug/features/ads/data/services/active_ads_service.dart';
+import 'package:vayug/features/ads/domain/i_ad_service.dart';
 import 'package:vayug/features/ads/data/services/ad_impression_service.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:vayug/shared/config/app_config.dart';
@@ -17,6 +18,7 @@ class BannerAdWidget extends StatefulWidget {
   final VoidCallback? onAdImpression;
   final VoidCallback? onVideoPause;
   final VoidCallback? onVideoResume;
+  final IAdService? adService;
 
   const BannerAdWidget({
     Key? key,
@@ -25,6 +27,7 @@ class BannerAdWidget extends StatefulWidget {
     this.onAdImpression,
     this.onVideoPause,
     this.onVideoResume,
+    this.adService,
   }) : super(key: key);
 
   @override
@@ -262,9 +265,15 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
                                         border: Border.all(color: Colors.white24, width: 0.5),
                                       ),
                                       child: (() {
-                                        String label = widget.adData['callToAction']?['label'] ?? 'Learn More';
+                                        String label = 'Learn More';
+                                        final cta = widget.adData['callToAction'];
+                                        if (cta is Map) {
+                                          label = cta['label']?.toString() ?? 'Learn More';
+                                        } else if (cta is String) {
+                                          label = cta;
+                                        }
                                         // **FIX: Replace 'Shop Now' with 'Learn More'**
-                                        if (label.toString().toUpperCase() == 'SHOP NOW') {
+                                        if (label.toUpperCase() == 'SHOP NOW') {
                                           label = 'Learn More';
                                         }
 
@@ -368,7 +377,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       if (link.isNotEmpty) {
         // Track click
         if (adId != null) {
-          final activeAdsService = ActiveAdsService();
+          final activeAdsService = widget.adService ?? ActiveAdsService();
           await activeAdsService.trackClick(adId);
         }
 

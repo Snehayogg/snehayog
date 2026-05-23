@@ -218,7 +218,7 @@ class FeedQueueService {
 
           if (finalBatch.length > 0) {
               const randomized = RecommendationService.weightedShuffle(finalBatch, this.BATCH_SIZE);
-              const ordered = RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 4 });
+              const ordered = await RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 4 });
               const pushIds = ordered.map(v => v._id.toString());
               const hashes = ordered.map(v => v.videoHash).filter(Boolean);
               await Promise.all([
@@ -266,7 +266,7 @@ class FeedQueueService {
             filtered = candidates.filter((v, i) => !sFlags[i]);
           }
           const randomized = RecommendationService.weightedShuffle(filtered, Math.min(filtered.length, count * 3));
-          const ordered = RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 3 });
+          const ordered = await RecommendationService.orderFeedWithDiversity(randomized, { minCreatorSpacing: 3 });
           finalIds.push(...ordered.slice(0, count).map(v => v._id.toString()));
       }
     } catch (e) {}

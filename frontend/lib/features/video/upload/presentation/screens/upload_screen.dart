@@ -3,9 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:vayug/shared/services/file_picker_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
-import 'package:vayug/core/providers/video_providers.dart';
-import 'package:vayug/core/providers/navigation_providers.dart';
-import 'package:vayug/core/providers/profile_providers.dart';
 import 'package:vayug/core/providers/video_upload_providers.dart';
 import 'package:vayug/features/video/upload/presentation/managers/upload_state_manager.dart';
 import 'package:vayug/features/auth/presentation/controllers/google_sign_in_controller.dart';
@@ -21,9 +18,9 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/upload/presentation/screens/upload_advanced_settings_screen.dart';
-import 'package:vayug/features/video/upload/presentation/screens/make_episode_screen.dart';
 import 'package:vayug/shared/constants/interests.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
+import 'package:vayug/core/design/spacing.dart';
 
 class UploadScreen extends ConsumerStatefulWidget {
   final VoidCallback? onVideoUploaded;
@@ -128,10 +125,23 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       thumbnailFile: _selectedThumbnail.value,
       tags: manager.tags,
       platforms: _selectedPlatforms.value,
+      allowedSubscribers: _selectedSubscribers.value,
     );
 
-    if (manager.status == UploadStatus.success && widget.onVideoUploaded != null) {
-      widget.onVideoUploaded!();
+    if (manager.status == UploadStatus.success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppText.get('upload_success_message')),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      if (widget.onVideoUploaded != null) {
+        widget.onVideoUploaded!();
+      }
+      _resetScreenState();
     }
   }
 
@@ -176,12 +186,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         initialChildSize: 0.8,
         builder: (context, scrollController) => SingleChildScrollView(
           controller: scrollController,
-          padding: const EdgeInsets.all(24),
+        padding: AppSpacing.edgeInsetsAll24,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(AppText.get('upload_terms_title'), style: AppTypography.headlineSmall),
-              const SizedBox(height: 16),
+              AppSpacing.vSpace16,
               _buildNoticePoint(
                 title: AppText.get('upload_terms_copyright'),
                 body: AppText.get('upload_terms_copyright_desc'),
@@ -190,7 +200,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 title: AppText.get('upload_terms_reporting'),
                 body: AppText.get('upload_terms_reporting_desc'),
               ),
-              const SizedBox(height: 24),
+              AppSpacing.vSpace24,
               AppButton(
                 onPressed: () => Navigator.pop(context),
                 label: AppText.get('btn_i_understand'),
@@ -205,12 +215,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   Widget _buildNoticePoint({required String title, required String body}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.only(bottom: AppSpacing.space16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
+          AppSpacing.vSpace4,
           Text(body, style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary)),
         ],
       ),
@@ -258,11 +268,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: AppSpacing.edgeInsetsAll24,
       child: Column(
         children: [
           _buildUploadProgressDashboard(context, state),
-          const SizedBox(height: 32),
+          AppSpacing.vSpace32,
           _buildActionButtons(state),
         ],
       ),
@@ -272,23 +282,17 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   Widget _buildLoginView(GoogleSignInController authController) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(AppSpacing.space32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.lock_outline, size: 64, color: AppColors.textTertiary),
-            const SizedBox(height: 24),
-            Text(AppText.get('upload_login_required_title'), style: AppTypography.headlineSmall),
-            const SizedBox(height: 12),
-            Text(
-              AppText.get('upload_login_required_desc'),
-              textAlign: TextAlign.center,
-              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 32),
+            AppSpacing.vSpace24,
+            Text(AppText.get('upload_login_required'), style: AppTypography.headlineSmall),
+            AppSpacing.vSpace32,
             AppButton(
               onPressed: () => authController.signIn(),
-              label: AppText.get('btn_login'),
+              label: AppText.get('btn_sign_in_google'),
               isFullWidth: true,
             ),
           ],
@@ -299,19 +303,20 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   Widget _buildInitialChoiceView(BuildContext context) {
     return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.space24, vertical: AppSpacing.spacing10),
       child: Column(
         children: [
           Text(AppText.get('upload_choose_what_create'),
               style: AppTypography.headlineLarge.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center),
-          const SizedBox(height: 48),
+          AppSpacing.vSpace48,
           _buildChoiceCard(
             icon: Icons.video_library,
             title: AppText.get('upload_video'),
             color: AppColors.primary,
             onTap: _pickVideo,
           ),
-          const SizedBox(height: 24),
+          AppSpacing.vSpace24,
           _buildChoiceCard(
             icon: Icons.campaign,
             title: AppText.get('upload_create_ad'),
@@ -320,7 +325,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateAdScreenRefactored()));
             },
           ),
-          const SizedBox(height: 40),
+          SizedBox(height: AppSpacing.spacing10),
           TextButton.icon(
             onPressed: _showWhatToUploadDialog,
             icon: const Icon(Icons.help_outline, size: 16),
@@ -336,7 +341,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(AppSpacing.spacing5),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
@@ -345,7 +350,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         child: Row(
           children: [
             Icon(icon, size: 32, color: color),
-            const SizedBox(width: 16),
+            AppSpacing.hSpace16,
             Expanded(child: Text(title, style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold))),
             Icon(Icons.chevron_right, color: color),
           ],
@@ -361,6 +366,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     return Column(
       children: [
         if (state.errorMessage != null) _buildErrorBanner(state.errorMessage!),
+        AppSpacing.vSpace16,
         Center(
           child: Stack(
             alignment: Alignment.center,
@@ -386,7 +392,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 32),
+        AppSpacing.vSpace32,
         if (status == UploadStatus.idle || status == UploadStatus.error)
           _buildUploadForm(state)
         else
@@ -399,7 +405,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     return Column(
       children: [
         _buildCategorySelector(state),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpacing.spacing5),
         TextField(
           controller: _titleController,
           decoration: InputDecoration(
@@ -407,7 +413,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: AppSpacing.spacing5),
         _buildAdvancedSettingsNavigation(),
       ],
     );
@@ -416,7 +422,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   Widget _buildCategorySelector(UploadStateManager state) {
     final options = kInterestOptions.where((c) => c != 'Custom Interest').toList();
     return DropdownButtonFormField<String>(
-      value: state.category ?? 'Others',
+      initialValue: state.category ?? 'Others',
       items: options.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
       onChanged: (val) => state.setCategory(val ?? 'Others'),
       decoration: InputDecoration(
@@ -430,7 +436,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
     return Column(
       children: [
         Text('Phase: ${state.currentPhase.toUpperCase()}', style: AppTypography.titleSmall),
-        const SizedBox(height: 16),
+        AppSpacing.vSpace16,
         if (state.crossPostStatus.isNotEmpty)
           ...state.crossPostStatus.entries.map((e) => ListTile(
                 leading: _getPlatformIcon(e.key, AppColors.primary),
@@ -471,8 +477,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
 
   Widget _buildErrorBanner(String message) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: AppSpacing.space24),
+      padding: AppSpacing.edgeInsetsAll12,
       decoration: BoxDecoration(
         color: AppColors.error.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
@@ -480,7 +486,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       child: Row(
         children: [
           const Icon(Icons.error_outline, color: AppColors.error, size: 20),
-          const SizedBox(width: 12),
+          AppSpacing.hSpace12,
           Expanded(child: Text(message, style: const TextStyle(color: AppColors.error))),
         ],
       ),

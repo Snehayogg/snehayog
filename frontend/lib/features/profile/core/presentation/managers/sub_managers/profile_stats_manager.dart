@@ -101,7 +101,9 @@ class ProfileStatsManager extends ChangeNotifier {
           earnings = uploaderEarnings;
         } else {
           double aggregated = 0.0;
-          for (var video in userVideos) aggregated += video.earnings;
+          for (var video in userVideos) {
+            aggregated += video.earnings;
+          }
           earnings = aggregated;
         }
       }

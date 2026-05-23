@@ -8,5 +8,6 @@ final authServiceProvider = Provider<IAuthService>((ref) {
 });
 
 final googleSignInProvider = ChangeNotifierProvider<GoogleSignInController>((ref) {
-  return GoogleSignInController();
+  final authService = ref.watch(authServiceProvider);
+  return GoogleSignInController(authService: authService);
 });

@@ -9,7 +9,7 @@ void main() {
     });
 
     test('Should add UTM parameters correctly', () {
-      final url = 'https://google.com';
+      const url = 'https://google.com';
       final result = UrlUtils.enrichUrl(
         url,
         source: 'test_source',

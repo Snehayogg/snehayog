@@ -83,6 +83,9 @@ class VideoUploadService implements IVideoUploadService {
         videoType: metadata?['videoType'] ?? 'yog',
         crossPostPlatforms: List<String>.from(metadata?['crossPostPlatforms'] ?? []),
         link: metadata?['link'],
+        allowedSubscribers: metadata?['allowedSubscribers'] != null
+            ? List<String>.from(metadata?['allowedSubscribers'])
+            : null,
         onProgress: (progress) {
           _progressController.add(progress);
         },

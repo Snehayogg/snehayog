@@ -66,6 +66,8 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    // Mark as shown immediately so it doesn't repeatedly show if the user closes the app
+    WelcomeOnboardingService.markWelcomeOnboardingShown();
   }
 
   @override
@@ -133,26 +135,28 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
               child: Column(
                 children: [
-                  // Dots Indicator
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      _steps.length,
-                      (index) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        height: 8,
-                        width: _currentPage == index ? 24 : 8,
-                        decoration: BoxDecoration(
-                          color: _currentPage == index
-                              ? AppColors.primary
-                              : AppColors.textSecondary.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(4),
+                  // Dots Indicator (Hidden on video step to maximize space)
+                  if (_currentPage != _steps.length - 1) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        _steps.length,
+                        (index) => AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          height: 8,
+                          width: _currentPage == index ? 24 : 8,
+                          decoration: BoxDecoration(
+                            color: _currentPage == index
+                                ? AppColors.primary
+                                : AppColors.textSecondary.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 32),
+                  ],
 
                   // Action Button
                   if (_currentPage != _steps.length - 1)
@@ -227,78 +231,102 @@ class _WelcomeOnboardingScreenState extends State<WelcomeOnboardingScreen> {
   }
 
   Widget _buildStep(GuideStep step) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Spacer(flex: 1),
-
-        // Visual Section
-        if (step.isVideo && step.videoUrl != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16), // Increased size
-            child: OnboardingVideoPlayer(
-              videoUrl: step.videoUrl!,
-              autoPlay: true,
-              onProgress: (progress) {
-                if (progress >= 0.2 && !_isVideoProgressSufficient) {
-                  setState(() {
-                    _isVideoProgressSufficient = true;
-                  });
-                }
-              },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
             ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: step.color.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: step.color.withValues(alpha: 0.2),
-                  width: 2,
-                ),
-              ),
-              child: HugeIcon(
-                icon: step.icon,
-                size: 80,
-                color: step.color,
+            child: IntrinsicHeight(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(height: step.isVideo ? 0 : 24),
+                  
+                  // Visual Section
+                  if (step.isVideo && step.videoUrl != null)
+                    Padding(
+                      padding: EdgeInsets.zero, // Edge-to-edge horizontally
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: constraints.maxHeight * 0.85, // Maximize vertical space
+                        ),
+                        child: OnboardingVideoPlayer(
+                          videoUrl: step.videoUrl!,
+                          autoPlay: true,
+                          onProgress: (progress) {
+                            if (progress >= 0.2 && !_isVideoProgressSufficient) {
+                              setState(() {
+                                _isVideoProgressSufficient = true;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: step.color.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: step.color.withValues(alpha: 0.2),
+                            width: 2,
+                          ),
+                        ),
+                        child: HugeIcon(
+                          icon: step.icon,
+                          size: 64,
+                          color: step.color,
+                        ),
+                      ),
+                    ),
+
+                  if (!step.isVideo) ...[
+                    const SizedBox(height: 32),
+
+                    // Text Content
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        children: [
+                          Text(
+                            step.title,
+                            textAlign: TextAlign.center,
+                            style: AppTypography.headlineLarge.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.5,
+                              fontSize: 24,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            step.description,
+                            textAlign: TextAlign.center,
+                            style: AppTypography.bodyLarge.copyWith(
+                              color: AppColors.textSecondary,
+                              height: 1.5,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
           ),
-        const SizedBox(height: 48),
-
-        // Text Content
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              Text(
-                step.title,
-                textAlign: TextAlign.center,
-                style: AppTypography.headlineLarge.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                step.description,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyLarge.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const Spacer(flex: 2),
-      ],
+        );
+      },
     );
   }
 }

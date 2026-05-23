@@ -3,14 +3,15 @@ import automatedPayoutService from '../services/payoutServices/automatedPayoutSe
 import monthlyNotificationCron from '../services/notificationServices/monthlyNotificationCron.js';
 import recommendationScoreCron from '../services/yugFeedServices/recommendationScoreCron.js';
 import adCleanupService from '../services/adServices/adCleanupService.js';
+import exclusiveVideoCleanupService from '../services/uploadServices/exclusiveVideoCleanupService.js';
 
 export default async () => {
   try {
     // Start services that require database
     automatedPayoutService.startScheduler();
 
-    // Start ad cleanup cron job (run every hour at minute 0)
-    cron.schedule('0 * * * *', async () => {
+    // Start ad cleanup cron job (run monthly on the 1st day of every month at midnight 00:00)
+    cron.schedule('0 0 1 * *', async () => {
       try {
         await adCleanupService.runCleanup();
       } catch (error) {
@@ -23,6 +24,9 @@ export default async () => {
 
     // Start recommendation score recalculation cron job (runs every 15 minutes)
     recommendationScoreCron.start();
+
+    // Start exclusive video 7-day auto-cleanup cron job (runs daily at 00:00 midnight)
+    exclusiveVideoCleanupService.startScheduler();
 
     console.log('✅ Background jobs initialized');
   } catch (error) {

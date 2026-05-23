@@ -202,12 +202,15 @@ export const uploadVideo = async (req, res) => {
       try {
         // **NEW: Invalidate cache in background to avoid blocking the response**
         if (redisService.getConnectionStatus()) {
-          invalidateCache([
-            'videos:feed:*',
+          const cacheKeysToInvalidate = [
             `user:feed:${user.googleId}:*`,
             `videos:user:${user.googleId}`,
             VideoCacheKeys.all()
-          ]).catch(err => console.error('⚠️ Upload: Cache invalidation failed:', err.message));
+          ];
+          if (!video.isSubscriberOnly) {
+            cacheKeysToInvalidate.push('videos:feed:*');
+          }
+          invalidateCache(cacheKeysToInvalidate).catch(err => console.error('⚠️ Upload: Cache invalidation failed:', err.message));
         }
 
         // **NEW: Generate AI embedding in background (prevents 20s timeouts during model loading)**
@@ -386,11 +389,14 @@ export const registerUpload = async (req, res) => {
 
     // Non-blocking: Invalidate cache in background
     if (redisService.getConnectionStatus()) {
-      invalidateCache([
-        'videos:feed:*',
+      const cacheKeysToInvalidate = [
         `user:feed:${user.googleId}:*`,
         VideoCacheKeys.all()
-      ]).catch(err => console.error('⚠️ RegisterUpload: Cache invalidation failed:', err.message));
+      ];
+      if (!video.isSubscriberOnly) {
+        cacheKeysToInvalidate.push('videos:feed:*');
+      }
+      invalidateCache(cacheKeysToInvalidate).catch(err => console.error('⚠️ RegisterUpload: Cache invalidation failed:', err.message));
     }
 
     return res.status(201).json({

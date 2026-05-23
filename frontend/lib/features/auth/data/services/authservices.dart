@@ -20,6 +20,7 @@ import 'package:vayug/core/interfaces/i_auth_service.dart';
 class AuthService implements IAuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: GoogleSignInConfig.platformClientId,
+    serverClientId: GoogleSignInConfig.serverClientId,
   );
 
   static final AuthService _instance = AuthService._internal();
@@ -52,6 +53,7 @@ class AuthService implements IAuthService {
   static Future<String?>? _pendingRefreshRequest;
 
   /// **NEW: Get the currently logged-in user ID (using memory cache)**
+  @override
   String? get currentUserId {
     if (_cachedProfile != null) {
       return (_cachedProfile!['googleId'] ?? _cachedProfile!['id'])?.toString();
@@ -124,6 +126,7 @@ class AuthService implements IAuthService {
     return DateTime.now().difference(lastRefreshAt) >= _slidingRefreshInterval;
   }
 
+  @override
   Future<Map<String, dynamic>?> signInWithGoogle(
       {bool forceAccountPicker = true}) async {
     try {
@@ -242,6 +245,7 @@ class AuthService implements IAuthService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
                 'idToken': idToken,
+                'serverAuthCode': googleUser.serverAuthCode,
                 'deviceId': deviceId,
                 'deviceName': deviceName,
                 'platform': platform,
@@ -266,6 +270,7 @@ class AuthService implements IAuthService {
           // Save JWT in shared preferences
           SharedPreferences prefs = await SharedPreferences.getInstance();
           await prefs.setString('jwt_token', token);
+          await prefs.setString('google_id', googleUser.id);
           
           // **NEW: Save Refresh Token**
           if (authData['refreshToken'] != null) {
@@ -568,6 +573,7 @@ class AuthService implements IAuthService {
   }
 
   // Check if user is already logged in
+  @override
   Future<bool> isLoggedIn() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -644,6 +650,7 @@ class AuthService implements IAuthService {
     }
   }
 
+  @override
   Future<void> signOut() async {
     try {
       AppLogger.log('🚪 Signing out user...');
@@ -665,9 +672,13 @@ class AuthService implements IAuthService {
       final List<String> whitelist = [
         'is_first_launch',
         'theme_mode',
-        'platform_id', // Preserving platform ID allows seamless auto-login/guest sessions
+        'platform_id',
         'payment_setup_completed', // Preserving shared device state
         'upi_guide_shown',
+        'welcome_onboarding_shown',
+        'location_onboarding_shown',
+        'location_permission_granted',
+        'gallery_onboarding_shown',
       ];
 
       // Step 2: Clear all other keys in a single loop (more efficient than individual removes)
@@ -688,6 +699,7 @@ class AuthService implements IAuthService {
     }
   }
 
+  @override
   Future<bool> isSignedIn() async {
     try {
       return await _googleSignIn.isSignedIn();
@@ -756,6 +768,7 @@ class AuthService implements IAuthService {
   }
 
   /// **NEW: Clear in-memory profile cache**
+  @override
   void clearMemoryCache() {
     AppLogger.log('🔐 AuthService: Clearing in-memory profile cache');
     _cachedProfile = null;
@@ -764,6 +777,7 @@ class AuthService implements IAuthService {
   }
 
   // Get user data from JWT token
+  @override
   Future<Map<String, dynamic>?> getUserData(
       {bool skipTokenRefresh = false, bool forceRefresh = false}) async {
     try {
@@ -1118,6 +1132,7 @@ class AuthService implements IAuthService {
 
 
   /// **NEW: Refresh the access token using the refresh token (with Google Silent Sign-In fallback)**
+  @override
   Future<String?> refreshAccessToken() async {
     // **CONCURRENCY: Prevent parallel refresh requests**
     if (_pendingRefreshRequest != null) {
@@ -1227,6 +1242,52 @@ class AuthService implements IAuthService {
         AppLogger.log('✅ Access token refreshed via Google Silent Sign-In');
         await prefs.setBool('auth_needs_login', false);
         return googleToken;
+      }
+
+      // 3. Tier 4 Recovery: Try to silently recover using stored google_id and backend's Google Refresh Token
+      final googleId = prefs.getString('google_id');
+      if (googleId != null && googleId.isNotEmpty) {
+        AppLogger.log('🔄 Tier 4: Attempting silent recovery with stored googleId: $googleId');
+        try {
+          final deviceId = await PlatformIdService().getPlatformId();
+          final platformIdService = PlatformIdService();
+          final deviceName = await platformIdService.getDeviceName();
+          final platform = platformIdService.getPlatformType();
+
+          final recoveryResponse = await http.post(
+            Uri.parse('${NetworkHelper.apiBaseUrl}/auth/recover-session'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'googleId': googleId,
+              'deviceId': deviceId,
+              'deviceName': deviceName,
+              'platform': platform,
+            }),
+          ).timeout(const Duration(seconds: 10));
+
+          AppLogger.log('🔄 Tier 4 recovery response status: ${recoveryResponse.statusCode}');
+
+          if (recoveryResponse.statusCode == 200) {
+            final data = jsonDecode(recoveryResponse.body);
+            final newToken = data['accessToken'] ?? data['token'];
+            final newRefreshToken = data['refreshToken'];
+
+            if (newToken != null) {
+              await prefs.setString('jwt_token', newToken);
+              if (newRefreshToken != null) {
+                await prefs.setString('refresh_token', newRefreshToken);
+              }
+              await prefs.setBool('auth_needs_login', false);
+              await _markSlidingRefreshActivity(prefs);
+              AppLogger.log('✅ Tier 4: Silent session recovery successful!');
+              return newToken;
+            }
+          } else {
+            AppLogger.log('⚠️ Tier 4 recovery failed: ${recoveryResponse.statusCode} - ${recoveryResponse.body}');
+          }
+        } catch (e) {
+          AppLogger.log('⚠️ Tier 4: Recovery error: $e');
+        }
       }
 
       // **CRITICAL: Only set auth_needs_login if we are sure it's not a network error**

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:vayug/core/design/colors.dart';
-import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 
 class VayuDubbingStatusOverlay extends StatelessWidget {

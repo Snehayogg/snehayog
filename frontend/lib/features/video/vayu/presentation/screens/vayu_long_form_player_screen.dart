@@ -11,6 +11,7 @@ import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
+import 'package:vayug/core/interfaces/i_dubbing_service.dart';
 import 'package:vayug/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 import 'package:vayug/core/design/typography.dart';
@@ -21,6 +22,9 @@ import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:vayug/features/ads/data/services/active_ads_service.dart';
+import 'package:vayug/features/ads/domain/i_ad_service.dart';
+import 'package:vayug/core/interfaces/i_quiz_engine.dart';
+import 'package:vayug/features/video/quiz/data/services/standard_quiz_engine.dart';
 import 'package:vayug/features/video/feed/presentation/screens/video_feed_advanced/widgets/banner_ad_section.dart';
 import 'package:vayug/features/video/core/presentation/managers/video_controller_manager.dart';
 import 'package:vayug/features/video/core/presentation/managers/shared_video_controller_pool.dart';
@@ -34,10 +38,8 @@ import 'package:vayug/features/video/vayu/presentation/widgets/vayu_player/vayu_
 import 'package:vayug/features/video/vayu/presentation/widgets/vayu_player/vayu_dubbing_status_overlay.dart';
 import 'package:vayug/shared/widgets/vayu_bottom_sheet.dart';
 import 'package:vayug/shared/widgets/report_dialog_widget.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
-import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/core/providers/navigation_providers.dart';
@@ -47,12 +49,18 @@ class VayuLongFormPlayerScreen extends ConsumerStatefulWidget {
   final VideoModel video;
   final List<VideoModel> relatedVideos;
   final int? parentTabIndex;
+  final IDubbingService? dubbingService;
+  final IAdService? adService;
+  final IQuizEngine? quizEngine;
 
   const VayuLongFormPlayerScreen({
     super.key,
     required this.video,
     this.relatedVideos = const [],
     this.parentTabIndex,
+    this.dubbingService,
+    this.adService,
+    this.quizEngine,
   });
 
   @override
@@ -84,8 +92,9 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   bool _lifecyclePaused = false;
 
   // Banner Ad State
-  final ActiveAdsService _activeAdsService = ActiveAdsService();
+  late final IAdService _activeAdsService;
   final Map<int, Map<String, dynamic>> _bannerAdsByIndex = {};
+  late final IQuizEngine _quizEngine;
 
 
   SharedPreferences? _prefs;
@@ -103,7 +112,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   bool _showScrollHintOverlay = false;
 
   // Dubbing State
-  final OnDeviceDubbingService _onDeviceDubbingService = OnDeviceDubbingService();
+  late final IDubbingService _dubbingService;
   final Map<String, ValueNotifier<DubbingResult>> _dubbingResultsVN = {};
   final Map<String, StreamSubscription> _dubbingSubscriptions = {};
   final Map<String, String> _selectedAudioLanguage = {};
@@ -117,14 +126,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   // Quiz State
   QuizModel? _activeQuiz;
-  final Map<String, Set<int>> _shownQuizzesPerVideo = {};
-  final List<QuizModel> _activeQuizHistory = [];
   StreamSubscription<String>? _poolDisposalSubscription;
   final Map<int, VoidCallback> _errorListeners = {};
 
   @override
   void initState() {
     super.initState();
+    _dubbingService = widget.dubbingService ?? OnDeviceDubbingServiceImpl();
+    _activeAdsService = widget.adService ?? ActiveAdsService();
+    _quizEngine = widget.quizEngine ?? StandardQuizEngine();
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.landscapeLeft,
@@ -452,17 +462,16 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     final video = _videos[_currentIndex];
     final quizzes = video.quizzes;
     if (quizzes == null || quizzes.isEmpty) return;
-    final currentMs = controller.value.position.inMilliseconds;
-    final shownQuizzes = _shownQuizzesPerVideo[video.id] ??= {};
-    for (int i = 0; i < quizzes.length; i++) {
-      final quiz = quizzes[i];
-      if (shownQuizzes.contains(i)) continue;
-      final targetMs = (quiz.timestamp * 1000).toInt();
-      final diff = currentMs - targetMs;
-      if (diff >= 0 && diff < 1500) {
-        setState(() { _activeQuiz = quiz; shownQuizzes.add(i); _activeQuizHistory.add(quiz); });
-        break;
-      }
+    final quiz = _quizEngine.evaluatePosition(
+      videoId: video.id,
+      currentPosition: controller.value.position,
+      quizzes: quizzes,
+    );
+    if (quiz != null) {
+      _quizEngine.markShown(video.id, quiz);
+      setState(() {
+        _activeQuiz = quiz;
+      });
     }
   }
 
@@ -800,11 +809,12 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
 
   void _onPageChanged(int index) {
     if (index == _currentIndex) return;
+    final oldVideoId = _videos[_currentIndex].id;
+    _quizEngine.reset(oldVideoId);
     _pauseCurrentVideo(); _reprimeWindowIfNeeded(index); _stopViewTracking(_currentIndex);
     setState(() {
       _currentIndex = index;
       _activeQuiz = null;
-      _activeQuizHistory.clear();
     });
     ref.read(mainControllerProvider).updateCurrentVideoIndex(index, tabIndex: 1);
     _startViewTracking(index); _preloadNearbyVideos(); _initializePlayer(index); _loadBannerAd(index);
@@ -858,7 +868,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     setState(() => _isDubbingProgressVisible = true);
     final resultVN = _getOrCreateNotifier<DubbingResult>(_dubbingResultsVN, video.id, const DubbingResult(status: DubbingStatus.checking));
     _dubbingSubscriptions[video.id]?.cancel();
-    _dubbingSubscriptions[video.id] = _onDeviceDubbingService.dubLocalVideo(video.videoUrl, targetLang: targetLang).listen((r) {
+    _dubbingSubscriptions[video.id] = _dubbingService.dubVideo(video.id, video.videoUrl, targetLang: targetLang).listen((r) {
       if (!mounted) return;
       resultVN.value = r;
       if (r.status == DubbingStatus.completed && r.dubbedUrl != null) {
@@ -911,7 +921,8 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
         const SizedBox(width: 12),
         Expanded(child: AppButton(onPressed: () {
           Navigator.pop(context);
-          _onDeviceDubbingService.cancelDubbing(_videos.firstWhere((v) => v.id == videoId).videoUrl);
+          final video = _videos.firstWhere((v) => v.id == videoId);
+          _dubbingService.cancelDubbing(videoId, video.videoUrl);
           _dubbingSubscriptions[videoId]?.cancel();
           _dubbingResultsVN[videoId]?.value = const DubbingResult(status: DubbingStatus.idle);
         }, label: 'Haan')),
@@ -999,6 +1010,15 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   Widget _buildAdSection(int index) {
     final ad = _bannerAdsByIndex[index];
     if (ad == null) return const SizedBox.shrink();
-    return Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: BannerAdSection(adData: {...ad, 'creatorId': _videos[index].uploader.id}, onVideoPause: () => _controllers[index]?.pause(), onVideoResume: () => _controllers[index]?.play(), onImpression: () async {}));
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: BannerAdSection(
+        adData: {...ad, 'creatorId': _videos[index].uploader.id},
+        adService: _activeAdsService,
+        onVideoPause: () => _controllers[index]?.pause(),
+        onVideoResume: () => _controllers[index]?.play(),
+        onImpression: () async {},
+      ),
+    );
   }
 }

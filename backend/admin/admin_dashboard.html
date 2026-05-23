@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💰 Vayug Admin Dashboard - Automated Payouts</title>
+    <title>💰 Vayug Admin Dashboard </title>
     <style>
         * {
             margin: 0;
@@ -639,59 +639,79 @@
             return null;
         };
 
-        const promptForAdminKey = () => {
-            const key = prompt('Enter the Admin Dashboard access key:');
-            if (key && key.trim()) {
-                const trimmed = key.trim();
-                localStorage.setItem(ADMIN_KEY_STORAGE_KEY, trimmed);
-                return trimmed;
-            }
-            return null;
-        };
+        let activePromptPromise = null;
 
-        const clearAdminKey = () => {
+        const handleUnauthorized = async () => {
+            if (activePromptPromise) {
+                return activePromptPromise;
+            }
+
+            // Clear the invalid key from localStorage and in-memory variable
             localStorage.removeItem(ADMIN_KEY_STORAGE_KEY);
             ADMIN_DASHBOARD_KEY = null;
+
+            activePromptPromise = new Promise((resolve) => {
+                // Use a tiny timeout to let other concurrent 401s group up
+                setTimeout(() => {
+                    const key = prompt('Enter the Admin Dashboard access key:');
+                    if (key && key.trim()) {
+                        const trimmed = key.trim();
+                        localStorage.setItem(ADMIN_KEY_STORAGE_KEY, trimmed);
+                        ADMIN_DASHBOARD_KEY = trimmed;
+                        resolve(trimmed);
+                    } else {
+                        resolve(null);
+                    }
+                    activePromptPromise = null;
+                }, 50);
+            });
+
+            return activePromptPromise;
         };
 
         const getAdminKey = ({ promptIfMissing = true } = {}) => {
             if (!ADMIN_DASHBOARD_KEY) {
                 ADMIN_DASHBOARD_KEY = detectAdminKey();
             }
-
-            if (!ADMIN_DASHBOARD_KEY && promptIfMissing) {
-                ADMIN_DASHBOARD_KEY = promptForAdminKey();
-            }
-
             return ADMIN_DASHBOARD_KEY;
         };
 
         const authorizedFetch = async (url, options = {}) => {
             let attempt = 0;
             let lastResponse = null;
+
             while (attempt < 2) {
-                const key = getAdminKey({ promptIfMissing: attempt > 0 });
+                // Get the current key
+                let key = getAdminKey();
+                
+                // If missing and we are on the second attempt, handle it
+                if (!key && attempt > 0) {
+                    key = await handleUnauthorized();
+                }
+
                 const headers = new Headers(options.headers || {});
                 if (key) {
                     headers.set('x-admin-key', key);
                 }
 
                 const response = await fetch(url, { ...options, headers });
-
                 lastResponse = response;
+
                 if (response.status !== 401) {
                     return response;
                 }
 
-                clearAdminKey();
-                attempt += 1;
-                if (attempt < 2) {
+                if (attempt === 0) {
                     showError('Admin dashboard key required or invalid. Please enter it.');
+                    await handleUnauthorized();
                 }
+                
+                attempt += 1;
             }
 
             return lastResponse;
         };
+
 
         const detectApiBase = () => {
             const params = new URLSearchParams(window.location.search);
@@ -1069,7 +1089,7 @@
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
-                        <h3 style="margin-bottom: 8px; color: #667eea;">${formatNumber(creators.length)}</h3>
+                        <h3 style="margin-bottom: 8px; color: #667eea;">${formatNumber(creators.filter(c => (c.totalVideos || 0) > 0).length)}</h3>
                         <p style="margin: 0; color: #555;">Creators with Videos (≥1 video)</p>
                     </div>
                     <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center;">
@@ -2150,7 +2170,16 @@
             }
         }
 
+        let lastErrorTime = 0;
+        let lastErrorMessage = '';
         function showError(message) {
+            const now = Date.now();
+            if (message === lastErrorMessage && now - lastErrorTime < 2000) {
+                return; // Prevent identical messages within 2 seconds
+            }
+            lastErrorTime = now;
+            lastErrorMessage = message;
+
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
             errorDiv.textContent = message;
@@ -2158,7 +2187,12 @@
             const container = document.querySelector('.container');
             container.insertBefore(errorDiv, container.firstChild);
 
-            setTimeout(() => errorDiv.remove(), 5000);
+            setTimeout(() => {
+                errorDiv.remove();
+                if (lastErrorMessage === message) {
+                    lastErrorMessage = '';
+                }
+            }, 5000);
         }
 
         function showSuccess(message) {
@@ -2489,6 +2523,196 @@
                 const title = "⚠️ URGENT: Earnings on Hold (Add UPI ID Now)";
                 const body = `Dear ${creatorName}, please add your UPI ID in the profile section to receive your earnings.`;
                 
+if (response && response.ok) {
+                    showSuccess(`Video removed and logged for transparency.`);
+                    if (reportId) dismissReport(reportId, false);
+                    loadVideos();
+                    loadReportedVideos();
+                    loadPayoutStats();
+                } else {
+                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    showError(`Failed: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error removing video:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function deleteVideo(videoId, videoName) {
+            // Keep this as a backup hard-delete method if needed, 
+            // but we'll use removeVideoWithTransparency for standard moderation.
+            if (!confirm(`Are you sure you want to PERMANENTLY delete this video without logging it for the creator?\n\nVideo: ${videoName}`)) {
+                return false;
+            }
+
+            try {
+                const response = await authorizedFetch(`${API_BASE}/admin/videos/${videoId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response && (response.ok || response.status === 404)) {
+                    if (response.status === 404) {
+                        console.warn(`Video ${videoId} already deleted or not found.`);
+                    }
+                    showSuccess(`Video "${videoName}" removed successfully`);
+                    if (typeof loadVideos === 'function') loadVideos(); // Refresh the list if it exists
+                    return true;
+                } else {
+                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    showError(`Failed to delete video: ${error.error || 'Unknown error'}`);
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error deleting video:', error);
+                showError(`Error deleting video: ${error.message}`);
+                return false;
+            }
+        }
+
+        function searchVideos() {
+            currentVideoPage = 0; // Reset to first page
+            loadVideos();
+        }
+
+        function resetVideoFilters() {
+            document.getElementById('videoSearch').value = '';
+            currentVideoPage = 0;
+            loadVideos();
+        }
+
+        function previousVideoPage() {
+            if (currentVideoPage > 0) {
+                currentVideoPage--;
+                loadVideos();
+            }
+        }
+
+        function nextVideoPage() {
+            currentVideoPage++;
+            loadVideos();
+        }
+
+        async function sendNotification() {
+            const target = document.getElementById('notifTarget').value.trim();
+            const title = document.getElementById('notifTitle').value.trim();
+            const body = document.getElementById('notifBody').value.trim();
+            const dataStr = document.getElementById('notifData').value.trim();
+
+            if (!title || !body) {
+                showError('Title and Body are required');
+                return;
+            }
+
+            let dataObj = {};
+            if (dataStr) {
+                try {
+                    dataObj = JSON.parse(dataStr);
+                } catch (e) {
+                    showError('Invalid JSON in Data field');
+                    return;
+                }
+            }
+
+            if (!confirm(`Are you sure you want to send this notification to ${target ? target : 'ALL USERS'}?`)) {
+                return;
+            }
+
+            try {
+                // Determine endpoint based on target
+                const endpoint = target ? `${API_BASE}/notifications/send` : `${API_BASE}/notifications/broadcast`;
+                const payload = {
+                    title,
+                    body,
+                    data: dataObj
+                };
+
+                if (target) {
+                    payload.googleId = target;
+                }
+
+                setLoading(true);
+                const response = await authorizedFetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showSuccess(`Notification sent! Success: ${result.successCount || 1}, Failed: ${result.failureCount || 0}`);
+                    // Clear inputs
+                    document.getElementById('notifTitle').value = '';
+                    document.getElementById('notifBody').value = '';
+                    document.getElementById('notifData').value = '';
+                } else {
+                    showError(`Failed: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error sending notification:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+        async function sendPaymentNotification(googleId, creatorName) {
+            if (!googleId || googleId === '—') {
+                showError('Cannot send notification: Invalid Google ID');
+                return;
+            }
+
+            if (!confirm(`Send payment success notification to ${creatorName}?`)) {
+                return;
+            }
+
+            try {
+                const title = "Payment Sucessful";
+                const body = "Dear Creator, your payment has been successfully sent. Please check your bank account.";
+                
+                setLoading(true);
+                const response = await authorizedFetch(`${API_BASE}/notifications/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        googleId: googleId,
+                        title: title,
+                        body: body,
+                        data: { type: 'payment_update' }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showSuccess(`Notification sent to ${creatorName} ✅`);
+                } else {
+                    showError(`Failed: ${result.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error sending payment notification:', error);
+                showError(`Error: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function sendUpiRequestNotification(googleId, creatorName) {
+            if (!googleId || googleId === '—') {
+                showError('Cannot send notification: Invalid Google ID');
+                return;
+            }
+
+            if (!confirm(`Send UPI Request notification to ${creatorName}?`)) {
+                return;
+            }
+
+            try {
+                const title = "⚠️ URGENT: Earnings on Hold (Add UPI ID Now)";
+                const body = `Dear ${creatorName}, please add your UPI ID in the profile section to receive your earnings.`;
+                
                 setLoading(true);
                 const response = await authorizedFetch(`${API_BASE}/notifications/send`, {
                     method: 'POST',
@@ -2537,68 +2761,73 @@
 
         function showDailyUploadsModal(videos) {
             // Remove existing modal if any
-            const existingModal = document.getElementById('dailyUploadsModal');
+            var existingModal = document.getElementById('dailyUploadsModal');
             if (existingModal) existingModal.remove();
 
-            const modalHtml = `
-                <div id="dailyUploadsModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;">
-                    <div style="background: white; width: 90%; max-width: 800px; max-height: 90vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
-                        <div style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                            <h2 style="margin: 0; font-size: 1.5rem;">📅 Daily Uploads (${videos.length})</h2>
-                            <button onclick="document.getElementById('dailyUploadsModal').remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
-                        </div>
-                        <div style="padding: 20px; overflow-y: auto; flex: 1;">
-                            ${videos.length === 0 ? '<p style="text-align: center; color: #666;">No videos uploaded today.</p>' : 
-                                `<table class="payout-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Video</th>
-                                            <th>Uploader</th>
-                                            <th>Time</th>
-                                            <th>Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${videos.map(video => `
-                                            <tr>
-                                                <td>
-                                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                                        ${video.thumbnailUrl ? `<img src="${video.thumbnailUrl}" style="width: 60px; height: 34px; object-fit: cover; border-radius: 4px;">` : ''}
-                                                        <div>
-                                                            <strong>${escapeHtml(video.videoName || 'Untitled')}</strong>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    ${escapeHtml(video.uploader?.name || 'Unknown')}<br>
-                                                    <small style="color: #666;">${escapeHtml(video.uploader?.email || '—')}</small>
-                                                </td>
-                                                <td>${new Date(video.createdAt).toLocaleTimeString()}</td>
-                                                <td>
-                                                     <button class="btn btn-primary btn-sm" onclick="window.open('${video.videoUrl}', '_blank')" style="padding: 4px 8px; font-size: 0.75rem;">
-                                                        ▶ Play
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>`
-                            }
-                        </div>
-                        <div style="padding: 20px; border-top: 1px solid #eee; text-align: right;">
-                             <button class="btn btn-primary" onclick="document.getElementById('dailyUploadsModal').remove()">Close</button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            var modalHtml = '<div id="dailyUploadsModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:1000;">' +
+                '<div style="background:white;width:90%;max-width:800px;max-height:90vh;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 5px 15px rgba(0,0,0,0.3);">' +
+                '<div style="padding:20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">' +
+                '<h2 style="margin:0;font-size:1.5rem;">&#128197; Daily Uploads (' + videos.length + ')</h2>' +
+                '<button onclick="document.getElementById(\'dailyUploadsModal\').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>' +
+                '</div>' +
+                '<div style="padding:20px;overflow-y:auto;flex:1;">' +
+                '<table class="payout-table">' +
+                '<thead><tr><th>Video</th><th>Uploader</th><th>Time</th><th>Status</th></tr></thead>' +
+                '<tbody id="dailyUploadsTableBody"></tbody>' +
+                '</table>' +
+                '</div>' +
+                '<div style="padding:20px;border-top:1px solid #eee;text-align:right;">' +
+                '<button class="btn btn-primary" onclick="document.getElementById(\'dailyUploadsModal\').remove()">Close</button>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
 
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            
+
+            // Populate rows separately to avoid nested template literal issues
+            var tbody = document.getElementById('dailyUploadsTableBody');
+            tbody.innerHTML = videos.map(function(video) {
+                var thumb = video.thumbnailUrl
+                    ? '<img src="' + video.thumbnailUrl + '" style="width:60px;height:34px;object-fit:cover;border-radius:4px;">'
+                    : '';
+                var name = escapeHtml(video.videoName || 'Untitled');
+                var uploader = escapeHtml((video.uploader && video.uploader.name) || 'Unknown');
+                var email = escapeHtml((video.uploader && video.uploader.email) || '—');
+                var time = new Date(video.createdAt).toLocaleTimeString();
+                var statusBadge = getDailyUploadStatusBadge(video);
+                return '<tr>' +
+                    '<td><div style="display:flex;align-items:center;gap:10px;">' + thumb + '<div><strong>' + name + '</strong></div></div></td>' +
+                    '<td>' + uploader + '<br><small style="color:#666;">' + email + '</small></td>' +
+                    '<td>' + time + '</td>' +
+                    '<td>' + statusBadge + '</td>' +
+                    '</tr>';
+            }).join('');
+
             // Close on click outside
             document.getElementById('dailyUploadsModal').addEventListener('click', function(e) {
                 if (e.target === this) this.remove();
             });
         }
+
+        function getDailyUploadStatusBadge(video) {
+            var status = (video.processingStatus || 'pending').toLowerCase();
+            var style, text;
+            if (status === 'completed' || status === 'ready') {
+                style = 'background-color:#e2f9e9;color:#1e7e34;padding:4px 8px;border-radius:12px;font-size:0.75rem;font-weight:bold;border:1px solid #c3e6cb;display:inline-block;';
+                text = 'Completed';
+            } else if (status === 'processing') {
+                style = 'background-color:#e8f4fd;color:#007bff;padding:4px 8px;border-radius:12px;font-size:0.75rem;font-weight:bold;border:1px solid #b8daff;display:inline-block;';
+                text = 'Processing (' + (video.processingProgress || 0) + '%)';
+            } else if (status === 'failed') {
+                style = 'background-color:#fdf2f2;color:#dc3545;padding:4px 8px;border-radius:12px;font-size:0.75rem;font-weight:bold;border:1px solid #f5c6cb;display:inline-block;';
+                text = 'Failed';
+            } else {
+                style = 'background-color:#f3f4f6;color:#4b5563;padding:4px 8px;border-radius:12px;font-size:0.75rem;font-weight:bold;border:1px solid #d6d8db;display:inline-block;';
+                text = status.charAt(0).toUpperCase() + status.slice(1);
+            }
+            return '<span style="' + style + '">' + text + '</span>';
+        }
+        
         // **NEW: Flagged Videos Management**
         async function loadFlaggedVideos() {
             const container = document.getElementById('flaggedVideosList');

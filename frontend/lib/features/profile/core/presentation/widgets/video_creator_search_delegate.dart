@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:vayug/core/interfaces/i_search_service.dart';
 import 'package:vayug/features/auth/data/usermodel.dart';
+import 'package:vayug/features/profile/search/data/models/search_suggestions.dart';
+import 'package:vayug/features/profile/search/data/services/search_service_impl.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
-import 'package:vayug/shared/services/search_service.dart';
 import 'package:vayug/features/profile/core/presentation/screens/profile_screen.dart';
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayug/core/design/theme.dart';
@@ -15,14 +17,13 @@ import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_pl
 
 /// Global search UI for videos and creators.
 class VideoCreatorSearchDelegate extends SearchDelegate<void> {
-  final SearchService _searchService;
+  final ISearchService _searchService;
   Timer? _suggestionDebounce;
-  String _lastSuggestionQuery =
-      ''; // **FIX: Track last query for proper rebuilds**
-  Future<Map<String, dynamic>>? _suggestionFuture; // **FIX: Track future**
+  String _lastSuggestionQuery = '';
+  Future<SearchSuggestions>? _suggestionFuture;
 
-  VideoCreatorSearchDelegate({SearchService? searchService})
-      : _searchService = searchService ?? SearchService();
+  VideoCreatorSearchDelegate({ISearchService? searchService})
+      : _searchService = searchService ?? SearchServiceImpl();
 
   @override
   void dispose() {
@@ -370,31 +371,23 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
     if (q != _lastSuggestionQuery) {
       _lastSuggestionQuery = q;
       _suggestionDebounce?.cancel();
-      final completer = Completer<Map<String, dynamic>>();
+      final completer = Completer<SearchSuggestions>();
       _suggestionDebounce = Timer(const Duration(milliseconds: 600), () async {
         try {
           final result = await _searchService.getSuggestions(q);
-          if (!completer.isCompleted) {
-            completer.complete(result);
-          }
+          if (!completer.isCompleted) completer.complete(result);
         } catch (e) {
-          if (!completer.isCompleted) {
-            completer.complete(<String, dynamic>{
-              'creators': <UserModel>[],
-              'videos': <VideoModel>[],
-            });
-          }
+          if (!completer.isCompleted) completer.complete(SearchSuggestions.empty);
         }
       });
       _suggestionFuture = completer.future;
     }
 
     // **FIX: Use FutureBuilder with key to force rebuild on query change**
-    return FutureBuilder<Map<String, dynamic>>(
-      key: ValueKey<String>(q), // **FIX: Force rebuild when query changes**
+    return FutureBuilder<SearchSuggestions>(
+      key: ValueKey<String>(q),
       future: _suggestionFuture,
-      builder:
-          (BuildContext context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
+      builder: (BuildContext context, AsyncSnapshot<SearchSuggestions> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: Padding(
@@ -404,15 +397,11 @@ class VideoCreatorSearchDelegate extends SearchDelegate<void> {
           );
         }
 
-        if (snapshot.hasError) {
-          return const SizedBox.shrink();
-        }
+        if (snapshot.hasError) return const SizedBox.shrink();
 
-        final data = snapshot.data ?? <String, dynamic>{};
-        final List<UserModel> creators =
-            (data['creators'] as List<UserModel>? ?? <UserModel>[]);
-        final List<VideoModel> videos =
-            (data['videos'] as List<VideoModel>? ?? <VideoModel>[]);
+        final data = snapshot.data ?? SearchSuggestions.empty;
+        final List<UserModel> creators = data.creators;
+        final List<VideoModel> videos = data.videos;
 
         if (creators.isEmpty && videos.isEmpty) {
           return Center(

@@ -9,6 +9,7 @@ import {
 } from '../../utils/common.js';
 import { AD_CONFIG, PAYMENT_CONFIG } from '../../constants/index.js';
 import { calculateCategoryRelevance } from '../../config/categoryMap.js';
+import adEngine from './adEngine/index.js';
 
 class AdService {
   async createAdWithPayment(adData) {
@@ -229,142 +230,35 @@ class AdService {
 
   /**
    * Get active ads for serving with proper targeting
+   * Delegated entirely to VayuAdEngine plugins
    */
   async getActiveAds(targetingCriteria = {}) {
     try {
-      const { userId, platform, location, videoCategory, videoTags, videoKeywords, adType } = targetingCriteria;
-
-      console.log('🎯 AdService: getActiveAds called with:', { 
-        userId, platform, location, videoCategory, videoTags, videoKeywords, adType 
-      });
-
-      // Build query for active ads
-      const query = {
-        isActive: true,
-        reviewStatus: 'approved'
+      const { adType = 'banner' } = targetingCriteria;
+      
+      const context = {
+        category: targetingCriteria.videoCategory,
+        tags: targetingCriteria.videoTags,
+        keywords: targetingCriteria.videoKeywords,
+        location: targetingCriteria.location,
+        platform: targetingCriteria.platform,
+        videoData: {
+          category: targetingCriteria.videoCategory,
+          tags: targetingCriteria.videoTags,
+          keywords: targetingCriteria.videoKeywords,
+          videoName: targetingCriteria.videoKeywords?.[0] || ''
+        }
       };
-      
-      // Add adType filter if specified
-      if (adType) {
-        query.adType = adType;
-      }
-      
-      // Find ads with active campaigns
-      const activeCreatives = await AdCreative.find(query)
-        .sort({ createdAt: -1 })
-        .populate({
-          path: 'campaignId',
-          match: { 
-            status: 'active',
-            startDate: { $lte: new Date() },
-            endDate: { $gte: new Date() }
-          }
-        })
-        .limit(50);
 
-      // Filter out ads with null campaign (campaign not active or not in date range)
-      const validCreatives = activeCreatives.filter(ad => ad.campaignId !== null);
+      const options = {
+        adType: adType,
+        limit: 10,
+        useFallback: true
+      };
 
-      console.log(`🔍 AdService: Found ${validCreatives.length} active and valid ad creatives`);
-
-      // **STEP 2: Filter ads based on targeting if contextual signals are provided**
-      const hasContext = Boolean(videoCategory) ||
-        (Array.isArray(videoTags) && videoTags.length > 0) ||
-        (Array.isArray(videoKeywords) && videoKeywords.length > 0);
-
-      if (!hasContext) {
-        console.log('ℹ️ AdService: No video context provided; returning all active ads');
-        return validCreatives.map(ad => this.transformAdForFrontend(ad));
-      }
-
-      const targetedAds = [];
-      
-      for (const creative of validCreatives) {
-        const campaign = creative.campaignId;
-        let relevanceScore = 0;
-        let matchReasons = [];
-
-        // **TARGETING LOGIC: Match ad interests with video context**
-        
-        // 1. Check if campaign has interests defined
-        const campaignInterests = campaign.target?.interests || [];
-        
-        if (campaignInterests.length === 0) {
-          // If no interests specified, show to all (universal ad)
-          relevanceScore = 50;
-          matchReasons.push('universal_ad');
-        } else {
-          // Check interest matching with video category using smart category map
-          if (videoCategory) {
-            for (const interest of campaignInterests) {
-              const relevance = calculateCategoryRelevance(interest, videoCategory);
-              
-              if (relevance.score > 0) {
-                relevanceScore += relevance.score;
-                matchReasons.push(`category_${relevance.level}:${interest}(${relevance.score})`);
-              }
-            }
-          }
-
-          // Check interest matching with video tags
-          if (videoTags && videoTags.length > 0) {
-            for (const interest of campaignInterests) {
-              const interestLower = interest.toLowerCase();
-              for (const tag of videoTags) {
-                const tagLower = tag.toLowerCase();
-                
-                if (tagLower === interestLower || tagLower.includes(interestLower) || interestLower.includes(tagLower)) {
-                  relevanceScore += 60;
-                  matchReasons.push(`tag_match:${tag}`);
-                }
-              }
-            }
-          }
-
-          // Check interest matching with video keywords
-          if (videoKeywords && videoKeywords.length > 0) {
-            for (const interest of campaignInterests) {
-              const interestLower = interest.toLowerCase();
-              for (const keyword of videoKeywords) {
-                const keywordLower = keyword.toLowerCase();
-                
-                if (keywordLower === interestLower || keywordLower.includes(interestLower) || interestLower.includes(keywordLower)) {
-                  relevanceScore += 40;
-                  matchReasons.push(`keyword_match:${keyword}`);
-                }
-              }
-            }
-          }
-        }
-
-        // **DECISION: Only show ads with relevance score > 0**
-        if (relevanceScore > 0) {
-          targetedAds.push({
-            creative,
-            relevanceScore,
-            matchReasons: matchReasons.join(', ')
-          });
-        }
-      }
-
-      // **FALLBACK: If nothing matched but we have active ads, return them sorted by score or newest**
-      if (targetedAds.length === 0) {
-        console.log('⚠️ AdService: No targeted ads matched; returning all active ads as fallback');
-        return validCreatives.map(ad => this.transformAdForFrontend(ad));
-      }
-
-      // **STEP 3: Sort by relevance score (highest first)**
-      targetedAds.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-      console.log(`✅ AdService: ${targetedAds.length} ads matched targeting criteria`);
-
-      // **STEP 4: Return top ads**
-      const finalAds = targetedAds.slice(0, 10).map(item => item.creative);
-
-      // Transform raw AdCreative documents to frontend-expected format
-      return finalAds.map(ad => this.transformAdForFrontend(ad));
+      return await adEngine.getTargetedFeed(context, options);
     } catch (error) {
-      console.error('❌ AdService: Error getting active ads:', error);
+      console.error('❌ AdService: Error delegating to AdEngine:', error);
       return [];
     }
   }

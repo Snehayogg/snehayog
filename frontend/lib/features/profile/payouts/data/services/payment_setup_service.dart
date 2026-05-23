@@ -13,6 +13,7 @@ class PaymentSetupService implements IPaymentSetupService {
   final AuthService _authService = AuthService();
 
   /// Check if user has completed payment setup
+  @override
   Future<bool> hasCompletedPaymentSetup() async {
     try {
       // First check local cache for quick response
@@ -151,6 +152,7 @@ class PaymentSetupService implements IPaymentSetupService {
   }
 
   /// Mark payment setup as completed
+  @override
   Future<void> markPaymentSetupCompleted() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -168,6 +170,7 @@ class PaymentSetupService implements IPaymentSetupService {
   }
 
   /// Clear payment setup status (for testing or reset)
+  @override
   Future<void> clearPaymentSetupStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -186,6 +189,7 @@ class PaymentSetupService implements IPaymentSetupService {
   }
 
   /// Get payment setup status with details
+  @override
   Future<Map<String, dynamic>> getPaymentSetupStatus() async {
     try {
       final hasSetup = await hasCompletedPaymentSetup();
@@ -209,6 +213,7 @@ class PaymentSetupService implements IPaymentSetupService {
     }
   }
 
+  @override
   Future<Map<String, dynamic>?> fetchPaymentProfile() async {
     try {
       final userData = await _authService.getUserData();
@@ -245,6 +250,7 @@ class PaymentSetupService implements IPaymentSetupService {
     }
   }
 
+  @override
   Future<void> updateUpiId(String upiId) async {
     final userData = await _authService.getUserData();
     final token = userData?['token'];

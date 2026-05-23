@@ -49,3 +49,7 @@ app.*.map.json
 # **NEW: Configuration files with sensitive data**
 # Never commit files containing API keys, secrets, or sensitive configuration
 lib/config/app_config.dart
+
+# **NEW: Custom build configs for --dart-define-from-file**
+config.json
+env.json

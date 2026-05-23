@@ -186,7 +186,7 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
     const userId = req.user.id;
 
     if (!key || !videoName) {
-      return res.status(400).json({ error: 'Key and VideoName are required' });
+      return res.status(400).json({ success: false, error: 'Key and VideoName are required' });
     }
 
     console.log('🚀 Direct Upload Complete received for:', key);
@@ -194,7 +194,22 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
     // Find user by Google ID to get proper ObjectId
     const user = await User.findOne({ googleId: userId });
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // **FIX: Resolve allowedSubscribers from googleIds/strings → MongoDB ObjectIds**
+    // Flutter sends MongoDB _id strings (from /api/users/subscribers response).
+    // The subscriber-videos query uses ObjectId matching, so we must store ObjectIds.
+    let resolvedSubscriberIds = [];
+    if (Array.isArray(allowedSubscribers) && allowedSubscribers.length > 0) {
+      const subscriberDocs = await User.find({
+        $or: [
+          { _id: { $in: allowedSubscribers.filter(id => mongoose.Types.ObjectId.isValid(id)) } },
+          { googleId: { $in: allowedSubscribers } }
+        ]
+      }).select('_id').lean();
+      resolvedSubscriberIds = subscriberDocs.map(doc => doc._id);
+      console.log(`✅ direct-complete: Resolved ${resolvedSubscriberIds.length}/${allowedSubscribers.length} subscriber IDs to ObjectIds`);
     }
 
     // 1. Create Video Record (Processing State)
@@ -218,9 +233,9 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
       seriesId: seriesId || null,
       episodeNumber: episodeNumber ? parseInt(episodeNumber) : 0,
       quizzes: Array.isArray(quizzes) ? quizzes : [],
-      // **NEW: Subscriber-only access control**
-      allowedSubscribers: Array.isArray(allowedSubscribers) ? allowedSubscribers : [],
-      isSubscriberOnly: Array.isArray(allowedSubscribers) && allowedSubscribers.length > 0
+      // **FIX: Store resolved ObjectIds so subscriber-videos query works correctly**
+      allowedSubscribers: resolvedSubscriberIds,
+      isSubscriberOnly: resolvedSubscriberIds.length > 0
     });
 
     if (crossPostPlatforms && Array.isArray(crossPostPlatforms)) {
@@ -250,13 +265,14 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
 
     // 3. Return success immediately
     res.status(201).json({
+      success: true,
       message: 'Video upload received and processing started',
       video: newVideo
     });
 
   } catch (error) {
     console.error('❌ Error finishing direct upload:', error);
-    res.status(500).json({ error: 'Failed to complete upload process' });
+    res.status(500).json({ success: false, error: 'Failed to complete upload process' });
   }
 });
 
@@ -264,7 +280,7 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
 router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No video file uploaded' });
+      return res.status(400).json({ success: false, error: 'No video file uploaded' });
     }
 
     const { videoName, description, link, crossPostPlatforms, category, tags, quizzes } = req.body;
@@ -281,6 +297,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     if (!videoValidation.isValid) {
       await fs.unlink(videoPath);
       return res.status(400).json({
+        success: false,
         error: 'Invalid video file',
         details: videoValidation.error
       });
@@ -291,7 +308,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     const user = await User.findOne({ googleId: userId });
     if (!user) {
       await fs.unlink(videoPath);
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
 
     // **NEW: Calculate file hash for duplicate detection**
@@ -302,6 +319,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       console.error('❌ Error calculating file hash:', hashError);
       await fs.unlink(videoPath);
       return res.status(500).json({
+        success: false,
         error: 'Failed to process video file',
         details: 'Error calculating file hash'
       });
@@ -325,6 +343,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
       await fs.unlink(videoPath);
 
       return res.status(409).json({
+        success: false,
         error: 'Duplicate video detected',
         message: 'You have already uploaded this video',
         existingVideo: {
@@ -425,6 +444,7 @@ router.post('/video', verifyToken, uploadLimiter, upload.single('video'), async 
     }
 
     res.status(500).json({
+      success: false,
       error: 'Video upload failed',
       details: error.message
     });
@@ -470,13 +490,13 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
   try {
     const video = await Video.findById(req.params.videoId);
     if (!video) {
-      return res.status(404).json({ error: 'Video not found' });
+      return res.status(404).json({ success: false, error: 'Video not found' });
     }
 
     // **FIX: Compare against the user's ObjectId, not Google ID**
     const owner = await User.findOne({ googleId: req.user.id });
     if (!owner || video.uploader.toString() !== owner._id.toString()) {
-      return res.status(403).json({ error: 'Access denied' });
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
     res.json({
@@ -504,6 +524,7 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('❌ Error getting video status:', error);
     res.status(500).json({
+      success: false,
       error: 'Failed to get video status',
       details: error.message
     });
@@ -515,17 +536,18 @@ router.post('/video/:videoId/retry', verifyToken, async (req, res) => {
   try {
     const video = await Video.findById(req.params.videoId);
     if (!video) {
-      return res.status(404).json({ error: 'Video not found' });
+      return res.status(404).json({ success: false, error: 'Video not found' });
     }
 
     // **NEW: Check if user owns the video**
     if (video.uploader.toString() !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
     // **NEW: Check if video processing failed**
     if (video.processingStatus !== 'failed') {
       return res.status(400).json({
+        success: false,
         error: 'Video is not in failed state'
       });
     }
@@ -555,6 +577,7 @@ router.post('/video/:videoId/retry', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('❌ Error retrying video processing:', error);
     res.status(500).json({
+      success: false,
       error: 'Failed to retry video processing',
       details: error.message
     });

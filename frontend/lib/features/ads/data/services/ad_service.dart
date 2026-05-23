@@ -8,6 +8,7 @@ import 'package:vayug/shared/services/cloudflare_r2_service.dart';
 import 'package:vayug/shared/config/app_config.dart';
 import 'package:vayug/shared/managers/smart_cache_manager.dart';
 import 'package:vayug/features/ads/data/services/active_ads_service.dart';
+import 'package:vayug/features/ads/domain/i_ad_service.dart';
 import 'package:vayug/features/ads/data/services/ad_refresh_notifier.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
@@ -22,7 +23,7 @@ class AdService {
   final CloudflareR2Service _cloudflareService = CloudflareR2Service();
   // final RazorpayService _razorpayService = RazorpayService();  // Temporarily commented
   final SmartCacheManager _cacheManager = SmartCacheManager();
-  final ActiveAdsService _activeAdsService = ActiveAdsService();
+  final IAdService _activeAdsService = ActiveAdsService();
   final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
 
   // Create a new ad

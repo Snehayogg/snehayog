@@ -7,9 +7,10 @@ import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/services/http_client_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/features/ads/domain/i_ad_service.dart';
 
 /// Service to fetch all types of active ads (banner, carousel, video feed)
-class ActiveAdsService {
+class ActiveAdsService implements IAdService {
   static String get _baseUrl => AppConfig.baseUrl;
   final SmartCacheManager _cacheManager = SmartCacheManager();
   final AdTargetingService _adTargetingService = AdTargetingService();
@@ -20,6 +21,7 @@ class ActiveAdsService {
 
   /// Fetch all active ads from backend
   /// Optionally pass contextual signals to improve targeting
+  @override
   Future<Map<String, List<Map<String, dynamic>>>> fetchActiveAds({
     String? videoCategory,
     List<String>? videoTags,
@@ -388,6 +390,7 @@ class ActiveAdsService {
   }
 
   /// Track ad impression
+  @override
   Future<bool> trackImpression(String adId) async {
     try {
       AppLogger.log('📊 ActiveAdsService: Tracking impression for ad: $adId');
@@ -408,6 +411,7 @@ class ActiveAdsService {
   }
 
   /// Track ad click
+  @override
   Future<bool> trackClick(String adId, {String? userId}) async {
     try {
       AppLogger.log('🖱️ ActiveAdsService: Tracking click for ad: $adId');
@@ -432,6 +436,7 @@ class ActiveAdsService {
   }
 
   /// **NEW: Clear ads cache when ads are deleted**
+  @override
   Future<void> clearAdsCache() async {
     try {
       AppLogger.log('🧹 ActiveAdsService: Clearing ads cache...');

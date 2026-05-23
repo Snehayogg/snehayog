@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 
@@ -41,7 +40,7 @@ class AppInitializationManager {
   bool hasInitialVideosMore = false;
   
   // **NEW: Completer for background fetch synchronization**
-  Completer<List<VideoModel>?> _backgroundFetchCompleter = Completer<List<VideoModel>?>();
+  final Completer<List<VideoModel>?> _backgroundFetchCompleter = Completer<List<VideoModel>?>();
   Future<List<VideoModel>?> get backgroundFetchFuture => _backgroundFetchCompleter.future;
 
   // **NEW: Track if a forced update is required**

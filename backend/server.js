@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -108,14 +111,23 @@ const startServer = async () => {
 // Start the application
 if (process.env.NODE_ENV !== 'test') {
   startServer().then(() => {
-    // Start background video worker in same process for better reliability on Fly.io
-    if (process.env.FLY_APP_NAME || process.env.NODE_ENV === 'production') {
+    // Start background video worker in same process if not explicitly disabled
+    const shouldRunIntegratedWorker = (process.env.FLY_APP_NAME || process.env.NODE_ENV === 'production') &&
+                                     process.env.DISABLE_INTEGRATED_WORKER !== 'true';
+    if (shouldRunIntegratedWorker) {
       console.log('🎬 Starting integrated Video Worker...');
       import('./workers/videoWorker.js').catch(err => {
         console.error('❌ Failed to start integrated Video Worker:', err);
       });
+    } else {
+      console.log('ℹ️ Integrated Video Worker is disabled (running in decoupled worker process).');
     }
   });
+} else {
+  // In test mode, initialize loaders so supertest has access to all registered routes
+  console.log('🧪 Test Mode: Initializing Express loaders in-memory...');
+  await loaders({ expressApp: app });
+  console.log('✅ Test Mode: Express loaders initialized');
 }
 
 export default app;

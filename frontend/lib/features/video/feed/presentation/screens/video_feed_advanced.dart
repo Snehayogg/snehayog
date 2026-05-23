@@ -60,10 +60,14 @@ import 'package:vayug/features/video/core/data/services/video_cache_proxy_servic
 import 'package:vayug/shared/services/local_gallery_service.dart';
 import 'package:vayug/features/video/edit/presentation/screens/edit_video_details.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
+import 'package:vayug/core/interfaces/i_dubbing_service.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayug/features/video/dubbing/data/services/on_device_dubbing_service.dart';
 import 'package:vayug/shared/widgets/vayu_snackbar.dart';
 import 'package:vayug/features/video/core/presentation/widgets/quiz_overlay.dart';
+import 'package:vayug/features/ads/domain/i_ad_service.dart';
+import 'package:vayug/core/interfaces/i_quiz_engine.dart';
+import 'package:vayug/features/video/quiz/data/services/standard_quiz_engine.dart';
 
 part 'video_feed_advanced/video_feed_advanced_state_fields.dart';
 part 'video_feed_advanced/video_feed_advanced_playback.dart';
@@ -88,6 +92,9 @@ class VideoFeedAdvanced extends ConsumerStatefulWidget {
   final String? videoType;
   final bool isMainYugTab; // **NEW: Flag to identify the primary Yug feed**
   final int? parentTabIndex; // **NEW: Tab index where this feed resides (0 for Yug, 1 for Vayu, etc.)**
+  final IDubbingService? dubbingService;
+  final IAdService? adService;
+  final IQuizEngine? quizEngine;
 
   const VideoFeedAdvanced({
     Key? key,
@@ -97,6 +104,9 @@ class VideoFeedAdvanced extends ConsumerStatefulWidget {
     this.videoType,
     this.isMainYugTab = false, // **NEW: Flag to identify the primary Yug feed**
     this.parentTabIndex,
+    this.dubbingService,
+    this.adService,
+    this.quizEngine,
   }) : super(key: key);
 
   @override
@@ -666,9 +676,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       widget.initialVideoId != null && widget.initialVideos == null;
 
   bool _shouldAutoplayForContext(String reason) {
-    // **LAYER 1: Visibility Gate (Logic)**
-    
-    // 1. Tab-Active Guard: If tab is hidden, NEVER play audio
+    // 1. Tab-Active Guard: If tab is hidden, NEVER play audio/video
     if (widget.parentTabIndex != null) {
       final currentTabIndex = _mainController?.currentIndex ?? 0;
       if (currentTabIndex != widget.parentTabIndex) {
@@ -680,29 +688,43 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
 
-    // 2. Lifecycle Guard: Foreground only
+    // Additional safeguard for main feed tabs
+    if ((_mainController?.currentIndex != 0) && widget.parentTabIndex == null) {
+      AppLogger.log('🚫 AUTOPLAY[$reason]: Yug feed not active');
+      return false;
+    }
+
+    // **LAYER 2: Priority/Bypass Logic**
+    // If opened from profile or deep link, we should always allow autoplay (bypassing visibility/route gates)
+    if (_openedFromProfile || _openedFromDeepLink) {
+      // Still respect lifecycle guard to avoid background audio when app is minimized
+      if (!_allowAutoplay(reason)) {
+        AppLogger.log('🚫 AUTOPLAY[$reason]: blocked by app lifecycle (profile/deeplink)');
+        return false;
+      }
+      return true; 
+    }
+
+    // **LAYER 3: Visibility Gate (Logic)**
+    
+    // 1. Lifecycle Guard: Foreground only
     if (!_allowAutoplay(reason)) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: blocked by app lifecycle');
       return false;
     }
 
-    // 3. Navigation Route Guard: Top-most screen only
+    // 2. Navigation Route Guard: Top-most screen only
     final bool isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
     if (!isCurrentRoute) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: route obscured (isCurrent=false)');
       return false;
     }
     
-    // 4. Auth Loading Guard
+    // 3. Auth Loading Guard
     final authController = ref.read(googleSignInProvider);
     if (authController.isLoading) {
       AppLogger.log('🚫 AUTOPLAY[$reason]: Auth is loading');
       return false;
-    }
-
-    // **LAYER 2: Priority/Bypass Logic**
-    if (_openedFromProfile || _openedFromDeepLink) {
-      return true; // These already passed the route and tab visibility gates above
     }
 
     // 4. Component Visibility Guard
@@ -711,11 +733,6 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       return false;
     }
 
-    // Additional safeguard for main feed tabs
-    if ((_mainController?.currentIndex != 0) && widget.parentTabIndex == null) {
-      AppLogger.log('🚫 AUTOPLAY[$reason]: Yug feed not active');
-      return false;
-    }
     return true;
   }
 
@@ -1118,7 +1135,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
         _userPaused[videoId] = false; // hide when playing
         _userPausedVN[videoId]?.value = false;
         _hideLongPressAdOverlay();
-        _hidePauseAdOverlay(); // **NEW: Hide pause ad when video plays**
+        _hidePauseAdOverlay(videoId: videoId); // **NEW: Hide pause ad when video plays**
 
         _lifecyclePaused = false;
 
@@ -1690,10 +1707,18 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _poolDisposalSubscription?.cancel();
     _longPressAdAutoHideTimer?.cancel();
     
-    _dubbingSubscriptions.values.forEach((s) => s.cancel());
-    _preloadDebounceTimers.values.forEach((timer) => timer.cancel());
-    _bufferingTimers.values.forEach((timer) => timer.cancel());
-    _forceShowOverlayTimers.values.forEach((timer) => timer.cancel());
+    for (var s in _dubbingSubscriptions.values) {
+      s.cancel();
+    }
+    for (var timer in _preloadDebounceTimers.values) {
+      timer.cancel();
+    }
+    for (var timer in _bufferingTimers.values) {
+      timer.cancel();
+    }
+    for (var timer in _forceShowOverlayTimers.values) {
+      timer.cancel();
+    }
 
     // **3. STOP & DISPOSE TRACKERS & MANAGERS**
     _viewTracker.dispose();
@@ -1800,7 +1825,11 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
     _forceShowOverlayVN.clear();
 
     _showLongPressAdOverlayVN.dispose();
-    _showPauseAdOverlayVN.dispose();
+
+    for (final notifier in _showPauseAdOverlayPerVideoVN.values) {
+      notifier.dispose();
+    }
+    _showPauseAdOverlayPerVideoVN.clear();
 
     // DISPOSE PAGE CONTROLLERS LAST
     _pageController.dispose();
@@ -1945,7 +1974,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       );
 
       if (cancel == true) {
-        _onDeviceDubbingService.cancelDubbing(video.videoUrl);
+        _dubbingService.cancelDubbing(video.id, video.videoUrl);
         _dubbingSubscriptions[videoId]?.cancel();
         resultVN.value = const DubbingResult(status: DubbingStatus.idle);
         if (mounted) VayuSnackBar.showInfo(context, 'Dubbing cancelled.');
@@ -1957,7 +1986,7 @@ class _VideoFeedAdvancedState extends ConsumerState<VideoFeedAdvanced>
       const SnackBar(content: Text('Dubbing started it takes time..')),
     );
 
-    final sub = _onDeviceDubbingService.dubLocalVideo(video.videoUrl).listen((result) {
+    final sub = _dubbingService.dubVideo(video.id, video.videoUrl).listen((result) {
       if (!mounted) return;
       resultVN.value = result;
 

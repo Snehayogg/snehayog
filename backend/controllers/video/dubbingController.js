@@ -90,3 +90,42 @@ export const translateText = async (req, res) => {
     res.status(500).json({ error: 'Translation failed', details: error.message });
   }
 };
+
+import { HuggingFaceAIEngine } from '../../services/aiService/HuggingFaceAIEngine.js';
+import { OpenAIAIEngine } from '../../services/aiService/OpenAIAIEngine.js';
+
+export const getActiveAIEngine = async (req, res) => {
+  try {
+    const engine = AIService.getAIEngine();
+    res.json({
+      success: true,
+      activeEngine: engine.constructor.name,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve active AI Engine', details: error.message });
+  }
+};
+
+export const setActiveAIEngine = async (req, res) => {
+  try {
+    const { provider } = req.body;
+    if (!provider) {
+      return res.status(400).json({ error: 'Provider is required' });
+    }
+
+    if (provider.toLowerCase() === 'openai') {
+      AIService.setAIEngine(new OpenAIAIEngine());
+    } else if (provider.toLowerCase() === 'huggingface' || provider.toLowerCase() === 'hf') {
+      AIService.setAIEngine(new HuggingFaceAIEngine());
+    } else {
+      return res.status(400).json({ error: 'Unsupported provider. Choose "openai" or "huggingface"' });
+    }
+
+    res.json({
+      success: true,
+      activeEngine: AIService.getAIEngine().constructor.name,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to swap AI Engine', details: error.message });
+  }
+};

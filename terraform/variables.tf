@@ -41,3 +41,9 @@ variable "redis_url" {
   type        = string
   sensitive   = true
 }
+
+variable "fly_api_token" {
+  description = "Fly.io API deployment token"
+  type        = string
+  sensitive   = true
+}

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:vayug/shared/widgets/interactive_scale_button.dart';
-import 'dart:ui';
 
 class VayuPlayerOverlay extends StatelessWidget {
   final VideoPlayerController? controller;

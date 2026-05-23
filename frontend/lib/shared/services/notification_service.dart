@@ -23,6 +23,11 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
+  static final StreamController<RemoteMessage> _messageStreamController =
+      StreamController<RemoteMessage>.broadcast();
+  static Stream<RemoteMessage> get onMessageStream =>
+      _messageStreamController.stream;
+
   FirebaseMessaging? _messaging;
   String? _fcmToken;
   bool _initialized = false;
@@ -90,6 +95,9 @@ class NotificationService {
 
         // Show a local notification when app is in foreground
         await _showLocalNotification(message);
+
+        // Add message to stream
+        _messageStreamController.add(message);
       });
 
       // Handle notification taps when app is in background

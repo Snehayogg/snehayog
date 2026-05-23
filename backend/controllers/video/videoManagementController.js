@@ -7,6 +7,7 @@ import redisService from '../../services/caching/redisService.js';
 import { invalidateCache, VideoCacheKeys } from '../../middleware/cacheMiddleware.js';
 import { logger } from '../../middleware/traceMiddleware.js';
 import { serializeVideo } from '../../utils/serializers/videoSerializer.js';
+import queueService from '../../services/yugFeedServices/queueService.js';
 
 /**
  * **Update Video Metadata**
@@ -231,6 +232,9 @@ export const deleteVideo = async (req, res) => {
     await Video.findByIdAndDelete(videoId);
     await User.findByIdAndUpdate(user._id, { $pull: { videos: videoId } });
 
+    // Clean up queue jobs
+    await queueService.removeVideoJob(videoId);
+
     if (redisService.getConnectionStatus()) {
       await invalidateCache([
         'videos:feed:*', 
@@ -270,6 +274,13 @@ export const bulkDeleteVideos = async (req, res) => {
     await User.findByIdAndUpdate(user._id, { 
       $pull: { videos: { $in: objectIds } } 
     });
+
+    // Clean up queue jobs for all deleted videos
+    try {
+      await Promise.all(videoIds.map(id => queueService.removeVideoJob(id)));
+    } catch (err) {
+      console.error('❌ Failed to clean up bulk queue jobs:', err);
+    }
 
     if (redisService.getConnectionStatus()) {
       const patterns = [

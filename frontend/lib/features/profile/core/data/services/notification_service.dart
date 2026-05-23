@@ -9,6 +9,7 @@ class NotificationService implements INotificationService {
   final AuthService _authService = AuthService();
 
   /// Send a direct alert to subscribers (Creator Only)
+  @override
   Future<Map<String, dynamic>> sendCreatorAlert({
     required String message,
     String? title,
@@ -46,6 +47,7 @@ class NotificationService implements INotificationService {
   }
 
   /// Update notification preferences (Global or Creator-specific)
+  @override
   Future<Map<String, dynamic>> updatePreferences({
     bool? globalEnabled,
     String? disabledCreatorId,
@@ -80,6 +82,7 @@ class NotificationService implements INotificationService {
   }
 
   /// Get analytics for creator alerts
+  @override
   Future<Map<String, dynamic>> getCreatorAlertStats() async {
     try {
       final token = (await _authService.getUserData())?['token'];

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:vayug/features/auth/data/services/authservices.dart';
+import 'package:vayug/core/interfaces/i_auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 
 class GoogleSignInController extends ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final IAuthService _authService;
   bool _isLoading = false;
   String? _error;
   Map<String, dynamic>? _userData;
@@ -20,7 +21,7 @@ class GoogleSignInController extends ChangeNotifier {
     await _initInBackground();
   }
 
-  GoogleSignInController() {
+  GoogleSignInController({IAuthService? authService}) : _authService = authService ?? AuthService() {
     // **OPTIMIZED: Don't block UI during initialization**
     _initInBackground();
   }

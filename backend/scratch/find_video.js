@@ -5,9 +5,8 @@ dotenv.config();
 
 async function check() {
   await mongoose.connect(process.env.MONGO_URI);
-  const id = '69de58b0ca9b0dbe2b4d95b5'; // From screenshot
-  const video = await Video.findById(id);
-  console.log('Video found:', video ? video.videoName : 'NOT FOUND');
+  const videos = await Video.find({}).sort({ uploadedAt: -1 }).limit(10).select('videoName processingStatus uploadedAt').lean();
+  console.log('Last 10 Videos:', JSON.stringify(videos, null, 2));
   process.exit(0);
 }
 

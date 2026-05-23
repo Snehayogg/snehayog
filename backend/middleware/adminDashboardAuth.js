@@ -3,7 +3,33 @@ export const requireAdminDashboardKey = (req, res, next) => {
   const providedKey =
     req.headers['x-admin-key'] || req.query.adminKey || req.query.apiKey;
 
-  if (!adminKey) {
+  // Helper to trim and clean keys (removes surrounding quotes and whitespace/carriage returns)
+  const cleanKey = (key) => {
+    if (!key || typeof key !== 'string') return '';
+    let cleaned = key.trim();
+    // Strip surrounding double quotes
+    if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+      cleaned = cleaned.slice(1, -1);
+    }
+    // Strip surrounding single quotes
+    if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+      cleaned = cleaned.slice(1, -1);
+    }
+    return cleaned.trim();
+  };
+
+  const cleanedAdminKey = cleanKey(adminKey);
+  const cleanedProvidedKey = cleanKey(providedKey);
+
+  console.log('🔑 Admin Dashboard Auth Attempt:', {
+    hasAdminKey: !!adminKey,
+    cleanedAdminKeyLength: cleanedAdminKey.length,
+    hasProvidedKey: !!providedKey,
+    cleanedProvidedKeyLength: cleanedProvidedKey.length,
+    match: cleanedAdminKey === cleanedProvidedKey && cleanedAdminKey !== ''
+  });
+
+  if (!cleanedAdminKey) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn(
         '⚠️ ADMIN_DASHBOARD_KEY is not set. Allowing access because NODE_ENV is not production.'
@@ -19,7 +45,7 @@ export const requireAdminDashboardKey = (req, res, next) => {
       .json({ error: 'Admin dashboard access not configured' });
   }
 
-  if (providedKey && providedKey === adminKey) {
+  if (cleanedProvidedKey && cleanedProvidedKey === cleanedAdminKey) {
     return next();
   }
 

@@ -5,7 +5,8 @@ import {
   logout, 
   logoutAllDevices, 
   getActiveSessions,
-  checkDeviceId 
+  checkDeviceId,
+  recoverSession
 } from '../controllers/authController.js';
 import { authLimiter, refreshLimiter } from '../middleware/rateLimiter.js';
 import { verifyToken } from '../utils/verifytoken.js';
@@ -19,6 +20,9 @@ const router = express.Router();
 // Google Sign-In (first-time login / re-authentication)
 router.post('/', authLimiter, googleSignIn);
 router.post('/google', authLimiter, googleSignIn);
+
+// Silent session recovery using Google Refresh Token (Tier 4)
+router.post('/recover-session', authLimiter, recoverSession);
 
 // Device Auto-Login (after app reinstall)
 // router.post('/device-login', authLimiter, deviceLogin);

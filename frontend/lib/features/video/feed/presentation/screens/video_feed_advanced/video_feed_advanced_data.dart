@@ -386,27 +386,44 @@ extension _VideoFeedDataOperations on _VideoFeedAdvancedState {
   Future<void> refreshVideos() async {
     if (_isLoading || _isRefreshing) return;
     await _stopAllVideosAndClearControllers();
-    _isRefreshing = true;
-    try {
-      if (mounted) {
+    
+    if (mounted) {
+      safeSetState(() {
+        _isRefreshing = true;
         _isLoading = true;
-        _errorMessage = null;
-      }
+        // Keep _errorMessage intact so we stay on the error screen,
+        // displaying the loading spinner on the Retry button!
+      });
+    }
+
+    try {
       _currentPage = 1;
       _nextCursor = null; // Reset cursor for fresh start
       await _loadVideos(
           page: 1, append: false, clearSession: true, forceResetIndex: true);
+      
       if (mounted) {
-        _isLoading = false;
-        _errorMessage = null;
+        safeSetState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+          _errorMessage = null;
+        });
       }
     } catch (e) {
       if (mounted) {
-        _isLoading = false;
-        _errorMessage = e.toString();
+        safeSetState(() {
+          _isLoading = false;
+          _isRefreshing = false;
+          _errorMessage = e.toString();
+        });
       }
     } finally {
-      _isRefreshing = false;
+      if (mounted) {
+        safeSetState(() {
+          _isRefreshing = false;
+          _isLoading = false;
+        });
+      }
     }
   }
 

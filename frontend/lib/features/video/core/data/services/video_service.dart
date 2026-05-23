@@ -252,6 +252,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Toggle like for a video (like/unlike)**
+  @override
   Future<VideoModel> toggleLike(String videoId) async {
     // **CONNECTIVITY CHECK: Verify internet before like operation**
     final hasInternet = await ConnectivityService.hasInternetConnection();
@@ -400,6 +401,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Toggle save (bookmark) for a video**
+  @override
   Future<bool> toggleSave(String videoId) async {
     final hasInternet = await ConnectivityService.hasInternetConnection();
     if (!hasInternet) {
@@ -550,6 +552,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Get user videos**
+  @override
   Future<List<VideoModel>> getUserVideos(String userId,
       {bool forceRefresh = false,
       int page = 1,
@@ -678,6 +681,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Upload video with compression and validation**
+  @override
   Future<Map<String, dynamic>> uploadVideo({
     required File videoFile,
     required String title,
@@ -1059,6 +1063,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Delete video**
+  @override
   Future<bool> deleteVideo(String videoId) async {
     try {
       AppLogger.log('🗑️ VideoService: Attempting to delete video: $videoId');
@@ -1097,6 +1102,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Delete multiple videos (Bulk Deletion)**
+  @override
   Future<int> deleteVideos(List<String> videoIds) async {
     if (videoIds.isEmpty) return 0;
 
@@ -1150,6 +1156,7 @@ class VideoService implements IVideoService {
   }
 
   /// **Get video processing status**
+  @override
   Future<Map<String, dynamic>?> getVideoProcessingStatus(String videoId) async {
     try {
       AppLogger.log(

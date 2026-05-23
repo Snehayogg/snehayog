@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vayug/features/ads/presentation/widgets/banner_ad_widget.dart';
+import 'package:vayug/features/ads/domain/i_ad_service.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 
 /// Banner Ad Section Widget
@@ -10,6 +11,7 @@ class BannerAdSection extends StatefulWidget {
   final Future<void> Function()? onImpression;
   final VoidCallback? onVideoPause;
   final VoidCallback? onVideoResume;
+  final IAdService? adService;
 
   const BannerAdSection({
     Key? key,
@@ -18,6 +20,7 @@ class BannerAdSection extends StatefulWidget {
     this.onImpression,
     this.onVideoPause,
     this.onVideoResume,
+    this.adService,
   }) : super(key: key);
 
   @override
@@ -62,6 +65,7 @@ class _BannerAdSectionState extends State<BannerAdSection> {
       onAdImpression: () async => await widget.onImpression?.call(),
       onVideoPause: widget.onVideoPause,
       onVideoResume: widget.onVideoResume,
+      adService: widget.adService,
     );
   }
 }

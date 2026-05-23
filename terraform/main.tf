@@ -37,5 +37,9 @@ terraform {
       source  = "upstash/upstash"
       version = "~> 1.4.0"
     }
+    fly = {
+      source  = "fly-apps/fly"
+      version = "~> 0.0.23"
+    }
   }
 }

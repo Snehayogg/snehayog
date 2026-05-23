@@ -92,6 +92,28 @@ class ProfileStateManager extends ChangeNotifier {
     return upiId != null && upiId.toString().trim().isNotEmpty;
   }
 
+  String get upiId {
+    final data = userData;
+    if (data == null) return '';
+    final paymentDetails = data['paymentDetails'];
+    if (paymentDetails == null) return '';
+    return paymentDetails['upiId']?.toString().trim() ?? '';
+  }
+
+  String get maskedUpiId {
+    final upi = upiId;
+    if (upi.isEmpty) return '';
+    final parts = upi.split('@');
+    if (parts.length < 2) {
+      if (upi.length > 4) {
+        return '${upi.substring(0, 4)}•••';
+      }
+      return '$upi•••';
+    }
+    final handle = parts[0];
+    return '$handle@•••';
+  }
+
   double get cachedEarnings => statsManager.cachedEarnings;
   bool get isEarningsLoading => statsManager.isEarningsLoading;
   List<dynamic> get creatorAlertStats => statsManager.creatorAlertStats;

@@ -26,22 +26,33 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
         final bool isCurrentlyVisible = visibleFraction > 0;
         _handleVisibilityChange(isCurrentlyVisible);
       },
-      child: RefreshIndicator(
-        onRefresh: refreshVideos,
-        child: PageView.builder(
-          controller: _pageController,
-          scrollDirection: Axis.vertical,
-          onPageChanged: _onPageChanged,
-          itemCount: _getTotalItemCount(),
-          itemBuilder: (context, index) {
-            return _buildFeedItem(index);
-          },
-        ),
-      ),
+      child: _openedFromProfile
+          ? PageView.builder(
+              controller: _pageController,
+              scrollDirection: Axis.vertical,
+              onPageChanged: _onPageChanged,
+              itemCount: _getTotalItemCount(),
+              itemBuilder: (context, index) {
+                return _buildFeedItem(index);
+              },
+            )
+          : RefreshIndicator(
+              onRefresh: refreshVideos,
+              child: PageView.builder(
+                controller: _pageController,
+                scrollDirection: Axis.vertical,
+                onPageChanged: _onPageChanged,
+                itemCount: _getTotalItemCount(),
+                itemBuilder: (context, index) {
+                  return _buildFeedItem(index);
+                },
+              ),
+            ),
     );
   }
 
   Widget _buildErrorState() {
+    final bool isRefreshingOrLoading = _isLoading || _isRefreshing;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -72,9 +83,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           AppSpacing.vSpace24,
           AppButton(
             onPressed: refreshVideos,
-            icon: const Icon(Icons.refresh),
+            icon: isRefreshingOrLoading ? null : const Icon(Icons.refresh),
             label: 'Retry',
             variant: AppButtonVariant.primary,
+            isLoading: isRefreshingOrLoading,
           ),
           AppSpacing.vSpace12,
           AppButton(
@@ -82,6 +94,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
             icon: const Icon(Icons.wifi_find),
             label: 'Test Connection',
             variant: AppButtonVariant.secondary,
+            isDisabled: isRefreshingOrLoading,
           ),
         ],
       ),
@@ -200,6 +213,9 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
   }
 
   int _getTotalItemCount() {
+    if (_openedFromProfile) {
+      return _videos.length;
+    }
     // **FIXED: Always add THREE extra items (buffer) to allow scrolling past end**
     // This solves "Blocked Scrolling" issue when next video isn't ready.
     // User can drag into these placeholders, triggering the loader.
@@ -713,12 +729,12 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
               ),
             ),
 
-            // **PAUSE AD: Allow taps to trigger ad actions or resume video**
+            // **PAUSE AD: Attached per-video so it scrolls with the video**
             Positioned.fill(
               child: ValueListenableBuilder<bool>(
-                valueListenable: _showPauseAdOverlayVN,
+                valueListenable: _getOrCreateNotifier<bool>(_showPauseAdOverlayPerVideoVN, videoId, false),
                 builder: (context, showOverlay, _) {
-                  if (!showOverlay || index != _currentIndex) {
+                  if (!showOverlay) {
                     return const SizedBox.shrink();
                   }
                   return _buildLongPressAdContent(index, isPauseAd: true);
@@ -885,6 +901,7 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
     // BannerAdSection will try AdMob first, then fallback to custom ads
     return BannerAdSection(
       adData: adDataWithVideoId, // **FIXED: Pass custom ad data for fallback**
+      adService: _activeAdsService,
       onVideoPause: () {
         // Pause the currently playing video while the browser is open
         final videoId = index < _videos.length ? _videos[index].id : null;
@@ -1225,10 +1242,19 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                 // **FIX: Reserve dynamic space for right-side action column**
                 // Prevents "Right overflowed by X pixels" on some devices.
                 right: _secondaryActionHitTargetSize + 40,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(
-                      12, 8, 12, 4), // **FIX: Tighter bottom padding**
-                  child: Column(
+                child: ValueListenableBuilder<QuizModel?>(
+                  valueListenable: _activeQuizVN,
+                  builder: (context, activeQuiz, _) {
+                    final bool isQuizVisible = activeQuiz != null && index == _currentIndex;
+                    return AnimatedOpacity(
+                      duration: const Duration(milliseconds: 250),
+                      opacity: isQuizVisible ? 0.0 : 1.0,
+                      child: IgnorePointer(
+                        ignoring: isQuizVisible,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(
+                              12, 8, 12, 4), // **FIX: Tighter bottom padding**
+                          child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1386,6 +1412,10 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                   ),
                 ),
               ),
+            );
+          },
+        ),
+      ),
               Positioned(
                 right: 12,
                 bottom:
@@ -1463,92 +1493,117 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
           return overlayContent;
         }
 
-        return Stack(
-          children: [
-            ValueListenableBuilder<QuizModel?>(
-              valueListenable: _activeQuizVN,
-              builder: (context, activeQuiz, _) {
-                // If quiz is active, hide the rest of the overlay for clean UI
-                final bool hideOverlayForQuiz = activeQuiz != null;
+        return ValueListenableBuilder<QuizModel?>(
+          valueListenable: _activeQuizVN,
+          builder: (context, activeQuiz, _) {
+            final bool isQuizVisible = activeQuiz != null && index == _currentIndex;
 
-                return Stack(
-                  children: [
-                    ValueListenableBuilder<bool>(
-                      valueListenable: forceShowNotifier,
-                      builder: (context, forceShow, _) {
-                        // **CRASH-PROOF: Sequential safety check**
-                        if (!sharedPool.isControllerValid(controller)) {
-                          Future.microtask(() {
-                            if (mounted) {
-                              _getController(index);
-                              safeSetState(() {});
-                            }
-                          });
-                          return overlayContent;
-                        }
+            return ValueListenableBuilder<bool>(
+              valueListenable: forceShowNotifier,
+              builder: (context, forceShow, _) {
+                // **CRASH-PROOF: Sequential safety check**
+                if (!sharedPool.isControllerValid(controller)) {
+                  Future.microtask(() {
+                    if (mounted) {
+                      _getController(index);
+                      safeSetState(() {});
+                    }
+                  });
+                  return overlayContent;
+                }
 
-                        return ListenableBuilder(
-                          listenable: controller,
-                          builder: (context, child) {
-                            try {
-                              if (sharedPool.isControllerDisposed(controller)) {
-                                return child!;
-                              }
-                              
-                              final value = controller.value;
-                              final bool isPlaying = value.isPlaying;
-                              
-                              // Show overlay if force-showing OR if paused
-                              // BUT hide it if a quiz is currently active!
-                              final bool shouldShow = (forceShow || !isPlaying) && !hideOverlayForQuiz;
-                              
-                              return AnimatedOpacity(
-                                opacity: shouldShow ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                                child: IgnorePointer(
-                                  ignoring: !shouldShow,
-                                  child: child,
-                                ),
-                              );
-                            } catch (e) {
-                              return child!;
-                            }
-                          },
+                return ListenableBuilder(
+                  listenable: controller,
+                  builder: (context, _) {
+                    try {
+                      if (sharedPool.isControllerDisposed(controller)) {
+                        return overlayContent;
+                      }
+
+                      final value = controller.value;
+                      final bool isPlaying = value.isPlaying;
+
+                      // If quiz is visible, only hide overlay when video is playing.
+                      // If video is paused, we want all the action buttons to appear!
+                      final bool hideOverlayForQuiz = isQuizVisible && isPlaying;
+                      final bool shouldShow = (forceShow || !isPlaying) && !hideOverlayForQuiz;
+
+                      Widget contentWithVisibility = AnimatedOpacity(
+                        opacity: shouldShow ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        child: IgnorePointer(
+                          ignoring: !shouldShow,
                           child: overlayContent,
-                        );
-                      },
-                    ),
-                    // Quiz Overlay positioned at the bottom, above progress bar
-                    if (activeQuiz != null && index == _currentIndex)
-                      Positioned(
-                        bottom: bottomPadding + 20,
-                        left: 16,
-                        right: 16,
-                        child: QuizOverlay(
-                          quiz: activeQuiz,
-                          onDismiss: () => _activeQuizVN.value = null,
-                          onBack: () {
-                            final String videoId = _videos[index].id;
-                            final history = _quizHistoryPerVideo[videoId];
-                            if (history != null && history.length > 1) {
-                              history.removeLast(); // Remove current
-                              _activeQuizVN.value = history.last; // Show previous
-                            }
-                          },
-                          onAnswered: (int answerIndex) {
-                            AppLogger.log('📝 YugFeed: Quiz answered: $answerIndex');
-                          },
                         ),
-                      ),
-                  ],
+                      );
+
+                      // Compact state when video is paused (to prevent overlapping the vertical actions bar on the right side)
+                      final bool isCompact = !isPlaying;
+                      
+                      final double targetBottom = isQuizVisible 
+                          ? bottomPadding + (isCompact ? 10.0 : 20.0) 
+                          : bottomPadding + 16.0;
+
+                      final double targetRight = isCompact ? 80.0 : 16.0;
+
+                      return Stack(
+                        children: [
+                          contentWithVisibility,
+
+                          // Unified Quiz & CTA Column positioned reactively at the bottom
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.fastOutSlowIn,
+                            left: 16,
+                            right: targetRight,
+                            bottom: targetBottom,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch, // Matches both widths perfectly!
+                              children: [
+                                if (video.link?.isNotEmpty == true)
+                                  AppButton(
+                                    label: 'Visit Now',
+                                    onPressed: () => _handleVisitNow(video),
+                                    icon: const Icon(Icons.open_in_new, size: 14, color: AppColors.white),
+                                    variant: AppButtonVariant.secondary,
+                                    size: AppButtonSize.small,
+                                  ),
+                                if (isQuizVisible) ...[
+                                  const SizedBox(height: 12.0),
+                                  QuizOverlay(
+                                    quiz: activeQuiz,
+                                    isCompact: isCompact, // Set compact mode
+                                    onDismiss: () => _activeQuizVN.value = null,
+                                    onBack: () {
+                                      final String videoId = video.id;
+                                      _quizEngine.removeLastHistory(videoId);
+                                      final history = _quizEngine.getHistory(videoId);
+                                      if (history.isNotEmpty) {
+                                        _activeQuizVN.value = history.last;
+                                      } else {
+                                        _activeQuizVN.value = null;
+                                      }
+                                    },
+                                    onAnswered: (int answerIndex) {
+                                      _quizEngine.submitAnswer(video.id, activeQuiz, answerIndex);
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    } catch (e) {
+                      return overlayContent;
+                    }
+                  },
                 );
               },
-            ),
-            // **Visit Now button remains visible outside AnimatedOpacity**
-            Positioned(left: 0, bottom: 0, child: visitNowButton),
-
-          ],
+            );
+          },
         );
       },
     );
@@ -1623,17 +1678,19 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
                     return !isLiked;
                   },
                 ),
-                AppSpacing.vSpace4,
-                Text(
-                  _formatCount(likeCount),
-                  style: TextStyle(
-                    color: AppColors.white,
-                    fontSize: AppTypography.fontSizeSM,
-                    fontWeight: AppTypography.weightMedium,
+                if (widget.videoType != 'yog') ...[
+                  AppSpacing.vSpace4,
+                  Text(
+                    _formatCount(likeCount),
+                    style: TextStyle(
+                      color: AppColors.white,
+                      fontSize: AppTypography.fontSizeSM,
+                      fontWeight: AppTypography.weightMedium,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
               ],
             );
           },
@@ -1861,13 +1918,24 @@ extension _VideoFeedUI on _VideoFeedAdvancedState {
 
   /// **PAUSE AD: Show ad on pause — no auto-hide, hides only when video plays**
   void _showPauseAd(int index) {
+    if (index >= _videos.length) return;
     final carouselAd = _carouselAdManager.getCarouselAdForIndex(index);
     if (carouselAd == null || carouselAd.slides.isEmpty) return;
-    _showPauseAdOverlayVN.value = true;
+    final videoId = _videos[index].id;
+    _getOrCreateNotifier<bool>(_showPauseAdOverlayPerVideoVN, videoId, false).value = true;
   }
 
-  void _hidePauseAdOverlay() {
-    _showPauseAdOverlayVN.value = false;
+  void _hidePauseAdOverlay({String? videoId}) {
+    // If a specific videoId is provided, hide only that video's pause ad
+    if (videoId != null) {
+      _showPauseAdOverlayPerVideoVN[videoId]?.value = false;
+      return;
+    }
+    // Fallback: Hide the pause ad for the currently active video
+    if (_currentIndex < _videos.length) {
+      final activeVideoId = _videos[_currentIndex].id;
+      _showPauseAdOverlayPerVideoVN[activeVideoId]?.value = false;
+    }
   }
 
   Widget _buildLongPressAdContent(int index, {bool isPauseAd = false}) {

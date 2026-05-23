@@ -486,7 +486,7 @@ class ProfileDialogsWidget {
             icon: Icons.info_outline_rounded,
             url: 'https://snehayog.site/about.html',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
         ],
       ),
     );
@@ -535,6 +535,19 @@ class ProfileDialogsWidget {
         VayuSnackBar.showError(context, 'An error occurred while opening the link.');
       }
     }
+  }
+
+  static String _maskUpiId(String upi) {
+    if (upi.isEmpty) return '';
+    final parts = upi.split('@');
+    if (parts.length < 2) {
+      if (upi.length > 4) {
+        return '${upi.substring(0, 4)}•••';
+      }
+      return '$upi•••';
+    }
+    final handle = parts[0];
+    return '$handle@•••';
   }
 
   static Future<void> showHowToEarnDialog(
@@ -610,7 +623,7 @@ class ProfileDialogsWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              currentUpi,
+                              _maskUpiId(currentUpi),
                               style: const TextStyle(
                                 fontSize: 15,
                                 color: AppColors.textSecondary,

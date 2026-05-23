@@ -130,31 +130,16 @@ router.post('/impressions/banner', async (req, res) => {
         });
       }
 
-      // Prevent duplicate impressions from same user within 1 hour
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      
-      const existingImpression = await AdImpression.findOne({
+      // Create new impression record
+      await AdImpression.create({
         videoId: videoId,
         adId: adId,
         userId: normalizedUserId,
-        timestamp: { $gte: oneHourAgo }
+        creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
+        adType: 'banner',
+        impressionType: 'view',
+        timestamp: new Date()
       });
-
-      if (!existingImpression) {
-        // Create new impression record
-        await AdImpression.create({
-          videoId: videoId,
-          adId: adId,
-          userId: normalizedUserId,
-          creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
-          adType: 'banner',
-          impressionType: 'view',
-          timestamp: new Date()
-        });
-        // console.log(`✅ Video-specific banner impression tracked: Video ${videoId}, Ad ${adId}`);
-      } else {
-        // console.log(`⚠️ Duplicate impression prevented: Video ${videoId}, Ad ${adId}`);
-      }
     } catch (impressionError) {
       // Log error but don't fail the request
       console.error('⚠️ Error creating impression record:', impressionError);
@@ -231,31 +216,16 @@ router.post('/impressions/carousel', async (req, res) => {
         });
       }
 
-      // Prevent duplicate impressions from same user within 1 hour
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      
-      const existingImpression = await AdImpression.findOne({
+      // Create new impression record
+      await AdImpression.create({
         videoId: videoId,
         adId: adId,
         userId: normalizedUserId,
-        timestamp: { $gte: oneHourAgo }
+        creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
+        adType: 'carousel',
+        impressionType: 'scroll_view',
+        timestamp: new Date()
       });
-
-      if (!existingImpression) {
-        // Create new impression record
-        await AdImpression.create({
-          videoId: videoId,
-          adId: adId,
-          userId: normalizedUserId,
-          creatorId: creatorId, // **NEW: Save creatorId for fast lookup**
-          adType: 'carousel',
-          impressionType: 'scroll_view',
-          timestamp: new Date()
-        });
-        console.log(`✅ Video-specific carousel impression tracked: Video ${videoId}, Ad ${adId}`);
-      } else {
-        console.log(`⚠️ Duplicate impression prevented: Video ${videoId}, Ad ${adId}`);
-      }
     } catch (impressionError) {
       // Log error but don't fail the request
       console.error('⚠️ Error creating impression record:', impressionError);
@@ -383,49 +353,22 @@ router.post('/impressions/banner/view', async (req, res) => {
       }
     }
 
-    // Find existing impression record and mark it as viewed
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    
-    const impression = await AdImpression.findOne({
-      videoId: videoId,
-      adId: adId,
-      userId: normalizedUserId,
-      timestamp: { $gte: oneHourAgo },
-      isViewed: false // Only update if not already viewed
-    });
+      // **OPTIMIZATION: Get creatorId from request or fetch from Video**
+      let creatorId = providedCreatorId;
+      
+      if (!creatorId) {
+        const video = await Video.findById(videoId).select('uploader').lean();
+        creatorId = video ? video.uploader : null;
+      }
 
-      if (impression) {
-        // ... update existing impression
-        impression.isViewed = true;
-        impression.viewDuration = viewDuration;
-        impression.viewCount = (impression.viewCount || 0) + 1;
-        await impression.save();
-        
-        // **NEW: Update real-time stats**
-        if (impression.creatorId) {
-          // **NEW: Increment views on AdCreative**
-          await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
-          
-          await updateMonthlyStats(impression.creatorId, 'banner');
-        }
-      } else {
-
-        // **OPTIMIZATION: Get creatorId from request or fetch from Video**
-        let creatorId = providedCreatorId;
-        
-        if (!creatorId) {
-          const video = await Video.findById(videoId).select('uploader').lean();
-          creatorId = video ? video.uploader : null;
-        }
-
-        // **NEW: PREVENT SELF-VIEW**
-        if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
-          return res.status(200).json({ 
-            success: true,
-            message: 'Self-view ignored',
-            ignored: true 
-          });
-        }
+      // **NEW: PREVENT SELF-VIEW**
+      if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
+        return res.status(200).json({ 
+          success: true,
+          message: 'Self-view ignored',
+          ignored: true 
+        });
+      }
 
       // Create new viewed impression record
       await AdImpression.create({
@@ -447,8 +390,6 @@ router.post('/impressions/banner/view', async (req, res) => {
       await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
       
       await updateMonthlyStats(creatorId, 'banner');
-      // console.log(`✅ New banner ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
-    }
 
     res.status(200).json({ 
       success: true,
@@ -518,49 +459,22 @@ router.post('/impressions/carousel/view', async (req, res) => {
       }
     }
 
-    // Find existing impression record and mark it as viewed
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    
-    const impression = await AdImpression.findOne({
-      videoId: videoId,
-      adId: adId,
-      userId: normalizedUserId,
-      timestamp: { $gte: oneHourAgo },
-      isViewed: false
-    });
+      // **OPTIMIZATION: Get creatorId from request or fetch from Video**
+      let creatorId = providedCreatorId;
+      
+      if (!creatorId) {
+        const video = await Video.findById(videoId).select('uploader').lean();
+        creatorId = video ? video.uploader : null;
+      }
 
-      if (impression) {
-        // ... update existing impression
-        impression.isViewed = true;
-        impression.viewDuration = viewDuration;
-        impression.viewCount = (impression.viewCount || 0) + 1;
-        await impression.save();
-        
-        // **NEW: Update real-time stats**
-        if (impression.creatorId) {
-          // **NEW: Increment views on AdCreative**
-          await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
-          
-          await updateMonthlyStats(impression.creatorId, 'carousel');
-        }
-      } else {
-
-        // **OPTIMIZATION: Get creatorId from request or fetch from Video**
-        let creatorId = providedCreatorId;
-        
-        if (!creatorId) {
-          const video = await Video.findById(videoId).select('uploader').lean();
-          creatorId = video ? video.uploader : null;
-        }
-
-        // **NEW: PREVENT SELF-VIEW**
-        if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
-          return res.status(200).json({ 
-            success: true,
-            message: 'Self-view ignored',
-            ignored: true 
-          });
-        }
+      // **NEW: PREVENT SELF-VIEW**
+      if (normalizedUserId && creatorId && normalizedUserId.toString() === creatorId.toString()) {
+        return res.status(200).json({ 
+          success: true,
+          message: 'Self-view ignored',
+          ignored: true 
+        });
+      }
 
       await AdImpression.create({
         videoId: videoId,
@@ -581,8 +495,6 @@ router.post('/impressions/carousel/view', async (req, res) => {
       await AdCreative.findByIdAndUpdate(adId, { $inc: { views: 1 } });
       
       await updateMonthlyStats(creatorId, 'carousel');
-      // console.log(`✅ New carousel ad VIEW created: Video ${videoId}, Ad ${adId}, Duration: ${viewDuration}s`);
-    }
 
     res.status(200).json({ 
       success: true,

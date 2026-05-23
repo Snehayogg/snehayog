@@ -17,6 +17,7 @@ class DatabaseManager {
     });
 
     await mongoose.connect(process.env.MONGO_URI, {
+      maxPoolSize: 200,
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 30000,

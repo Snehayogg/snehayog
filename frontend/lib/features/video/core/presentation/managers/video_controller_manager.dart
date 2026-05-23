@@ -781,8 +781,7 @@ class VideoControllerManager {
   /// **TAB CHANGE DETECTION: Force pause all videos immediately (for critical situations)**
   void forcePauseAllVideosSync({String? exceptVideoId}) {
     AppLogger.log(
-        '🛑 VideoControllerManager: Force pausing all videos immediately' +
-            (exceptVideoId != null ? ' (excluding $exceptVideoId)' : ''));
+        '🛑 VideoControllerManager: Force pausing all videos immediately${exceptVideoId != null ? ' (excluding $exceptVideoId)' : ''}');
 
     for (final index in _controllers.keys) {
       // **FIX: Exclusion check**

@@ -5,18 +5,29 @@ import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:vayug/core/interfaces/i_dubbing_service.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/shared/config/app_config.dart';
 
 /// Orchestrates the dubbing process via Backend AI.
-class OnDeviceDubbingService {
+class OnDeviceDubbingServiceImpl implements IDubbingService {
   final Map<String, bool> _cancellationTokens = {};
 
-  void cancelDubbing(String videoUrl) {
+  @override
+  void cancelDubbing(String videoId, String videoUrl) {
     AppLogger.log('🛑 DubbingService: Cancelling dubbing for $videoUrl');
     _cancellationTokens[videoUrl] = true;
     FFmpegKit.cancel();
+  }
+
+  @override
+  Stream<DubbingResult> dubVideo(
+    String videoId,
+    String videoUrl, {
+    String targetLang = 'hindi',
+  }) {
+    return dubLocalVideo(videoUrl, targetLang: targetLang);
   }
 
   /// Starts the dubbing for a video file (local or remote).

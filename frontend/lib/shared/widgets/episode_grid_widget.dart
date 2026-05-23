@@ -5,7 +5,6 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/spacing.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/core/design/radius.dart';
-import 'package:vayug/features/video/core/data/models/video_model.dart';
 
 class EpisodeGridWidget extends StatelessWidget {
   final List<dynamic> episodes;

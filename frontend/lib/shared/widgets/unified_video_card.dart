@@ -89,10 +89,15 @@ class UnifiedVideoCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
+          border: video.isSubscriberOnly
+              ? Border.all(color: const Color(0xFFFFB300).withValues(alpha: 0.45), width: 1.5)
+              : null,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
+              color: video.isSubscriberOnly
+                  ? const Color(0xFFFFB300).withValues(alpha: 0.2)
+                  : Colors.black.withValues(alpha: 0.1),
+              blurRadius: video.isSubscriberOnly ? 6 : 4,
               offset: const Offset(0, 2),
             ),
           ],
@@ -190,11 +195,56 @@ class UnifiedVideoCard extends StatelessWidget {
                   ),
                 ),
 
-              if (!_isProcessing && video.crossPostStatus != null)
+              if (!_isProcessing && video.crossPostStatus != null && !video.isSubscriberOnly)
                 Positioned(
                   top: 8,
                   left: 8,
                   child: _buildCrossPostStatus(),
+                ),
+
+              // Premium Exclusive Subscriber-Only Badge
+              if (video.isSubscriberOnly)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFFD54F), // Amber-Gold
+                          Color(0xFFFF8F00), // Deep Gold
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20), // Pill shape
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock_rounded, color: Colors.white, size: 10),
+                        SizedBox(width: 3),
+                        Text(
+                          'EXCLUSIVE',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
 
               // Top Trailing (Edit Button)

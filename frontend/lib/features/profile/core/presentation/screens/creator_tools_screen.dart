@@ -370,7 +370,7 @@ class _CreatorToolsScreenState extends ConsumerState<CreatorToolsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Target Recipients', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                  const Text('Target Subscribers', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => Navigator.pop(context),

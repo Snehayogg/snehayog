@@ -48,7 +48,8 @@ export const serializeVideo = (video, apiVersion, requestingUserObjectId, traceI
     episodeNumber: videoObj.episodeNumber || 0,
     episodes: videoObj.episodes || [],
     dubbedUrls: dubbedUrls,
-    quizzes: videoObj.quizzes || []
+    quizzes: videoObj.quizzes || [],
+    isSubscriberOnly: videoObj.isSubscriberOnly === true
   };
 
   if (base.quizzes.length > 0) {

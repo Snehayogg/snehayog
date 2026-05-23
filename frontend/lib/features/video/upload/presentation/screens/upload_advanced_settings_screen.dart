@@ -5,7 +5,6 @@ import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/features/video/core/data/models/video_model.dart';
 import 'package:vayug/shared/widgets/app_button.dart';
 import 'package:vayug/features/video/quiz/presentation/screens/create_quiz_screen.dart';
-import 'package:vayug/features/profile/core/data/services/user_service.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 import 'package:vayug/features/video/upload/presentation/screens/subscriber_selection_screen.dart';
 
@@ -61,7 +60,7 @@ class _UploadAdvancedSettingsScreenState extends State<UploadAdvancedSettingsScr
           SliverList(
             delegate: SliverChildListDelegate([
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
                     _buildThumbnailRow(),

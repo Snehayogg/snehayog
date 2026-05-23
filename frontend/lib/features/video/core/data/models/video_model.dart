@@ -30,6 +30,7 @@ class VideoModel {
   bool isLiked;
   bool isSaved; // **NEW: Track if video is saved by current user**
   final bool isOptimistic; // **NEW: Track optimistically injected videos**
+  final bool isSubscriberOnly; // **NEW: Track if video is exclusive to subscribers**
   final Map<String, String>? crossPostStatus; // **NEW: Cross-platform publishing status**
   final Map<String, dynamic>? crossPostDetails; // **NEW: Platform-specific IDs/URLs**
 
@@ -87,6 +88,7 @@ class VideoModel {
     this.isLiked = false,
     this.isSaved = false, // **NEW: Default to false**
     this.isOptimistic = false, // **NEW: Default to false**
+    this.isSubscriberOnly = false, // **NEW: Default to false**
     this.crossPostStatus,
     this.crossPostDetails,
   });
@@ -373,6 +375,7 @@ class VideoModel {
         isLiked: json['isLiked'] == true,
         isSaved: json['isSaved'] == true, // **NEW: Parse isSaved from backend**
         isOptimistic: json['isOptimistic'] == true,
+        isSubscriberOnly: json['isSubscriberOnly'] == true || json['is_subscriber_only'] == true, // **NEW**
         crossPostStatus: json['crossPostStatus'] != null
             ? Map<String, String>.from(json['crossPostStatus'] as Map)
             : null,
@@ -452,6 +455,7 @@ class VideoModel {
       'isLiked': isLiked,
       'isSaved': isSaved, // **NEW: Include isSaved in JSON**
       'isOptimistic': isOptimistic,
+      'isSubscriberOnly': isSubscriberOnly, // **NEW**
       'crossPostStatus': crossPostStatus,
       'crossPostDetails': crossPostDetails,
       'quizzes': quizzes?.map((q) => q.toJson()).toList(),
@@ -494,6 +498,7 @@ class VideoModel {
     bool? isLiked,
     bool? isSaved, 
     bool? isOptimistic,
+    bool? isSubscriberOnly, // **NEW**
     Map<String, String>? crossPostStatus,
     Map<String, dynamic>? crossPostDetails,
     List<QuizModel>? quizzes,
@@ -535,6 +540,7 @@ class VideoModel {
       isLiked: isLiked ?? this.isLiked,
       isSaved: isSaved ?? this.isSaved,
       isOptimistic: isOptimistic ?? this.isOptimistic,
+      isSubscriberOnly: isSubscriberOnly ?? this.isSubscriberOnly, // **NEW**
       crossPostStatus: crossPostStatus ?? this.crossPostStatus,
       crossPostDetails: crossPostDetails ?? this.crossPostDetails,
       quizzes: quizzes ?? this.quizzes,

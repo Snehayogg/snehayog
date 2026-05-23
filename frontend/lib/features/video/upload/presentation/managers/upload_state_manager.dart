@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:vayug/core/interfaces/i_video_upload_service.dart';
 import 'package:vayug/core/interfaces/i_video_service.dart';
+import 'package:vayug/shared/services/notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 enum UploadStatus { idle, preparing, uploading, validation, processing, finalizing, success, error }
 
@@ -75,6 +77,7 @@ class UploadStateManager extends ChangeNotifier {
     File? thumbnailFile,
     List<String>? tags,
     List<String>? platforms,
+    List<String>? allowedSubscribers,
   }) async {
     if (_selectedVideo == null) {
       _setError('Please select a video first');
@@ -118,6 +121,7 @@ class UploadStateManager extends ChangeNotifier {
           'tags': tags ?? _tags,
           'crossPostPlatforms': platforms,
           'category': _selectedCategory,
+          'allowedSubscribers': allowedSubscribers,
         },
       );
 
@@ -148,29 +152,68 @@ class UploadStateManager extends ChangeNotifier {
   }
 
   Future<bool> _waitForProcessing(String videoId) async {
-    const maxAttempts = 60; // 5 minutes with 5s delay
+    const maxAttempts = 180; // 15 minutes with 5s delay
     int attempts = 0;
 
-    while (attempts < maxAttempts) {
-      try {
-        final statusData = await _videoService.getVideoProcessingStatus(videoId);
-        final processingStatus = statusData?['processingStatus']?.toString().toLowerCase();
+    bool? pushSuccess;
+    StreamSubscription<RemoteMessage>? sub;
 
-        if (processingStatus == 'completed' || processingStatus == 'ready') {
-          return true;
-        } else if (processingStatus == 'failed') {
-          return false;
+    try {
+      sub = NotificationService.onMessageStream.listen((message) {
+        final data = message.data;
+        if (data['type'] == 'video_processed' && data['videoId'] == videoId) {
+          final status = data['status'];
+          print('📱 Received FCM notification for video $videoId processing status: $status');
+          if (status == 'completed') {
+            pushSuccess = true;
+          } else if (status == 'failed') {
+            pushSuccess = false;
+          }
+        }
+      });
+    } catch (e) {
+      print('⚠️ Failed to initialize FCM stream listener: $e');
+    }
+
+    try {
+      while (attempts < maxAttempts) {
+        if (pushSuccess != null) {
+          print('🚀 Resolving video processing wait via real-time FCM notification: $pushSuccess');
+          return pushSuccess!;
         }
 
-        // Update progress slightly during polling
-        _progress = 0.5 + (attempts / maxAttempts * 0.4);
-        notifyListeners();
-      } catch (e) {
-        // Ignore single polling errors
-      }
+        try {
+          final statusData = await _videoService.getVideoProcessingStatus(videoId);
+          final videoData = statusData?['video'] as Map<String, dynamic>?;
+          
+          final processingStatus = videoData?['processingStatus']?.toString().toLowerCase();
+          final processingProgress = videoData?['processingProgress'] as num?;
 
-      await Future.delayed(const Duration(seconds: 5));
-      attempts++;
+          if (processingStatus == 'completed' || processingStatus == 'ready') {
+            return true;
+          } else if (processingStatus == 'failed') {
+            return false;
+          }
+
+          // Use backend progress if available and > 0, else use fake progress based on attempts
+          if (processingProgress != null && processingProgress > 0) {
+            // Backend progress is typically 0-100. Map it to the 0.5 - 1.0 range of overall progress.
+            _progress = 0.5 + ((processingProgress / 100) * 0.5);
+          } else {
+            // Fake progress slightly during polling if backend isn't updating frequently
+            _progress = 0.5 + (attempts / maxAttempts * 0.4);
+          }
+          
+          notifyListeners();
+        } catch (e) {
+          // Ignore single polling errors
+        }
+
+        await Future.delayed(const Duration(seconds: 5));
+        attempts++;
+      }
+    } finally {
+      await sub?.cancel();
     }
     return false;
   }

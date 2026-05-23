@@ -5,4 +5,6 @@ abstract class IAuthService {
   Future<bool> isSignedIn();
   Future<Map<String, dynamic>?> signInWithGoogle({bool forceAccountPicker = true});
   void clearMemoryCache();
+  Future<bool> isLoggedIn();
+  Future<String?> refreshAccessToken();
 }

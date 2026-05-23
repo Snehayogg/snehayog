@@ -45,7 +45,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   int _primedStartIndex = -1;
 
   // Ad and analytics services
-  final ActiveAdsService _activeAdsService = ActiveAdsService();
+  late final IAdService _activeAdsService;
   final VideoViewTracker _viewTracker = VideoViewTracker();
   final AdRefreshNotifier _adRefreshNotifier = AdRefreshNotifier();
   final BackgroundProfilePreloader _profilePreloader =
@@ -54,7 +54,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   StreamSubscription? _adRefreshSubscription;
 
   // Dubbing State
-  final OnDeviceDubbingService _onDeviceDubbingService = OnDeviceDubbingService();
+  late final IDubbingService _dubbingService;
   final Map<String, ValueNotifier<DubbingResult>> _dubbingResultsVN = {};
   final Map<String, StreamSubscription> _dubbingSubscriptions = {};
   final Map<String, String> _selectedAudioLanguage = {};
@@ -118,8 +118,7 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   final Map<String, VoidCallback> _errorListeners = {};
 
   final ValueNotifier<QuizModel?> _activeQuizVN = ValueNotifier<QuizModel?>(null);
-  final Map<String, Set<int>> _shownQuizzesPerVideo = {};
-  final Map<String, List<QuizModel>> _quizHistoryPerVideo = {};
+  late final IQuizEngine _quizEngine;
 
 
   // Resume tracking
@@ -199,7 +198,8 @@ mixin VideoFeedStateFieldsMixin on ConsumerState<VideoFeedAdvanced> {
   Timer? _longPressAdAutoHideTimer;
 
   // **Pause-triggered ad overlay state (no auto-hide — hides when video plays)**
-  final ValueNotifier<bool> _showPauseAdOverlayVN = ValueNotifier<bool>(false);
+  // Per-video map so the ad is attached to and scrolls with its specific video.
+  final Map<String, ValueNotifier<bool>> _showPauseAdOverlayPerVideoVN = {};
 
   // Screen visibility
   bool _isScreenVisible =

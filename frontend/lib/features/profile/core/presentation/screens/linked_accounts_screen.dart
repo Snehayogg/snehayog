@@ -203,7 +203,7 @@ class _LinkedAccountsScreenState extends ConsumerState<LinkedAccountsScreen> {
                   ),
                 )
               else
-                 Icon(Icons.check_circle, color: AppColors.success, size: 24),
+                 const Icon(Icons.check_circle, color: AppColors.success, size: 24),
             ],
           ),
           SizedBox(height: AppSpacing.spacing3),

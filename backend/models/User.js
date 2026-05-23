@@ -95,6 +95,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // **NEW: Google OAuth Offline Refresh Token for Tier 4 auto-login recovery**
+  googleRefreshToken: {
+    type: String,
+    default: null
+  },
   // **NEW: Track last active time for identifying inactive users**
   lastActive: {
     type: Date,

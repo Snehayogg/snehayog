@@ -37,7 +37,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
     if (_quizzes.length >= maxAllowedCount) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Maximum density reached (${maxAllowedCount} quizzes for this video length).'),
+          content: Text('Maximum density reached ($maxAllowedCount quizzes for this video length).'),
           backgroundColor: AppColors.error,
         ),
       );

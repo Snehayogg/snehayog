@@ -1224,7 +1224,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
     
     // First try to find by Google ID (primary identifier)
     let user = await User.findOne({ googleId: id })
-      .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+      .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country paymentDetails')
       .lean();
 
     // If not found, try by MongoDB ObjectId
@@ -1234,7 +1234,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
         // **IDENTITY OPTIMIZATION: Support pre-resolved ObjectIds**
         if (mongoose.Types.ObjectId.isValid(id)) {
           user = await User.findById(id)
-            .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country')
+            .select('_id googleId name email profilePic websiteUrl videos followingCount followerCount preferredCurrency preferredPaymentMethod country paymentDetails')
             .lean();
         }
       } catch (e) {
@@ -1274,6 +1274,7 @@ router.get('/:id', passiveVerifyToken, async (req, res) => {
       preferredCurrency: isOwner ? user.preferredCurrency : null,
       preferredPaymentMethod: isOwner ? user.preferredPaymentMethod : null,
       country: isOwner ? user.country : null,
+      paymentDetails: isOwner ? user.paymentDetails : null,
     };
 
     // **API VERSIONING: Backward Compatibility for Legacy Versions**

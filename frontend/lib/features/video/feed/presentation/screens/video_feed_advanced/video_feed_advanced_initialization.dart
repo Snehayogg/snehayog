@@ -22,6 +22,9 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
     _videoService = VideoService();
     _authService = AuthService();
     _carouselAdManager = CarouselAdManager();
+    _dubbingService = widget.dubbingService ?? OnDeviceDubbingServiceImpl();
+    _activeAdsService = widget.adService ?? ActiveAdsService();
+    _quizEngine = widget.quizEngine ?? StandardQuizEngine();
 
 
     _adRefreshSubscription = _adRefreshNotifier.refreshStream.listen((_) {
@@ -162,10 +165,13 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
             _videos.isNotEmpty ? videoIdentityKey(_videos.first) : null;
 
         // **FIX: Rank videos and find correct index AFTER ranking (async - runs in isolate)**
-        final rankedVideos = await _rankVideosWithEngagement(
-          _videos,
-          preserveVideoKey: preserveKey,
-        );
+        // Skip engagement ranking for profile feeds to strictly preserve chronological order
+        final rankedVideos = _openedFromProfile
+            ? _videos
+            : await _rankVideosWithEngagement(
+                _videos,
+                preserveVideoKey: preserveKey,
+              );
 
         // **CRITICAL FIX: If all videos were filtered out, use original videos as fallback**
         final videosToUse =
@@ -180,7 +186,8 @@ extension _VideoFeedInitialization on _VideoFeedAdvancedState {
 
         if (mounted) {
           // **FIX: Synchronize pagination state from manager**
-          _hasMore = AppInitializationManager.instance.hasInitialVideosMore;
+          // Set _hasMore to false for profile feeds to prevent loading global feed videos on scroll
+          _hasMore = _openedFromProfile ? false : AppInitializationManager.instance.hasInitialVideosMore;
           _currentPage = 1;
 
           // **FIX: Find correct index AFTER ranking (videos may have been reordered)**

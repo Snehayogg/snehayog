@@ -13,6 +13,7 @@ class UserService implements IUserService {
   // **REQUEST DEDUPLICATION: Track in-flight requests to prevent duplicate API calls**
   static final Map<String, Future<Map<String, dynamic>>> _pendingRequests = {};
 
+  @override
   Future<Map<String, dynamic>> getUserById(String id) async {
     // **OPTIMIZATION: If a request for this user ID is already in-flight, reuse it**
     if (_pendingRequests.containsKey(id)) {
@@ -77,6 +78,7 @@ class UserService implements IUserService {
   }
 
   /// Follow a user
+  @override
   Future<bool> followUser(String userIdToFollow) async {
     final trimmedUserId = userIdToFollow.trim();
     if (trimmedUserId.isEmpty || trimmedUserId == 'unknown') {
@@ -146,6 +148,7 @@ class UserService implements IUserService {
   }
 
   /// Unfollow a user
+  @override
   Future<bool> unfollowUser(String userIdToUnfollow) async {
     final trimmedUserId = userIdToUnfollow.trim();
     if (trimmedUserId.isEmpty || trimmedUserId == 'unknown') {
@@ -194,6 +197,7 @@ class UserService implements IUserService {
   }
 
   /// Check if current user is following another user
+  @override
   Future<bool> isFollowingUser(String userIdToCheck) async {
     final trimmedUserId = userIdToCheck.trim();
     if (trimmedUserId.isEmpty || trimmedUserId == 'unknown') {
@@ -229,6 +233,7 @@ class UserService implements IUserService {
   }
 
   /// **OPTIMIZED: Batch check follow status for multiple users in 1 API call**
+  @override
   Future<Map<String, bool>> batchCheckFollowStatus(List<String> userIds) async {
     if (userIds.isEmpty) return {};
 
@@ -259,6 +264,7 @@ class UserService implements IUserService {
   }
 
   /// Update user profile information
+  @override
   Future<bool> updateProfile({
     required String googleId,
     required String name,
@@ -287,6 +293,7 @@ class UserService implements IUserService {
     }
   }
   
+  @override
   Future<String?> updateProfilePhoto(String googleId, String photoPath) async {
     final token = (await _authService.getUserData())?['token'];
     if (token == null) throw Exception('Not authenticated');
@@ -311,6 +318,7 @@ class UserService implements IUserService {
   }
 
   /// Get user data including follower counts
+  @override
   Future<UserModel?> getUserData(String userId) async {
     try {
       AppLogger.log('🔍 UserService: Getting user data for userId: $userId');

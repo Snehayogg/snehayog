@@ -1,17 +1,28 @@
 app = "vayug"
 primary_region = "bom"
 
+[processes]
+  app = "npm start"
+  worker = "npm run worker"
+
 [env]
   PORT = "8080"
+  DISABLE_INTEGRATED_WORKER = "true"
 
 [build]
 
 [http_service]
+  processes = ["app"]
   internal_port = 8080
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 150
+    hard_limit = 200
 
 [[http_service.checks]]
   grace_period = "30s"

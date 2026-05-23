@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'package:vayug/core/interfaces/i_dubbing_service.dart';
 import 'package:vayug/features/video/dubbing/data/models/dubbing_models.dart';
 import 'package:vayug/shared/utils/app_logger.dart';
 
-class OnDeviceDubbingService {
-  final dynamic _tts = null;
-  dynamic _translator = null;
-  dynamic _processor = null;
+class DisabledDubbingServiceImpl implements IDubbingService {
 
-  void cancelDubbing(String videoUrl) {}
+  @override
+  void cancelDubbing(String videoId, String videoUrl) {}
 
-  Stream<DubbingResult> dubLocalVideo(String videoPath, {String targetLang = 'english'}) async* {
+  @override
+  Stream<DubbingResult> dubVideo(
+    String videoId,
+    String videoUrl, {
+    String targetLang = 'hindi',
+  }) async* {
     AppLogger.log('⚠️ Fast Profile: Dubbing is disabled in this build mode.');
     yield const DubbingResult(
       status: DubbingStatus.failed,

@@ -304,8 +304,7 @@ class ProfileHeaderWidget extends ConsumerWidget {
     return Row(
       children: [
         if (stateManager.isEditing ||
-            ((stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock) &&
-                !stateManager.hasUpiId))
+            (stateManager.totalVideoCount >= 2 || hasReferralBillingUnlock))
           Expanded(
             child: stateManager.isEditing
                 ? Row(
@@ -342,14 +341,23 @@ class ProfileHeaderWidget extends ConsumerWidget {
                   )
                 : ElevatedButton.icon(
                     onPressed: onAddUpiId,
-                    icon: const HugeIcon(
-                        icon: HugeIcons.strokeRoundedWallet01, size: 18),
+                    icon: HugeIcon(
+                      icon: stateManager.hasUpiId
+                          ? HugeIcons.strokeRoundedCheckmarkCircle02
+                          : HugeIcons.strokeRoundedWallet01,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                     label: Text(
                       AppText.get('btn_add_upi_id'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: stateManager.hasUpiId
+                          ? AppColors.primary
+                          : AppColors.success,
                       foregroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),

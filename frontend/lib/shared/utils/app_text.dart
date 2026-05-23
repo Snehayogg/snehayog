@@ -96,7 +96,6 @@ class AppText {
     'upload_processed_ready':
         'Video has been processed and is ready for streaming!',
     'upload_login_required': 'Login Required',
-    'upload_please_sign_in_upload': 'Please sign in to upload videos.',
     'upload_terms_title':
         'What to Upload? \nVayug Terms & Conditions (Copyright Policy)',
     'upload_terms_user_responsibility': '1. User Responsibility',

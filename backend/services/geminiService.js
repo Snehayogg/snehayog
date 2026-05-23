@@ -12,32 +12,111 @@ class GeminiService {
     }
 
     /**
-     * Generates a detailed description of the video content.
-     * Uses Gemini 1.5 Flash multimodal analysis on the thumbnail + metadata.
-     * @param {string} thumbnailUrl - URL of the video thumbnail
-     * @param {Object} videoMetadata - Optional title/desc of the video
-     * @returns {Promise<Object>} - AI generated metadata
+     * Generates a detailed description using OpenAI GPT-4o-mini (Multimodal).
+     * Faster and higher rate limits for bulk migration.
      */
-    async getVideoContext(thumbnailUrl, videoMetadata = {}) {
+    async getOpenAIContext(imagePaths, videoMetadata = {}) {
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (!openaiKey) throw new Error("OPENAI_API_KEY is missing.");
+
+        try {
+            console.log(`🎬 [OpenAI] Analyzing sequence of ${imagePaths.length} frames...`);
+
+            const content = [
+                {
+                    type: "text",
+                    text: `Analyze this sequence of frames from a video to provide structured findings in JSON.
+                    Video Info:
+                    - Title: ${videoMetadata.title || 'Unknown'}
+                    - Category: ${videoMetadata.category || 'General'}
+                    - Description: ${videoMetadata.description || 'None'}
+
+                    Return strictly valid JSON:
+                    1. "summary": Detailed summary in Hinglish (mix of Hindi/English).
+                    2. "oneLineAbout": Short catchy description.
+                    3. "language": Primary language.
+                    4. "region": Region (North India, South India, Global, etc.).
+                    5. "keywords": Array of 8-10 tags.
+                    6. "activity": What is happening?`
+                }
+            ];
+
+            for (const imgPath of imagePaths) {
+                let data;
+                if (imgPath.startsWith('http')) {
+                    const response = await axios.get(imgPath, { responseType: 'arraybuffer' });
+                    data = Buffer.from(response.data).toString("base64");
+                } else {
+                    data = fs.readFileSync(imgPath).toString("base64");
+                }
+                
+                content.push({
+                    type: "image_url",
+                    image_url: {
+                        url: `data:image/jpeg;base64,${data}`
+                    }
+                });
+            }
+
+            const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content }],
+                response_format: { type: "json_object" }
+            }, {
+                headers: { 'Authorization': `Bearer ${openaiKey}` }
+            });
+
+            const metadata = response.data.choices[0].message.content;
+            const parsedData = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+            
+            console.log(`✅ [OpenAI] Analysis complete for: ${videoMetadata.title || 'Video'}`);
+            return parsedData;
+        } catch (error) {
+            console.error(`❌ [OpenAI] Failed:`, error.response?.data?.error?.message || error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Generates a detailed description of the video content.
+     */
+    async getVideoContext(imagePaths, videoMetadata = {}) {
+        const provider = process.env.AI_PROVIDER || 'gemini';
+        
+        if (provider === 'openai') {
+            return this.getOpenAIContext(imagePaths, videoMetadata);
+        }
+
         if (!this.apiKey) throw new Error("GEMINI_API_KEY is missing.");
 
         try {
-            console.log(`🎬 [Gemini] Analyzing thumbnail: ${thumbnailUrl}`);
+            console.log(`🎬 [Gemini] Analyzing sequence of ${imagePaths.length} frames...`);
             
-            // For analysis, we'll use the SDK as it handles multimodal better than raw axios for images
-            const model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: 'v1' });
+            const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+            const model = this.genAI.getGenerativeModel({ model: modelName });
 
-            // Download thumbnail image to pass as part
-            const imageResponse = await axios.get(thumbnailUrl, { responseType: 'arraybuffer' });
-            const imagePart = {
-                inlineData: {
-                    data: Buffer.from(imageResponse.data).toString("base64"),
-                    mimeType: "image/jpeg"
+            const parts = [];
+
+            for (const imgPath of imagePaths) {
+                let data;
+                if (imgPath.startsWith('http')) {
+                    const response = await axios.get(imgPath, { responseType: 'arraybuffer' });
+                    data = Buffer.from(response.data).toString("base64");
+                } else {
+                    data = fs.readFileSync(imgPath).toString("base64");
                 }
-            };
+                
+                parts.push({
+                    inlineData: {
+                        data,
+                        mimeType: "image/jpeg"
+                    }
+                });
+            }
 
             const prompt = `
-                Analyze this video thumbnail and metadata to provide structured findings in JSON.
+                Analyze this sequence of frames from a video to provide structured findings in JSON.
+                The video might be a compilation or edit of multiple clips.
                 
                 Video Info:
                 - Title: ${videoMetadata.title || 'Unknown'}
@@ -46,27 +125,41 @@ class GeminiService {
 
                 Return strictly valid JSON:
                 1. "summary": Detailed summary in Hinglish (mix of Hindi/English).
-                2. "oneLineAbout": Short description.
-                3. "language": Primary language (Hindi, English, Hinglish, etc.).
-                4. "region": Region (North India, South India, Global, etc.).
-                5. "keywords": Array of 5-8 relevant tags.
-                6. "activity": What is happening in the video?
-                
-                Ensure high quality for an Indian social media platform.
+                2. "oneLineAbout": Short catchy description.
+                3. "language": Primary language.
+                4. "region": Region.
+                5. "keywords": Array of 8-10 tags.
+                6. "activity": What is happening?
             `;
 
-            const result = await model.generateContent([prompt, imagePart]);
-            const response = await result.response;
-            const responseText = response.text();
-            
+            let result;
+            let retryCount = 0;
+            const maxRetries = 3;
+
+            while (retryCount <= maxRetries) {
+                try {
+                    result = await model.generateContent([prompt, ...parts]);
+                    break; 
+                } catch (err) {
+                    if ((err.message.includes('429') || err.message.includes('Quota')) && retryCount < maxRetries) {
+                        retryCount++;
+                        const waitTime = retryCount * 15000;
+                        console.warn(`⏳ [Gemini] Rate limit hit. Retry ${retryCount}/${maxRetries}...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        continue;
+                    }
+                    throw err; 
+                }
+            }
+
+            const responseText = result.response.text();
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error("Could not parse JSON from Gemini response");
             
-            const metadata = JSON.parse(jsonMatch[0]);
-            console.log(`✅ [Gemini] Metadata extracted for: ${videoMetadata.title || 'Video'}`);
-            return metadata;
+            console.log(`✅ [Gemini] Analysis complete for: ${videoMetadata.title || 'Video'}`);
+            return JSON.parse(jsonMatch[0]);
         } catch (error) {
-            console.error(`❌ [Gemini] Analysis failed:`, error.message);
+            console.error(`❌ [Gemini] Failed:`, error.message);
             return null; 
         }
     }

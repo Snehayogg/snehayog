@@ -30,5 +30,7 @@ const uploadAudio = multer({
 router.post('/transcribe', passiveVerifyToken, uploadAudio.single('audio'), dubbingController.transcribeAudio);
 router.post('/synthesize', passiveVerifyToken, dubbingController.synthesizeSpeech);
 router.post('/translate', passiveVerifyToken, dubbingController.translateText);
+router.get('/engine', passiveVerifyToken, dubbingController.getActiveAIEngine);
+router.post('/engine', passiveVerifyToken, dubbingController.setActiveAIEngine);
 
 export default router;

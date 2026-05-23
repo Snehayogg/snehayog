@@ -38,8 +38,9 @@ class SubscriptionStateManager extends ChangeNotifier {
       
       _allVideos = videos;
       
-      // Heuristic for exclusive content
+      // Exclusively filtered content
       _exclusiveVideos = videos.where((v) => 
+        v.isSubscriberOnly ||
         v.videoName.toLowerCase().contains('exclusive') || 
         (v.tags?.contains('exclusive') ?? false)
       ).toList();

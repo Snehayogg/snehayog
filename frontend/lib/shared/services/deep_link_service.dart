@@ -6,7 +6,6 @@ import 'package:vayug/features/auth/data/services/authservices.dart';
 import 'package:flutter/material.dart';
 import 'package:vayug/features/video/core/data/services/video_service.dart';
 import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_player_screen.dart';
-import 'package:vayug/features/video/core/data/models/video_model.dart';
 
 class DeepLinkService {
   static final DeepLinkService _instance = DeepLinkService._internal();

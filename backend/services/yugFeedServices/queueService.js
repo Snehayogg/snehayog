@@ -1,5 +1,6 @@
 import '../../config/env.js';
 import { Queue } from 'bullmq';
+import axios from 'axios';
 
 // Initializing Redis connection options from URL or individual parts
 export let redisOptions = {
@@ -98,6 +99,67 @@ class FeedQueueService {
     }
 
     /**
+     * Wakes up the Fly.io worker machine on-demand if env variables are configured.
+     */
+    async _wakeWorker() {
+        const flyAppName = process.env.FLY_APP_NAME;
+        const flyApiToken = process.env.FLY_API_TOKEN;
+
+        if (!flyAppName || !flyApiToken) {
+            console.log('ℹ️ QueueService: Standalone worker wake-up skipped (missing FLY_API_TOKEN or FLY_APP_NAME in env)');
+            return;
+        }
+
+        try {
+            console.log('📡 QueueService: Fetching app machines list from Fly.io...');
+            // 1. Get all machines for the app
+            const listResponse = await axios.get(
+                `https://api.machines.dev/v1/apps/${flyAppName}/machines`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${flyApiToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 5000
+                }
+            );
+
+            // 2. Filter for the machine(s) in the 'worker' process group
+            const workerMachines = listResponse.data.filter(
+                m => m.config?.metadata?.["fly_process_group"] === 'worker'
+            );
+
+            if (workerMachines.length === 0) {
+                console.warn('⚠️ QueueService: No worker machines found to start');
+                return;
+            }
+
+            // 3. Wake up the worker machines if they are not already started
+            for (const machine of workerMachines) {
+                if (machine.state !== 'started') {
+                    console.log(`📡 QueueService: Waking up worker machine (${machine.id}) in state ${machine.state}...`);
+                    const response = await axios.post(
+                        `https://api.machines.dev/v1/apps/${flyAppName}/machines/${machine.id}/start`,
+                        {},
+                        {
+                            headers: {
+                                Authorization: `Bearer ${flyApiToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            timeout: 5000
+                        }
+                    );
+                    console.log(`✅ QueueService: Worker machine ${machine.id} wake-up triggered: status ${response.status}`);
+                } else {
+                    console.log(`ℹ️ QueueService: Worker machine ${machine.id} is already running.`);
+                }
+            }
+        } catch (error) {
+            console.error('❌ QueueService: Failed to wake up worker machine:', error.response?.data || error.message);
+        }
+    }
+
+    /**
      * Add a video processing job to the queue
      * @param {Object} data - Job data
      * @param {string} data.videoId - Video ID
@@ -109,6 +171,7 @@ class FeedQueueService {
         try {
             console.log('📥 QueueService: Adding video job to queue:', data.videoId);
             await videoQueue.add('process-video', data, {
+                jobId: `process-video_${data.videoId}`,
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 5000 },
                 removeOnComplete: true,
@@ -121,6 +184,10 @@ class FeedQueueService {
                 }
             });
             console.log('✅ QueueService: Job added successfully');
+            
+            // Wake up background worker on Fly.io (async - don't block API response)
+            this._wakeWorker().catch(err => console.error('Error waking worker:', err));
+
             return true;
         } catch (error) {
             console.error('❌ QueueService: Failed to add job:', error);
@@ -142,10 +209,66 @@ class FeedQueueService {
                 removeOnFail: false,
                 priority: 1 // High Priority
             });
+            
+            // Wake up background worker on Fly.io (async - don't block API response)
+            this._wakeWorker().catch(err => console.error('Error waking worker:', err));
+
             return true;
         } catch (error) {
             console.error('❌ QueueService: Failed to add clip job:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Add a background video analysis job (Gemini)
+     * @param {Object} data - { videoId }
+     */
+    async addAnalysisJob(data) {
+        try {
+            console.log('📥 QueueService: Adding analysis job for video:', data.videoId);
+            await videoQueue.add('analyze-video', data, {
+                jobId: `analyze-video_${data.videoId}`,
+                attempts: 3,
+                backoff: { type: 'exponential', delay: 10000 },
+                removeOnComplete: true,
+                removeOnFail: false,
+                priority: 3 // Lower priority than video processing
+            });
+            return true;
+        } catch (error) {
+            console.error('❌ QueueService: Failed to add analysis job:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Remove video processing and analysis jobs from the queue if they exist
+     * @param {string} videoId - Video ID
+     */
+    async removeVideoJob(videoId) {
+        try {
+            console.log(`🧹 QueueService: Attempting to remove jobs for video ${videoId} from queue...`);
+            const jobTypes = [`process-video_${videoId}`, `analyze-video_${videoId}`];
+            for (const jobId of jobTypes) {
+                try {
+                    const job = await videoQueue.getJob(jobId);
+                    if (job) {
+                        const state = await job.getState();
+                        console.log(`   Found job ${jobId} in state: ${state}. Removing...`);
+                        await job.remove();
+                        console.log(`   Removed job ${jobId} successfully.`);
+                    } else {
+                        console.log(`   No job found with ID: ${jobId}`);
+                    }
+                } catch (jobErr) {
+                    console.warn(`⚠️ QueueService: Could not remove job ${jobId} (it may be active/locked by a worker):`, jobErr.message);
+                }
+            }
+            return true;
+        } catch (error) {
+            console.error(`❌ QueueService: Error removing job for video ${videoId}:`, error);
+            return false;
         }
     }
 

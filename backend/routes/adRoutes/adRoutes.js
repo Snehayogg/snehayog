@@ -14,18 +14,19 @@ import adCommentRoutes from './adCommentRoutes.js';
 import adCleanupService from '../../services/adServices/adCleanupService.js';
 import mongoose from 'mongoose';
 import redisService from '../../services/caching/redisService.js';
+import cloudflareR2Service from '../../services/uploadServices/cloudflareR2Service.js';
 
 const router = express.Router();
 
 const REVENUE_CACHE_TTL = 300; // 5 minutes
 
-// **NEW: Manual upload endpoint (Bypass Worker)**
+// **NEW: Manual upload endpoint (Bypass Worker but upload to Cloudflare R2)**
 router.post('/upload-manual', (req, res, next) => {
   // Use the existing multer 'upload' defined below (line 44)
   // We move the call here to handle it before the other routes
   next();
 }, (req, res) => {
-  upload.single('media')(req, res, (err) => {
+  upload.single('media')(req, res, async (err) => {
     if (err) {
       console.error('❌ Manual upload error:', err);
       return res.status(500).json({ error: err.message });
@@ -34,15 +35,37 @@ router.post('/upload-manual', (req, res, next) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    // Construct the public URL
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/ads/${req.file.filename}`;
-    console.log('✅ Manual upload success:', fileUrl);
-    
-    res.json({ 
-      url: fileUrl,
-      publicUrl: fileUrl,
-      key: `manual/${req.file.filename}`
-    });
+    try {
+      const filename = req.file.filename;
+      const filePath = req.file.path;
+      const mimeType = req.file.mimetype;
+      
+      // Define the key for R2
+      const key = `snehayog/ads/images/${filename}`;
+      
+      console.log(`📤 Uploading manual ad creative file to R2: ${key}`);
+      const uploadResult = await cloudflareR2Service.uploadFileToR2(filePath, key, mimeType);
+      
+      // Clean up local temp file immediately after upload
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      
+      console.log('✅ Manual upload to R2 success:', uploadResult.url);
+      
+      res.json({ 
+        url: uploadResult.url,
+        publicUrl: uploadResult.url,
+        key: uploadResult.key
+      });
+    } catch (error) {
+      console.error('❌ Error during manual upload to R2:', error);
+      // Cleanup local file in case of error
+      if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ error: 'Failed to upload creative to Cloudflare R2' });
+    }
   });
 });
 

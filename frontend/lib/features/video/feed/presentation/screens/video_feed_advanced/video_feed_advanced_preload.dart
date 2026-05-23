@@ -1181,27 +1181,17 @@ extension _VideoFeedPreload on _VideoFeedAdvancedState {
 
         final currentPosition = controller.value.position;
         final currentSeconds = currentPosition.inSeconds;
-        final currentMillis = currentPosition.inMilliseconds;
-        final shownQuizzes = _shownQuizzesPerVideo[videoId] ??= {};
 
-        for (int i = 0; i < video.quizzes!.length; i++) {
-          final quiz = video.quizzes![i];
-          if (shownQuizzes.contains(i)) continue;
+        final quiz = _quizEngine.evaluatePosition(
+          videoId: videoId,
+          currentPosition: currentPosition,
+          quizzes: video.quizzes!,
+        );
 
-          // **ROBUST TRIGGER (Senior Move)**:
-          // 1. Check if we are within 1 second of the target
-          // 2. OR check if we just passed the target in the last 500ms
-          // This prevents "skipping" the trigger due to frame drops or streaming lag.
-          final targetMillis = quiz.timestamp * 1000;
-          final diff = currentMillis - targetMillis;
-
-          if (diff >= 0 && diff < 1500) { // If we are at or up to 1.5s past the mark
-            _activeQuizVN.value = quiz;
-            shownQuizzes.add(i);
-            (_quizHistoryPerVideo[videoId] ??= []).add(quiz);
-            AppLogger.log('🎉 YugFeed: Triggered quiz "${quiz.question}" at $currentSeconds seconds');
-            break;
-          }
+        if (quiz != null) {
+          _quizEngine.markShown(videoId, quiz);
+          _activeQuizVN.value = quiz;
+          AppLogger.log('🎉 YugFeed: Triggered quiz "${quiz.question}" at $currentSeconds seconds');
         }
       } catch (e) {
         // Silently ignore disposal errors

@@ -17,3 +17,4 @@ void main() {
   group('integration_test/features/search/search_navigation_test.dart', () => test_3.main());
   group('integration_test/upload_video_test.dart', () => test_4.main());
 }
+

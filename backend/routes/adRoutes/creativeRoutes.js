@@ -4,27 +4,46 @@ import { adUpload, cleanupTempFile } from '../../config/upload.js';
 import AdCreative from '../../models/AdCreative.js';
 import AdCampaign from '../../models/AdCampaign.js';
 import User from '../../models/User.js';
+import cloudflareR2Service from '../../services/uploadServices/cloudflareR2Service.js';
 
 const router = express.Router();
 
-// **NEW: Manual upload endpoint (Bypass Worker)**
-router.post('/upload-manual', adUpload.single('media'), (req, res) => {
+// **NEW: Manual upload endpoint (Bypass Worker but upload to Cloudflare R2)**
+router.post('/upload-manual', adUpload.single('media'), asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
   
-  // Construct the public URL
-  // The path is already mapped to /uploads in express.js
-  // multer saves to 'uploads/ads/' so the URL is /uploads/ads/filename
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/ads/${req.file.filename}`;
-  console.log('✅ Manual upload success:', fileUrl);
-  
-  res.json({ 
-    url: fileUrl,
-    publicUrl: fileUrl,
-    key: `manual/${req.file.filename}`
-  });
-});
+  try {
+    const filename = req.file.filename;
+    const filePath = req.file.path;
+    const mimeType = req.file.mimetype;
+    
+    // Define the key for R2
+    const key = `snehayog/ads/images/${filename}`;
+    
+    console.log(`📤 Uploading manual ad creative file to R2: ${key}`);
+    const uploadResult = await cloudflareR2Service.uploadFileToR2(filePath, key, mimeType);
+    
+    // Clean up local temp file immediately after upload
+    cleanupTempFile(filePath);
+    
+    console.log('✅ Manual upload to R2 success:', uploadResult.url);
+    
+    res.json({ 
+      url: uploadResult.url,
+      publicUrl: uploadResult.url,
+      key: uploadResult.key
+    });
+  } catch (error) {
+    console.error('❌ Error during manual upload to R2:', error);
+    // Cleanup local file in case of error
+    if (req.file && req.file.path) {
+      cleanupTempFile(req.file.path);
+    }
+    res.status(500).json({ error: 'Failed to upload creative to Cloudflare R2' });
+  }
+}));
 
 // POST /ads/campaigns/:id/creatives - Upload ad creative
 router.post('/campaigns/:id/creatives', adUpload.single('creative'), asyncHandler(async (req, res) => {

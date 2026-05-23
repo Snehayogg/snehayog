@@ -91,6 +91,15 @@ export const getUserVideos = async (req, res) => {
 
     if (!user) {
       user = await User.findOne({ googleId: googleId }).select('_id googleId').lean();
+      if (!user) {
+        try {
+          if (mongoose.Types.ObjectId.isValid(googleId)) {
+            user = await User.findById(googleId).select('_id googleId').lean();
+          }
+        } catch (e) {
+          // Ignore invalid ObjectId errors
+        }
+      }
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       if (redisService.getConnectionStatus()) {
@@ -294,7 +303,7 @@ export const getFeed = async (req, res) => {
     finalVideos = await FeedQueueService.popFromQueue(userIdentifier, type, limitNum);
     
     if (finalVideos.length === 0) {
-      console.log(`[FeedQueue] Queue empty for ${userIdentifier} (${type}), falling back to MongoDB`);
+      console.log(`[FeedQueue] Queue empty for ${userIdentifier} (${type}), falling back to MongoDB with scoring`);
       const query = {
         videoType: type,
         processingStatus: 'completed'
@@ -303,22 +312,49 @@ export const getFeed = async (req, res) => {
       // STRICT: Main feed NEVER shows subscriber-only videos
       query.isSubscriberOnly = { $ne: true };
 
-      if (cursor) {
-        query.createdAt = { $lt: new Date(cursor) };
+      const poolLimit = cursor ? 30 : 60;
+      const queryCursor = cursor ? { createdAt: { $lt: new Date(cursor) } } : {};
+      
+      let skip = 0;
+      if (!cursor && pageNum > 1) {
+        skip = (pageNum - 1) * limitNum;
       }
 
-      const videosQuery = Video.find(query)
+      // 1. Fetch a larger pool of candidate videos
+      const candidates = await Video.find({
+        ...query,
+        ...queryCursor
+      })
         .populate('uploader', 'name profilePic googleId')
         .sort({ createdAt: -1 })
-        .limit(limitNum);
+        .skip(skip)
+        .limit(poolLimit)
+        .lean();
 
-      if (!cursor && pageNum > 1) {
-        const skip = (pageNum - 1) * limitNum;
-        videosQuery.skip(skip);
+      if (candidates.length > 0) {
+        // 2. Load context (user profile + interest vector) for scoring
+        let userProfile = null;
+        let userVector = null;
+        
+        if (userId && userId !== 'anon') {
+          userProfile = await User.findOne({ googleId: userId }).select('_id preferredLanguages location').lean();
+          userVector = await RecommendationService.getUserInterestVector(userId);
+        }
+
+        const context = {
+          user: userProfile || 'anon',
+          userVector: userVector
+        };
+
+        // 3. Score and rank candidates using modular RecommendationEngine (utilizes Gemini analysis)
+        const rankedCandidates = await RecommendationService.orderFeedWithDiversity(candidates, context);
+
+        // 4. Perform weighted shuffle to ensure variety and prevent identical feed order
+        finalVideos = RecommendationService.weightedShuffle(rankedCandidates, limitNum);
+        console.log(`[FeedFallback] Scored & shuffled ${finalVideos.length} fallback videos from pool of ${candidates.length}`);
+      } else {
+        finalVideos = [];
       }
-
-      finalVideos = await videosQuery.lean();
-      console.log(`[FeedFallback] MongoDB returned ${finalVideos.length} videos for ${type}`);
     }
 
     // SECONDARY SAFETY: Strictly filter out any exclusive content from the main feed results

@@ -13,6 +13,7 @@ import RecommendationService from '../services/yugFeedServices/recommendationSer
 import WatchHistory from '../models/WatchHistory.js';
 import RevenueService from '../services/adServices/revenueService.js';
 import brevoService from '../services/notificationServices/brevoService.js';
+import queueService from '../services/yugFeedServices/queueService.js';
 
 const router = express.Router();
 
@@ -1037,6 +1038,9 @@ router.delete('/videos/:videoId', requireAdminDashboardKey, async (req, res) => 
     // Delete the video
     await Video.findByIdAndDelete(videoId);
 
+    // Clean up queue jobs
+    await queueService.removeVideoJob(videoId);
+
     console.log(`✅ Admin deleted video: ${videoId} - ${video.videoName}`);
 
     res.json({
@@ -1103,6 +1107,9 @@ router.post('/videos/:videoId/remove', requireAdminDashboardKey, async (req, res
 
     // 4. PERMANENTLY DELETE the video from the database
     await Video.findByIdAndDelete(videoId);
+
+    // Clean up queue jobs
+    await queueService.removeVideoJob(videoId);
 
     res.json({
       success: true,

@@ -297,6 +297,21 @@ class _MainScreenWithLocationCheckState
     _hasCheckedWelcome = true;
 
     try {
+      // **NEW CHECK**: If the user is already logged in, do NOT show the welcome onboarding screen
+      final loggedIn = await ref.read(authServiceProvider).isLoggedIn();
+      if (loggedIn) {
+        // Quietly mark it as shown so we don't evaluate/check it again in the future
+        await WelcomeOnboardingService.markWelcomeOnboardingShown();
+        if (mounted) {
+          setState(() {
+            _shouldShowWelcome = false;
+            _isLoading = false;
+          });
+          _checkLocationInBackground();
+          _checkGalleryInBackground();
+        }
+        return;
+      }
 
       final shouldShow =
           await WelcomeOnboardingService.shouldShowWelcomeOnboarding();
