@@ -79,6 +79,7 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   int _currentIndex = 0;
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, ChewieController?> _chewieControllers = {};
+  final Set<int> _preloadingIndices = {};
 
   bool _hasMore = true;
   bool _isLoadingMore = false;
@@ -394,7 +395,14 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
       await newController.initialize().timeout(const Duration(seconds: 15));
       await newController.setPlaybackSpeed(_playbackSpeed);
       if (mounted) {
-        final chewie = _createChewieController(newController, effectiveVideo, autoPlay: shouldAutoPlay);
+        // Re-evaluate autoPlay AFTER async initialization to prevent phantom audio race condition
+        final bool actualAutoPlay = !_lifecyclePaused && index == _currentIndex;
+        
+        if (!actualAutoPlay) {
+          newController.pause(); // Force pause just to be safe
+        }
+
+        final chewie = _createChewieController(newController, effectiveVideo, autoPlay: actualAutoPlay);
         setState(() { _controllers[index] = newController; _chewieControllers[index] = chewie; });
         _controllerPool.addController(videoToPlay.id, newController, index: index);
         _setupLateInitialization(index, newController);
@@ -484,9 +492,13 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
     _mainController?.unregisterVideoObserver(onPause: _pauseCurrentVideo, onResume: _resumeCurrentVideo);
     try { _mainController?.unregisterCallbacks(); } catch (_) {}
     _savePlaybackPosition(_currentIndex);
+    
+    // **CRITICAL FIX**: Explicitly tell the shared pool to pause all videos before we lose references.
+    _controllerPool.pauseAllControllers();
+    _videoControllerManager.pauseAllVideos();
+    
     _controllers.forEach((index, c) { try { c.removeListener(_onPositionChanged); c.pause(); c.setVolume(0.0); } catch (_) {} });
     _chewieControllers.forEach((index, c) => c?.dispose());
-    _pageController.dispose();
     controlsTimer?.cancel(); overlayTimer?.cancel();
     _stopViewTracking(_currentIndex); _poolDisposalSubscription?.cancel();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -838,11 +850,16 @@ class _VayuLongFormPlayerScreenState extends ConsumerState<VayuLongFormPlayerScr
   }
 
   Future<void> _preloadVideo(int index) async {
-    if (index < 0 || index >= _videos.length || _controllers.containsKey(index)) return;
+    if (index < 0 || index >= _videos.length || _controllers.containsKey(index) || _preloadingIndices.contains(index)) return;
+    
+    _preloadingIndices.add(index);
     try {
       final c = await VideoControllerFactory.createController(_videos[index]);
       await c.initialize(); _controllers[index] = c; _controllerPool.addController(_videos[index].id, c, index: index);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _preloadingIndices.remove(index);
+    }
   }
 
   void _enableWakelock() { if (!_wakelockEnabled) { WakelockPlus.enable(); _wakelockEnabled = true; } }

@@ -44,8 +44,6 @@ class AppConfig {
     // For web development, localhost is the standard
     if (kIsWeb) return _workerDevelopmentUrl;
 
-    // For mobile development, we MUST use the machine's local IP instead of 'localhost'
-    // This allows the physical device to connect to the computer running the worker.
     try {
       final ipUri = Uri.parse(_localIpBaseUrl);
       return 'http://${ipUri.host}:8787';
