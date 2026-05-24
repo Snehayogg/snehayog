@@ -262,7 +262,8 @@ export const uploadVideo = async (req, res) => {
         videoName: video.videoName,
         processingStatus: 'queued',
         estimatedTime: '2-5 minutes',
-        costBreakdown: { processing: '$0 (FREE!)', storage: '$0.015/GB/month (R2)', bandwidth: '$0 (FREE forever!)' }
+        costBreakdown: { processing: '$0 (FREE!)', storage: '$0.015/GB/month (R2)', bandwidth: '$0 (FREE forever!)' },
+        isSubscriberOnly: video.isSubscriberOnly || false
       }
     });
 
@@ -507,8 +508,11 @@ export const createImageFeedEntry = async (req, res) => {
       video: {
         id: video._id,
         videoName: video.videoName,
-        videoUrl: video.videoUrl,
-        thumbnailUrl: video.thumbnailUrl,
+        videoUrl: video.processingStatus === 'completed' ? video.videoUrl : null,
+        thumbnailUrl: video.processingStatus === 'completed' ? video.thumbnailUrl : null,
+        crossPostStatus: video.crossPostStatus || {},
+        crossPostProgress: video.crossPostProgress || {},
+        crossPostDetails: video.crossPostDetails || {},
         link: video.link,
         videoType: video.videoType,
         mediaType: video.mediaType,

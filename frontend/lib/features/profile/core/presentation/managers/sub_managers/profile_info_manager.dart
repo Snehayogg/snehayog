@@ -228,7 +228,25 @@ class ProfileInfoManager extends ChangeNotifier {
 
   Future<void> ensurePaymentDetailsHydrated() async {
     if (_userData != null && _userData!['paymentDetails'] == null) {
-      await loadUserData(requestedUserId, forceRefresh: true, silent: true);
+      try {
+        final token = await _authService.getUserData().then((u) => u?['token']);
+        if (token != null) {
+          final response = await httpClientService.get(
+            Uri.parse('${NetworkHelper.apiBaseUrl}/creator-payouts/profile'),
+            headers: {'Authorization': 'Bearer $token'},
+          );
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body);
+            if (data['paymentDetails'] != null) {
+              _userData!['paymentDetails'] = data['paymentDetails'];
+              _userData!['hasUpiId'] = true;
+              notifyListenersSafe();
+            }
+          }
+        }
+      } catch (e) {
+        AppLogger.log('Error hydrating payment details: $e');
+      }
     }
   }
 

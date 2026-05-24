@@ -90,6 +90,25 @@ async function handleVideoProcessing(job) {
       console.error('⚠️ Worker: Failed to send success notification/notice:', notifyErr.message);
     }
 
+    try {
+      const user = await mongoose.model('User').findById(userId).select('googleId').lean();
+      if (user && redisService.getConnectionStatus && redisService.getConnectionStatus()) {
+        const { invalidateCache, VideoCacheKeys } = await import('../middleware/cacheMiddleware.js');
+        const cacheKeysToInvalidate = [
+          `user:feed:${user.googleId}:*`,
+          `videos:user:${user.googleId}`,
+          VideoCacheKeys.all()
+        ];
+        if (videoExists && !videoExists.isSubscriberOnly) {
+           cacheKeysToInvalidate.push('videos:feed:*');
+        }
+        await invalidateCache(cacheKeysToInvalidate);
+        console.log(`🧹 Worker: Invalidated cache for user ${user.googleId}`);
+      }
+    } catch (cacheErr) {
+      console.error('⚠️ Worker: Failed to invalidate cache after success:', cacheErr.message);
+    }
+
     return { status: 'completed', videoId, result };
 
   } catch (error) {
@@ -124,6 +143,17 @@ async function handleVideoProcessing(job) {
         console.log(`✅ Worker: Sent failure push notification and created DB Notice for user: ${userId}`);
       } catch (notifyErr) {
         console.error('⚠️ Worker: Failed to send failure notification/notice:', notifyErr.message);
+      }
+
+      try {
+        const user = await mongoose.model('User').findById(userId).select('googleId').lean();
+        if (user && redisService.getConnectionStatus && redisService.getConnectionStatus()) {
+          const { invalidateCache, VideoCacheKeys } = await import('../middleware/cacheMiddleware.js');
+          await invalidateCache([`videos:user:${user.googleId}`, VideoCacheKeys.all()]);
+          console.log(`🧹 Worker: Invalidated cache for user ${user.googleId} after failure`);
+        }
+      } catch (cacheErr) {
+        console.error('⚠️ Worker: Failed to invalidate cache after failure:', cacheErr.message);
       }
     } else {
       console.warn(`⚠️ Worker: Video ${videoId} was deleted during processing. Skipped failure updates.`);

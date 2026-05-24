@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:vayug/core/design/colors.dart';
 import 'package:vayug/core/design/typography.dart';
 import 'package:vayug/core/providers/auth_providers.dart';
@@ -10,8 +9,6 @@ import 'package:vayug/features/video/vayu/presentation/screens/vayu_long_form_pl
 import 'package:vayug/features/video/core/presentation/screens/video_screen.dart';
 import 'package:vayug/shared/widgets/unified_video_card.dart';
 import 'package:vayug/shared/widgets/vayu_video_card.dart';
-import 'package:vayug/shared/utils/format_utils.dart';
-import 'package:vayug/shared/widgets/interactive_scale_button.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:vayug/features/video/subscriptions/presentation/managers/subscription_state_manager.dart';
 
@@ -140,13 +137,12 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
               itemBuilder: (context, index) {
                 final video = state.exclusiveVideos[index];
                 final isVayu = video.videoType == 'vayu';
-                final displayVideo = video.copyWith(isSubscriberOnly: false);
                 return Padding(
                   padding: const EdgeInsets.only(right: 12.0),
                   child: SizedBox(
                     width: isVayu ? 280 : 100,
                     child: UnifiedVideoCard(
-                      video: displayVideo,
+                      video: video,
                       cardType: isVayu ? UnifiedVideoCardType.vayu : UnifiedVideoCardType.yug,
                       onTap: () => _navigateToVideo(video, state.allVideos),
                     ),
@@ -176,7 +172,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: VayuVideoCard(
-                video: video.copyWith(isSubscriberOnly: false),
+                video: video,
                 onTap: () => _navigateToVideo(video, state.allVideos),
               ),
             ),
@@ -204,7 +200,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                 (context, index) {
                   final yugVideo = yugGroup[index];
                   return UnifiedVideoCard(
-                    video: yugVideo.copyWith(isSubscriberOnly: false),
+                    video: yugVideo,
                     cardType: UnifiedVideoCardType.yug,
                     onTap: () => _navigateToVideo(yugVideo, state.allVideos),
                   );

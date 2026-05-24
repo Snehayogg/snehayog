@@ -14,6 +14,7 @@ import { uploadLimiter } from '../../middleware/rateLimiter.js';
 import AdmZip from 'adm-zip';
 import { addSocialJob } from '../../services/socialQueue.js';
 import queueService from '../../services/yugFeedServices/queueService.js';
+import redisService from '../../services/caching/redisService.js';
 
 const router = express.Router();
 
@@ -250,6 +251,20 @@ router.post('/video/direct-complete', verifyToken, uploadLimiter, async (req, re
     if (!hybridVideoService) {
       const { default: service } = await import('../../services/uploadServices/hybridVideoService.js');
       hybridVideoService = service;
+    }
+
+    // **FIX: Invalidate user's video cache so the new video appears immediately**
+    if (redisService.getConnectionStatus()) {
+      const { invalidateCache, VideoCacheKeys } = await import('../../middleware/cacheMiddleware.js');
+      const cacheKeysToInvalidate = [
+        `user:feed:${user.googleId}:*`,
+        `videos:user:${user.googleId}`,
+        VideoCacheKeys.all()
+      ];
+      if (!newVideo.isSubscriberOnly) {
+        cacheKeysToInvalidate.push('videos:feed:*');
+      }
+      invalidateCache(cacheKeysToInvalidate).catch(err => console.error('⚠️ direct-complete: Cache invalidation failed:', err.message));
     }
 
     // 2. Trigger Background Processing via BullMQ
@@ -517,7 +532,8 @@ router.get('/video/:videoId/status', verifyToken, async (req, res) => {
         // **NEW: Cross-post information**
         crossPostStatus: video.crossPostStatus || {},
         crossPostProgress: video.crossPostProgress || {},
-        crossPostDetails: video.crossPostDetails || {}
+        crossPostDetails: video.crossPostDetails || {},
+        isSubscriberOnly: video.isSubscriberOnly || false
       }
     });
 
